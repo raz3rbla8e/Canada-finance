@@ -81,18 +81,27 @@ def api_summary():
                 "SELECT COALESCE(SUM(amount),0) as t FROM transactions WHERE type='Expense' AND hidden=0 AND date LIKE ?",
                 (prev_like,),
             ).fetchone()["t"]
+            prev_inc = db.execute(
+                "SELECT COALESCE(SUM(amount),0) as t FROM transactions WHERE type='Income' AND hidden=0 AND date LIKE ?",
+                (prev_like,),
+            ).fetchone()["t"]
             prev_by_cat = db.execute(
                 """SELECT category, SUM(amount) as total FROM transactions
                    WHERE type='Expense' AND hidden=0 AND date LIKE ? GROUP BY category""",
                 (prev_like,),
             ).fetchall()
             prev_cat_map = {r["category"]: r["total"] for r in prev_by_cat}
+            prev_month_label = f"{pm.year}-{pm.month:02d}"
         except (ValueError, IndexError):
             prev_exp = 0
+            prev_inc = 0
             prev_cat_map = {}
+            prev_month_label = ""
     else:
         prev_exp = 0
+        prev_inc = 0
         prev_cat_map = {}
+        prev_month_label = ""
     # Budgets
     budgets = {
         r["category"]: r["monthly_limit"]
@@ -120,6 +129,8 @@ def api_summary():
         "expenses": expenses,
         "net": income - expenses,
         "prev_expenses": prev_exp,
+        "prev_income": prev_inc,
+        "prev_month": prev_month_label,
         "savings_rate": round((income - expenses) / income * 100, 1) if income > 0 else 0,
         "by_category": by_cat_out,
         "income_by_category": [{"category": r["category"], "total": r["total"]} for r in income_by_cat],

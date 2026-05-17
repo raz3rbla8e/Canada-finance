@@ -627,19 +627,23 @@ async function _renderDashboard(c) {
   const savingsRate = income > 0 ? (net / income * 100) : 0;
   const totalBalance = (accounts || []).reduce((s,a) => s + (a.balance||0), 0);
   const nwData = (netWorth || []).map(d => ({ m: d.month, v: d.net_worth }));
-  const prevNW = nwData.length >= 2 ? nwData[nwData.length-2].v : totalBalance;
-  const deltaNW = prevNW ? ((totalBalance - prevNW) / Math.abs(prevNW) * 100) : 0;
+  // Find net worth for selected month and its predecessor
+  const nwIdx = month ? nwData.findIndex(d => d.m === month) : nwData.length - 1;
+  const currentNW = nwIdx >= 0 ? nwData[nwIdx].v : totalBalance;
+  const prevNW = nwIdx >= 1 ? nwData[nwIdx - 1].v : (nwData.length >= 2 ? nwData[nwData.length - 2].v : totalBalance);
+  const deltaNW = prevNW ? ((currentNW - prevNW) / Math.abs(prevNW) * 100) : 0;
   const byCat = summary.by_category || [];
   const topCats = byCat.filter(x => x.total > 0).sort((a,b) => b.total - a.total).slice(0, 6);
   const totalExp = topCats.reduce((s,x) => s + x.total, 0);
   const budgets = summary.budgets || [];
   const recList = recurring?.recurring || (Array.isArray(recurring) ? recurring : []);
   const trendHistory = (trends || []).map(t => { const [y,mo] = (t.month||'').split('-').map(Number); return { m: mo ? new Date(y,mo-1,15).toLocaleString('en-CA',{month:'short'}) : t.month, income: t.income, expenses: t.expenses }; });
-  // Calculate deltas vs last month
-  const prevMonth = trendHistory.length >= 2 ? trendHistory[trendHistory.length - 2] : null;
-  const incomeDelta = prevMonth && prevMonth.income ? ((income - prevMonth.income) / prevMonth.income * 100) : 0;
-  const expDelta = prevMonth && prevMonth.expenses ? ((expenses - prevMonth.expenses) / prevMonth.expenses * 100) : 0;
-  const prevMonthName = prevMonth ? prevMonth.m : 'last month';
+  // Calculate deltas vs previous month (from summary API, relative to selected month)
+  const prevIncome = summary.prev_income || 0;
+  const prevExpenses = summary.prev_expenses || 0;
+  const incomeDelta = prevIncome ? ((income - prevIncome) / prevIncome * 100) : 0;
+  const expDelta = prevExpenses ? ((expenses - prevExpenses) / prevExpenses * 100) : 0;
+  const prevMonthName = summary.prev_month ? new Date(summary.prev_month + '-15').toLocaleString('en-CA', {month: 'short'}) : 'last month';
 
   // Insights
   let insightsHTML = '';
@@ -669,10 +673,10 @@ async function _renderDashboard(c) {
     <div class="kpi-grid">
       <div class="kpi hero-aurora" style="grid-column:span 2;padding:20px 22px">
         <div class="kpi-label">Net worth</div>
-        <div class="kpi-value">${fmtCurrencyHTML(totalBalance)}</div>
+        <div class="kpi-value">${fmtCurrencyHTML(currentNW)}</div>
         <div class="kpi-delta">
-          <span class="chip chip-up">${icon('arrow_up',11)} ${deltaNW.toFixed(1)}%</span>
-          <span>vs last month</span>
+          <span class="chip ${deltaNW >= 0 ? 'chip-up' : 'chip-dn'}">${icon(deltaNW >= 0 ? 'arrow_up' : 'arrow_dn',11)} ${Math.abs(deltaNW).toFixed(1)}%</span>
+          <span>vs ${prevMonthName}</span>
         </div>
         ${svgSparkline(nwData.map(d=>d.v), 120, 36, 'rgba(255,255,255,0.7)')}
       </div>
