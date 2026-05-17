@@ -7,13 +7,13 @@ from datetime import datetime
 import yaml
 from flask import Blueprint, jsonify, request, Response
 
-from canada_finance.config import BANKS_DIR
-from canada_finance.models.database import get_db
-from canada_finance.services.categorization import load_learned_dict
-from canada_finance.services.csv_parser import (
+from boreal.config import BANKS_DIR
+from boreal.models.database import get_db
+from boreal.services.categorization import load_learned_dict
+from boreal.services.csv_parser import (
     load_bank_configs, detect_bank_config, parse_with_config,
 )
-from canada_finance.services.rules_engine import save_transactions
+from boreal.services.rules_engine import save_transactions
 
 import_export_bp = Blueprint("import_export", __name__)
 
@@ -189,7 +189,7 @@ def api_export():
 @import_export_bp.route("/api/backup")
 def api_backup():
     """Download the full SQLite database file as a backup."""
-    from canada_finance.config import DB_PATH
+    from boreal.config import DB_PATH
     if not os.path.exists(DB_PATH):
         return jsonify({"error": "No database found"}), 404
     with open(DB_PATH, "rb") as f:
@@ -202,7 +202,7 @@ def api_backup():
 @import_export_bp.route("/api/restore", methods=["POST"])
 def api_restore():
     """Restore the database from an uploaded .db file."""
-    from canada_finance.config import DB_PATH
+    from boreal.config import DB_PATH
     f = request.files.get("file")
     if not f:
         return jsonify({"error": "No file provided"}), 400
@@ -323,7 +323,7 @@ def api_export_pdf():
 
 def _parse_ofx(text, learned):
     """Parse OFX/QFX file content into transaction dicts."""
-    from canada_finance.services.categorization import categorize
+    from boreal.services.categorization import categorize
 
     transactions = []
     # Extract account name from OFX if possible

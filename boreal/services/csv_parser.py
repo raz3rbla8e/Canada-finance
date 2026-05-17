@@ -5,9 +5,9 @@ import re
 
 import yaml
 
-from canada_finance.config import BANKS_DIR
-from canada_finance.services.helpers import parse_date, safe_abs_float
-from canada_finance.services.categorization import categorize
+from boreal.config import BANKS_DIR
+from boreal.services.helpers import parse_date, safe_abs_float
+from boreal.services.categorization import categorize
 
 
 def load_bank_configs() -> list:

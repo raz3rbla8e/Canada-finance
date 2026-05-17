@@ -4,12 +4,12 @@ Boreal - Personal Finance Dashboard for Canadians
 
 Entry point: python app.py
 Or install with: pip install .
-Then run: canada-finance
+Then run: boreal
 """
 
 import os
 
-from canada_finance import create_app
+from boreal import create_app
 
 app = create_app()
 

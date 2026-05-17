@@ -5,9 +5,9 @@ import threading
 
 from flask import Flask, session, request, jsonify, g
 
-from canada_finance.config import DB_PATH, PROJECT_ROOT, DEMO_MODE
-from canada_finance.models.database import init_db, close_db
-from canada_finance.routes import register_blueprints
+from boreal.config import DB_PATH, PROJECT_ROOT, DEMO_MODE
+from boreal.models.database import init_db, close_db
+from boreal.routes import register_blueprints
 
 
 def _get_secret_key() -> str:
@@ -121,7 +121,7 @@ def _start_demo_reset_timer(app):
     """Reset demo data every 60 minutes."""
     def _reset():
         with app.app_context():
-            from canada_finance.routes.main import _seed_demo_data
+            from boreal.routes.main import _seed_demo_data
             _seed_demo_data(wipe=True)
             print("🔄 Demo data auto-reset")
         # Schedule next reset
@@ -150,11 +150,11 @@ def create_app():
     # Auto-seed sample data in demo mode
     if DEMO_MODE:
         with app.app_context():
-            from canada_finance.models.database import get_db
+            from boreal.models.database import get_db
             db = get_db()
             count = db.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
             if count == 0:
-                from canada_finance.routes.main import _seed_demo_data
+                from boreal.routes.main import _seed_demo_data
                 added = _seed_demo_data(wipe=False)
                 print(f"🍁 Demo mode: seeded {added} sample transactions")
         _start_demo_reset_timer(app)

@@ -109,7 +109,7 @@ Download `Boreal.exe` from the [Releases](https://github.com/raz3rbla8e/Boreal/r
 To build the `.exe` yourself:
 ```bash
 pip install pyinstaller
-pyinstaller canada_finance.spec
+pyinstaller boreal.spec
 # Output: dist/Boreal.exe
 ```
 
@@ -315,13 +315,13 @@ Boreal/
 ├── requirements.txt                ← Pip dependencies
 ├── start.bat                       ← Windows launcher (auto-installs deps)
 ├── start.sh                        ← Mac/Linux launcher
-├── canada_finance.spec             ← PyInstaller build config
+├── boreal.spec                     ← PyInstaller build config
 ├── Dockerfile                      ← Docker container config
 ├── .env.example                    ← Environment variable reference
 ├── banks/                          ← YAML bank configs (auto-detect CSV formats)
 │   ├── amex.yaml
 │   ├── bmo_chequing.yaml
-│   ├── canada_finance_export.yaml  ← Recognizes re-imported exports
+│   ├── boreal_export.yaml           ← Recognizes re-imported exports
 │   ├── cibc_chequing.yaml
 │   ├── national_bank.yaml
 │   ├── rbc_chequing.yaml
@@ -336,9 +336,9 @@ Boreal/
 │   ├── student.yaml
 │   ├── self_employed.yaml
 │   └── carpool_commuter.yaml
-├── canada_finance/                 ← Application package
+├── boreal/                         ← Application package
 │   ├── __init__.py                 ← Flask app factory, CSRF middleware
-│   ├── __main__.py                 ← python -m canada_finance
+│   ├── __main__.py                 ← python -m boreal
 │   ├── config.py                   ← Paths and config constants
 │   ├── models/
 │   │   └── database.py             ← SQLite schema, init, tx_hash, migrations

@@ -3,9 +3,9 @@ import os
 import yaml
 from flask import Blueprint, jsonify, request
 
-from canada_finance.config import RULES_TEMPLATE_DIR
-from canada_finance.models.database import get_db
-from canada_finance.services.rules_engine import (
+from boreal.config import RULES_TEMPLATE_DIR
+from boreal.models.database import get_db
+from boreal.services.rules_engine import (
     load_enabled_rules, _condition_matches, evaluate_rules, apply_rule_to_transaction,
 )
 

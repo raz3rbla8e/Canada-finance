@@ -4,7 +4,7 @@ import sqlite3
 
 from flask import Blueprint, render_template, jsonify, current_app
 
-from canada_finance.config import DB_PATH, SAMPLE_DATA_DIR, BANKS_DIR
+from boreal.config import DB_PATH, SAMPLE_DATA_DIR, BANKS_DIR
 
 main_bp = Blueprint("main", __name__)
 
@@ -43,10 +43,10 @@ def api_demo_reset():
 def _seed_demo_data(wipe=True):
     """Seed (or re-seed) the database with comprehensive demo data."""
     from datetime import date, timedelta
-    from canada_finance.models.database import get_db
-    from canada_finance.services.categorization import load_learned_dict
-    from canada_finance.services.csv_parser import load_bank_configs, detect_bank_config, parse_with_config
-    from canada_finance.services.rules_engine import save_transactions
+    from boreal.models.database import get_db
+    from boreal.services.categorization import load_learned_dict
+    from boreal.services.csv_parser import load_bank_configs, detect_bank_config, parse_with_config
+    from boreal.services.rules_engine import save_transactions
 
     db = get_db()
     if wipe:

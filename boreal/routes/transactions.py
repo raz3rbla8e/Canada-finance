@@ -2,8 +2,8 @@ import sqlite3
 
 from flask import Blueprint, jsonify, request
 
-from canada_finance.models.database import get_db, tx_hash
-from canada_finance.routes.accounts import save_undo
+from boreal.models.database import get_db, tx_hash
+from boreal.routes.accounts import save_undo
 
 transactions_bp = Blueprint("transactions", __name__)
 

@@ -2,7 +2,7 @@ import sqlite3
 
 from flask import Blueprint, jsonify, request
 
-from canada_finance.models.database import get_db
+from boreal.models.database import get_db
 
 settings_bp = Blueprint("settings", __name__)
 

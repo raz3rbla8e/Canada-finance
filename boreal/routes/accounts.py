@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from flask import Blueprint, jsonify, request
 
-from canada_finance.models.database import get_db, tx_hash
+from boreal.models.database import get_db, tx_hash
 
 accounts_bp = Blueprint("accounts_extra", __name__)
 

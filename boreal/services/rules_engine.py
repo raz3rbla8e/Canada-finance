@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from canada_finance.models.database import get_db, get_db_path
+from boreal.models.database import get_db, get_db_path
 
 
 def load_enabled_rules(db=None):
@@ -106,7 +106,7 @@ def apply_rule_to_transaction(tx, rule):
 
 
 def save_transactions(txns: list) -> tuple:
-    from canada_finance.models.database import tx_hash
+    from boreal.models.database import tx_hash
     added = dupes = 0
     try:
         db = get_db()

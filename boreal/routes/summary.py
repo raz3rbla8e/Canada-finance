@@ -2,7 +2,7 @@ from datetime import date, timedelta
 
 from flask import Blueprint, jsonify, request
 
-from canada_finance.models.database import get_db
+from boreal.models.database import get_db
 
 summary_bp = Blueprint("summary", __name__)
 
