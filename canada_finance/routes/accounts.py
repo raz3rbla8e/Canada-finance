@@ -256,6 +256,51 @@ def api_schedules_post_due():
     return jsonify({"ok": True, "posted": posted})
 
 
+@accounts_bp.route("/api/schedules/<int:sid>/post", methods=["POST"])
+def api_schedule_post_single(sid):
+    """Post a single scheduled transaction now, regardless of due date."""
+    db = get_db()
+    s = db.execute("SELECT * FROM scheduled_transactions WHERE id=?", (sid,)).fetchone()
+    if not s:
+        return jsonify({"error": "Schedule not found"}), 404
+    today = date.today().isoformat()
+    post_date = s["next_due"] if s["next_due"] <= today else today
+    h = tx_hash(post_date, s["name"], s["amount"], s["account"])
+    existing = db.execute("SELECT id FROM transactions WHERE tx_hash=?", (h,)).fetchone()
+    posted = 0
+    if not existing:
+        db.execute(
+            "INSERT INTO transactions (date, type, name, category, amount, account, notes, source, tx_hash) VALUES (?,?,?,?,?,?,?,?,?)",
+            (post_date, s["type"], s["name"], s["category"], s["amount"],
+             s["account"], "Posted from schedule", "scheduled", h),
+        )
+        posted = 1
+    # Always advance next_due
+    d = date.fromisoformat(s["next_due"])
+    if s["frequency"] == "weekly":
+        d += timedelta(weeks=1)
+    elif s["frequency"] == "biweekly":
+        d += timedelta(weeks=2)
+    elif s["frequency"] == "monthly":
+        import calendar
+        orig_day = d.day
+        month = d.month + 1
+        year = d.year
+        if month > 12:
+            month = 1
+            year += 1
+        max_day = calendar.monthrange(year, month)[1]
+        d = date(year, month, min(orig_day, max_day))
+    elif s["frequency"] == "yearly":
+        import calendar
+        next_year = d.year + 1
+        max_day = calendar.monthrange(next_year, d.month)[1]
+        d = date(next_year, d.month, min(d.day, max_day))
+    db.execute("UPDATE scheduled_transactions SET next_due=? WHERE id=?", (d.isoformat(), sid))
+    db.commit()
+    return jsonify({"ok": True, "posted": posted})
+
+
 # ── TRANSFERS ─────────────────────────────────────────────────────────────────
 
 @accounts_bp.route("/api/transfers", methods=["POST"])

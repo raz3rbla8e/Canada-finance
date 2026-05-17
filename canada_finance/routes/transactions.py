@@ -71,13 +71,14 @@ def api_add():
     try:
         amount = float(d["amount"])
         h = tx_hash(d["date"], d["name"], amount, d["account"])
-        get_db().execute("""INSERT INTO transactions
+        db = get_db()
+        cur = db.execute("""INSERT INTO transactions
             (date,type,name,category,amount,account,notes,source,tx_hash)
             VALUES (?,?,?,?,?,?,?,?,?)""",
             (d["date"], d["type"], d["name"], d["category"],
              amount, d["account"], d.get("notes", ""), "manual", h))
-        get_db().commit()
-        return jsonify({"ok": True})
+        db.commit()
+        return jsonify({"ok": True, "id": cur.lastrowid})
     except sqlite3.IntegrityError:
         return jsonify({"error": "Duplicate transaction"}), 409
     except (ValueError, TypeError):

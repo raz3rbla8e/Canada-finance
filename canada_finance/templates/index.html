@@ -3,946 +3,140 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0e0f11">
+<meta name="theme-color" content="#2a5a3f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Boreal</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230f1218'/%3E%3Cpolygon points='50,12 38,33 62,33' fill='%235B9CF5'/%3E%3Cpolygon points='50,22 32,48 68,48' fill='%235B9CF5'/%3E%3Cpolygon points='50,35 27,65 73,65' fill='%235B9CF5'/%3E%3Crect x='46' y='65' width='8' height='12' rx='1.5' fill='%235B9CF5' opacity='.7'/%3E%3C/svg%3E">
+<title>Boreal — Personal finance, kept private</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect width='24' height='24' rx='6' fill='%232a5a3f'/%3E%3Cpath d='M12 3 L7 10 L9.5 10 L6.5 14 L9 14 L5 19 L19 19 L15 14 L17.5 14 L14.5 10 L17 10 Z' fill='white' opacity='0.95'/%3E%3C/svg%3E">
 <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ range(10000,99999) | random }}">
 </head>
 <body>
-<div class="shell">
 
-<!-- ── MOBILE TOP BAR ───────────────────────────────────────────────── -->
-<div class="mobile-topbar">
-  <button class="mobile-menu-btn" onclick="toggleMobileMenu()" aria-label="Open menu">
-    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-  </button>
-  <div class="logo">
-    <div class="logo-mark"><svg width="17" height="17" viewBox="0 0 100 100" fill="none"><polygon points="50,5 35,30 65,30" fill="#5B9CF5"/><polygon points="50,18 28,50 72,50" fill="#5B9CF5"/><polygon points="50,35 20,72 80,72" fill="#5B9CF5"/><rect x="44" y="72" width="12" height="16" rx="2" fill="#5B9CF5" opacity=".7"/></svg></div>
-    <span class="logo-text">Boreal</span>
-  </div>
-</div>
-
-<!-- ── SIDEBAR OVERLAY ──────────────────────────────────────────────── -->
-<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeMobileMenu()"></div>
-
-<!-- ── SIDEBAR ──────────────────────────────────────────────────────── -->
-<aside class="sidebar" id="sidebar">
-  <div class="sidebar-inner">
-  <div class="logo">
-    <div class="logo-mark"><svg width="17" height="17" viewBox="0 0 100 100" fill="none"><polygon points="50,5 35,30 65,30" fill="#5B9CF5"/><polygon points="50,18 28,50 72,50" fill="#5B9CF5"/><polygon points="50,35 20,72 80,72" fill="#5B9CF5"/><rect x="44" y="72" width="12" height="16" rx="2" fill="#5B9CF5" opacity=".7"/></svg></div>
-    <span class="logo-text">Boreal</span>
-    <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Collapse sidebar">
-      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
-    </button>
-  </div>
-
-  <div class="nav-section">
-    <div class="nav-label">Views</div>
-
-    <button class="nav-btn active" onclick="nav('dashboard')" data-tip="Dashboard">
-      <span class="nav-icon">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
-          <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M12 3 L7 10 L9.5 10 L6.5 14 L9 14 L5 19 L19 19 L15 14 L17.5 14 L14.5 10 L17 10 Z" fill="currentColor" opacity="0.95"/>
+          <rect x="11" y="19" width="2" height="3" rx="0.5" fill="currentColor" opacity="0.6"/>
         </svg>
-      </span>
-      <span class="nav-label-text">Dashboard</span>
-    </button>
-
-    <button class="nav-btn" onclick="nav('transactions')" data-tip="Transactions">
-      <span class="nav-icon">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-        </svg>
-      </span>
-      <span class="nav-label-text">Transactions</span>
-    </button>
-
-    <button class="nav-btn" onclick="nav('year')" data-tip="Year Review">
-      <span class="nav-icon">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
-        </svg>
-      </span>
-      <span class="nav-label-text">Year Review</span>
-    </button>
-
-    <button class="nav-btn" onclick="nav('import')" data-tip="Import">
-      <span class="nav-icon">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-        </svg>
-      </span>
-      <span class="nav-label-text">Import CSV</span>
-    </button>
-
-    <button class="nav-btn" onclick="nav('settings')" data-tip="Settings">
-      <span class="nav-icon">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-        </svg>
-      </span>
-      <span class="nav-label-text">Settings</span>
-    </button>
-  </div>
-
-  <div class="nav-section">
-    <div class="nav-label">Actions</div>
-
-    <button class="nav-btn" onclick="toggleQuickActions(event)" data-tip="Quick Actions" id="quick-actions-btn">
-      <span class="nav-icon">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-        </svg>
-      </span>
-      <span class="nav-label-text">Quick Actions</span>
-    </button>
-
-    <button class="nav-btn" onclick="openAddModal()" data-tip="Add Transaction">
-      <span class="nav-icon">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/>
-        </svg>
-      </span>
-      <span class="nav-label-text">Add Transaction</span>
-    </button>
-
-    <button class="nav-btn" onclick="openTransferModal()" data-tip="Transfer">
-      <span class="nav-icon">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M7 16l-4-4m0 0l4-4m-4 4h18M17 8l4 4m0 0l-4 4m4-4H3"/>
-        </svg>
-      </span>
-      <span class="nav-label-text">Transfer</span>
-    </button>
-
-    <button class="nav-btn" onclick="openExportModal()" data-tip="Export">
-      <span class="nav-icon">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-      </span>
-      <span class="nav-label-text">Export</span>
-    </button>
-  </div>
-
-  <div class="sidebar-bottom">
-    <div class="sidebar-bottom-row">
-      <span class="sidebar-bottom-label">Dark mode</span>
-      <label class="toggle">
-        <input type="checkbox" id="theme-toggle" onchange="toggleTheme()" checked>
-        <span class="toggle-slider"></span>
-      </label>
+      </div>
+      <div>
+        <div class="brand-name">Boreal</div>
+        <div class="brand-sub">v2.4 · local</div>
+      </div>
     </div>
-  </div>
-  </div><!-- /sidebar-inner -->
-</aside>
 
-<!-- ── MAIN ─────────────────────────────────────────────────────────── -->
-<main class="main">
-<div class="main-inner">
+    <div class="nav-section-label">Workspace</div>
+    <button class="nav-item active" data-view="dashboard" onclick="navigateTo('dashboard')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      <span>Dashboard</span>
+    </button>
+    <button class="nav-item" data-view="transactions" onclick="navigateTo('transactions')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+      <span>Transactions</span>
+      <span class="count" id="nav-txn-count"></span>
+    </button>
+    <button class="nav-item" data-view="budgets" onclick="navigateTo('budgets')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>
+      <span>Budgets</span>
+    </button>
+    <button class="nav-item" data-view="accounts" onclick="navigateTo('accounts')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 1 0-4h12"/><circle cx="17" cy="13" r="1.2"/></svg>
+      <span>Accounts</span>
+    </button>
+    <button class="nav-item" data-view="year" onclick="navigateTo('year')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="13" width="3" height="7" rx="1"/><rect x="10.5" y="9" width="3" height="11" rx="1"/><rect x="17" y="5" width="3" height="15" rx="1"/></svg>
+      <span>Year review</span>
+    </button>
 
-<!-- DEMO BANNER -->
-<div id="demo-banner" class="demo-banner" style="display:none">
-  <span>🍁 This is a live demo with sample data.</span>
-  <button class="demo-reset-btn" onclick="resetDemo()">Reset Demo</button>
-</div>
+    <div class="nav-section-label">Automate</div>
+    <button class="nav-item" data-view="import" onclick="navigateTo('import')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4M12 3v12M7 8l5-5 5 5"/></svg>
+      <span>Import</span>
+    </button>
+    <button class="nav-item" data-view="schedules" onclick="navigateTo('schedules')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <span>Scheduled</span>
+      <span class="count" id="nav-sched-count"></span>
+    </button>
+    <button class="nav-item" data-view="rules" onclick="navigateTo('rules')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h7M4 18h10"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+      <span>Rules</span>
+      <span class="count" id="nav-rules-count"></span>
+    </button>
 
-<!-- ══════════════════════════════════════════════════════════════════ -->
-<!-- DASHBOARD                                                          -->
-<!-- ══════════════════════════════════════════════════════════════════ -->
-<section id="sec-dashboard" class="section active" data-screen-label="Dashboard">
+    <div class="nav-section-label"></div>
+    <button class="nav-item" data-view="settings" onclick="navigateTo('settings')">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.15-1.43l2-1.55-2-3.46-2.36.85a7 7 0 0 0-2.48-1.43L13.5 2h-3l-.51 2.98a7 7 0 0 0-2.48 1.43l-2.36-.85-2 3.46 2 1.55A7 7 0 0 0 5 12c0 .49.05.96.15 1.43l-2 1.55 2 3.46 2.36-.85a7 7 0 0 0 2.48 1.43L10.5 22h3l.51-2.98a7 7 0 0 0 2.48-1.43l2.36.85 2-3.46-2-1.55c.1-.47.15-.94.15-1.43z"/></svg>
+      <span>Settings</span>
+    </button>
 
-  <div id="empty-state" class="empty-state" style="display:none">
-    <div class="empty-state-icon">🍁</div>
-    <h2>Welcome to Boreal</h2>
-    <p>Import a bank CSV to see your dashboard come to life.</p>
-    <button class="btn-primary" onclick="nav('import')">Import your first CSV</button>
-  </div>
-
-  <div id="dashboard-content">
-    <div class="month-row">
-      <button class="month-btn" id="month-prev" onclick="changeMonth(-1)">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+    <div class="sidebar-foot">
+      <button class="nav-item" id="theme-toggle-btn" onclick="toggleTheme()">
+        <svg class="icon" id="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <span id="theme-label">Dark mode</span>
       </button>
-      <div class="month-label" id="month-display" style="position:relative;cursor:pointer" onclick="toggleMonthMenu(event)">
-        —
-        <div class="month-menu" id="month-menu">
-          <button class="month-menu-item" onclick="event.stopPropagation(); exportCSV(false); closeMonthMenu()">📊 Export Month CSV</button>
-          <button class="month-menu-item" onclick="event.stopPropagation(); openPdfModal(); closeMonthMenu()">📄 Export PDF Report</button>
-          <button class="month-menu-item" onclick="event.stopPropagation(); exportCSV(true); closeMonthMenu()">📁 Export All CSV</button>
+      <div class="user-row">
+        <div class="avatar" id="user-avatar">B</div>
+        <div class="user-info">
+          <div class="user-name" id="user-display-name">Boreal</div>
+          <div class="user-mail" id="user-db-info">finance.db</div>
         </div>
       </div>
-      <button class="month-btn" id="month-next" onclick="changeMonth(1)">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
-      </button>
-      <button class="btn-icon customize-btn" id="dashboard-customize-btn" onclick="openCustomizeModal()" title="Customize dashboard layout">
-        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <span class="topbar-crumb" id="topbar-crumb">Dashboard</span>
+      <span style="color:var(--ink-4)">/</span>
+      <div class="month-picker">
+        <button onclick="stepMonth(-1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg></button>
+        <span class="label" id="month-label"></span>
+        <button onclick="stepMonth(1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6l6 6-6 6"/></svg></button>
+      </div>
+      <div class="topbar-spacer"></div>
+      <div class="searchbox" onclick="openCommandPalette()" style="cursor:pointer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        <input placeholder="Search or jump to…" readonly style="pointer-events:none">
+        <span class="kbd">⌘K</span>
+      </div>
+      <button class="icon-btn" title="Notifications" onclick="showToast('No new notifications')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>
       </button>
     </div>
 
-    <!-- Budget alerts -->
-    <div id="budget-alerts" class="budget-alerts" style="display:none"></div>
-
-    <!-- Stat cards -->
-    <div class="cards">
-      <div class="card">
-        <div class="card-label">Income</div>
-        <div class="card-value green" id="card-income">$—</div>
-        <div class="card-sub" id="card-income-src">—</div>
-        <div class="card-accent-bar green"></div>
-      </div>
-      <div class="card">
-        <div class="card-label">Expenses</div>
-        <div class="card-value red" id="card-expense">$—</div>
-        <div class="card-sub" id="card-expense-vs">—</div>
-        <div class="card-accent-bar red"></div>
-      </div>
-      <div class="card">
-        <div class="card-label">Net Saved</div>
-        <div class="card-value" id="card-net">$—</div>
-        <div class="card-sub" id="card-net-sub">—</div>
-        <div class="card-accent-bar plain"></div>
-      </div>
-      <div class="card">
-        <div class="card-label">Savings Rate</div>
-        <div class="card-value blue" id="card-rate">—%</div>
-        <div class="card-sub" id="card-rate-sub">of income saved</div>
-        <div class="card-accent-bar blue"></div>
-      </div>
+    <div id="view-container">
+      <!-- Views rendered here by JS -->
     </div>
-
-    <!-- Dashboard panels -->
-    <div id="dashboard-panels">
-      <div class="panel" data-panel-id="spending-by-category">
-        <div class="panel-title">
-          Spending by Category
-          <button class="btn-icon" title="Set budgets" onclick="nav('settings');showBudgetPanel()">
-            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-          </button>
-        </div>
-        <div id="cat-list"></div>
-      </div>
-
-      <div class="panel" data-panel-id="donut-chart">
-        <div class="panel-title">Breakdown</div>
-        <div class="chart-wrap"><canvas id="donut-chart"></canvas></div>
-      </div>
-
-      <div class="panel" data-panel-id="averages">
-        <div class="panel-title">Monthly Averages <span id="avg-subtitle" style="font-size:10px;color:var(--muted);font-weight:normal"></span></div>
-        <div id="averages-list"><div class="empty">Loading…</div></div>
-      </div>
-
-      <div class="panel" data-panel-id="recent-txns">
-        <div class="panel-title">Recent Transactions</div>
-        <table class="txn-table">
-          <thead><tr>
-            <th>Date</th><th>Name</th><th>Category</th><th style="text-align:right">Amount</th>
-          </tr></thead>
-          <tbody id="recent-txns"></tbody>
-        </table>
-      </div>
-
-      <div class="panel" data-panel-id="recurring">
-        <div class="panel-title">
-          Recurring &amp; Subscriptions
-          <span id="recurring-subtitle" style="font-size:10px;color:var(--muted);font-weight:normal"></span>
-        </div>
-        <div id="recurring-list"><div class="empty">Loading…</div></div>
-      </div>
-
-      <div class="panel" data-panel-id="spending-trends">
-        <div class="panel-title">Spending Trends</div>
-        <div class="chart-wrap"><canvas id="trends-chart"></canvas></div>
-      </div>
-
-      <div class="panel" data-panel-id="savings-goals">
-        <div class="panel-title">
-          Savings Goals
-          <button class="btn-icon" title="Manage goals" onclick="nav('settings');showGoalsPanel()">
-            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-          </button>
-        </div>
-        <div id="goals-dashboard-list"><div class="empty">No goals set</div></div>
-      </div>
-
-      <div class="panel" data-panel-id="net-worth">
-        <div class="panel-title">Net Worth</div>
-        <div class="chart-wrap"><canvas id="net-worth-chart"></canvas></div>
-      </div>
-
-      <div class="panel" data-panel-id="account-balances">
-        <div class="panel-title">
-          Account Balances
-          <button class="btn-icon" title="Manage accounts" onclick="nav('settings');showAccountsPanel()">
-            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-          </button>
-        </div>
-        <div id="account-balances-list"><div class="empty">No accounts set up</div></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ══════════════════════════════════════════════════════════════════ -->
-<!-- TRANSACTIONS                                                       -->
-<!-- ══════════════════════════════════════════════════════════════════ -->
-<section id="sec-transactions" class="section" data-screen-label="Transactions">
-  <div class="txn-header">
-    <div class="txn-title">All Transactions</div>
-    <div class="filter-row">
-      <input type="text" id="search-input" placeholder="Search — costco, eating out, 2026-03…"
-        style="width:260px;max-width:100%" oninput="onSearchInput()" onkeydown="if(event.key==='Escape')clearSearch()">
-      <select id="filter-type" onchange="loadTransactions()">
-        <option value="">All Types</option>
-        <option value="Expense">Expenses</option>
-        <option value="Income">Income</option>
-      </select>
-      <select id="filter-cat" onchange="loadTransactions()"><option value="">All Categories</option></select>
-      <select id="filter-account" onchange="loadTransactions()"><option value="">All Accounts</option></select>
-      <button class="btn-ghost btn-sm btn" id="hidden-toggle" onclick="toggleHiddenView()" style="display:none">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        Hidden <span id="hidden-count-badge" class="hidden-badge">0</span>
-      </button>
-      <button class="btn btn-sm" onclick="openAddModal()">+ Add</button>
-    </div>
-  </div>
-
-  <div id="bulk-toolbar" class="bulk-toolbar" style="display:none;align-items:center;gap:8px">
-    <span id="bulk-count" style="font-size:13px;color:var(--muted)">0 selected</span>
-    <button class="btn btn-sm" onclick="bulkCategorize()">Categorize</button>
-    <button id="bulk-hide-btn" class="btn btn-sm" onclick="bulkHide()">Hide</button>
-    <button id="bulk-unhide-btn" class="btn btn-sm" onclick="bulkUnhide()" style="display:none">Unhide</button>
-    <button class="btn btn-sm btn-red" onclick="bulkDelete()">Delete</button>
-    <button class="btn-ghost btn-sm btn" onclick="clearSelection()">Cancel</button>
-  </div>
-
-  <div id="search-banner" class="search-banner" style="display:none"></div>
-
-  <div class="panel" style="padding:0;overflow:hidden">
-    <table class="txn-table">
-      <thead><tr>
-        <th style="width:32px;padding-left:16px"></th>
-        <th>Date</th><th>Name</th><th>Category</th><th>Account</th>
-        <th>Type</th><th style="text-align:right">Amount</th><th style="padding-right:16px"></th>
-      </tr></thead>
-      <tbody id="all-txns"></tbody>
-    </table>
-    <div id="txn-empty" class="empty" style="display:none">No transactions found</div>
-  </div>
-
-  <div style="text-align:center;padding:20px 0">
-    <button id="load-more-btn" class="btn btn-ghost" style="display:none" onclick="loadMoreTransactions()">Load More</button>
-  </div>
-</section>
-
-<!-- ══════════════════════════════════════════════════════════════════ -->
-<!-- YEAR REVIEW                                                        -->
-<!-- ══════════════════════════════════════════════════════════════════ -->
-<section id="sec-year" class="section" data-screen-label="Year Review">
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
-    <button class="month-btn" onclick="changeYear(-1)">
-      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
-    </button>
-    <div class="month-label" id="year-display">—</div>
-    <button class="month-btn" onclick="changeYear(1)">
-      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
-    </button>
-  </div>
-  <div class="cards" style="grid-template-columns:repeat(3,1fr)" id="year-cards"></div>
-  <div class="grid2">
-    <div class="panel">
-      <div class="panel-title">Monthly Overview</div>
-      <div id="year-bars"></div>
-    </div>
-    <div class="panel">
-      <div class="panel-title">Top 5 Categories</div>
-      <div id="year-cats"></div>
-    </div>
-  </div>
-</section>
-
-<!-- ══════════════════════════════════════════════════════════════════ -->
-<!-- IMPORT                                                             -->
-<!-- ══════════════════════════════════════════════════════════════════ -->
-<section id="sec-import" class="section" data-screen-label="Import">
-  <div class="panel" style="max-width:600px">
-    <div class="panel-title">Import Bank CSVs</div>
-    <div class="drop-zone" id="drop-zone"
-      onclick="document.getElementById('csv-input').click()"
-      ondragover="event.preventDefault();this.classList.add('drag')"
-      ondragleave="this.classList.remove('drag')"
-      ondrop="handleDrop(event)">
-      <span class="file-icon">📂</span>
-      <strong>Drop CSV or OFX/QFX files here</strong>
-      <p>Tangerine · Wealthsimple · TD · RBC · CIBC · Scotiabank · BMO · National Bank · Amex · OFX/QFX<br>
-      Unknown format? A wizard will map your columns automatically.</p>
-    </div>
-    <input type="file" id="csv-input" multiple accept=".csv,.ofx,.qfx" style="display:none" onchange="handleFiles(this.files)">
-    <div class="import-results" id="import-results"></div>
-  </div>
-</section>
-
-<!-- ══════════════════════════════════════════════════════════════════ -->
-<!-- SETTINGS                                                           -->
-<!-- ══════════════════════════════════════════════════════════════════ -->
-<section id="sec-settings" class="section" data-screen-label="Settings">
-  <div style="max-width:640px">
-
-    <!-- Settings Tab Bar -->
-    <div class="settings-tabs">
-      <button class="settings-tab active" onclick="switchSettingsTab('general')" data-tab="general">General</button>
-      <button class="settings-tab" onclick="switchSettingsTab('categories')" data-tab="categories">Categories</button>
-      <button class="settings-tab" onclick="switchSettingsTab('accounts')" data-tab="accounts">Accounts</button>
-      <button class="settings-tab" onclick="switchSettingsTab('import')" data-tab="import">Import</button>
-    </div>
-
-    <!-- ── General Tab ── -->
-    <div class="settings-tab-pane active" data-tab-pane="general">
-
-    <div class="settings-section">
-      <div class="settings-title">Dashboard Layout</div>
-      <p class="settings-sub-title">Choose which panels appear on your dashboard and their order. Drag or use arrows to rearrange.</p>
-      <div id="settings-panel-list"></div>
-      <div style="margin-top:12px">
-        <button class="btn btn-ghost btn-sm" onclick="resetDashboardLayout()">Reset to Default</button>
-      </div>
-    </div>
-
-    <div class="settings-section" id="budget-panel">
-      <div class="settings-title">Monthly Budgets</div>
-      <p class="settings-sub-title">Set spending limits per category. Progress bars appear on the dashboard.</p>
-      <div id="budget-list" style="margin-bottom:14px"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <select id="budget-cat" style="flex:1;min-width:160px"><option value="">Select category…</option></select>
-        <input type="number" id="budget-amt" placeholder="$" style="width:100px" min="1">
-        <button class="btn btn-sm" onclick="saveBudget()">Set Budget</button>
-      </div>
-    </div>
-
-    <div class="settings-section">
-      <div class="settings-title">Backup &amp; Restore</div>
-      <p class="settings-sub-title">Download your database as a backup, or restore from a previous backup file.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn btn-sm" onclick="downloadBackup()">⬇ Download Backup</button>
-        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('restore-input').click()">⬆ Restore from Backup</button>
-        <input type="file" id="restore-input" accept=".db" style="display:none" onchange="restoreBackup(this.files[0])">
-      </div>
-    </div>
-
-    </div><!-- /general tab -->
-
-    <!-- ── Categories Tab ── -->
-    <div class="settings-tab-pane" data-tab-pane="categories">
-
-    <div class="settings-section">
-      <div class="settings-title">Categories</div>
-      <p class="settings-sub-title">Manage expense and income categories. Custom categories can be added, renamed, or deleted.</p>
-      <div style="margin-bottom:14px">
-        <div style="font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);margin-bottom:8px">Expense Categories</div>
-        <div id="expense-cat-list"></div>
-      </div>
-      <div style="margin-bottom:14px">
-        <div style="font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);margin-bottom:8px">Income Categories</div>
-        <div id="income-cat-list"></div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input type="text" id="new-cat-name" placeholder="New category name" style="flex:1;min-width:140px">
-        <input type="text" id="new-cat-icon" placeholder="🏷️" style="width:52px;text-align:center" maxlength="2">
-        <select id="new-cat-type" style="width:110px">
-          <option value="Expense">Expense</option>
-          <option value="Income">Income</option>
-        </select>
-        <button class="btn btn-sm" onclick="addCategory()">Add</button>
-      </div>
-    </div>
-
-    <div class="settings-section" id="groups-panel">
-      <div class="settings-title">Category Groups</div>
-      <p class="settings-sub-title">Organize expense categories into custom groups. Groups appear in the dashboard spending breakdown.</p>
-      <div id="groups-settings-list" style="margin-bottom:14px"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <input type="text" id="new-group-name" placeholder="New group name" style="flex:1;min-width:140px">
-        <button class="btn btn-sm" onclick="addGroup()">Add Group</button>
-      </div>
-    </div>
-
-    <div class="settings-section">
-      <div class="settings-title">Learned Merchants</div>
-      <p class="settings-sub-title">Categories you've set manually. Deleted entries revert to auto-categorization.</p>
-      <div id="learned-list"></div>
-    </div>
-
-    </div><!-- /categories tab -->
-
-    <!-- ── Accounts Tab ── -->
-    <div class="settings-tab-pane" data-tab-pane="accounts">
-
-    <div class="settings-section" id="accounts-panel">
-      <div class="settings-title">Accounts</div>
-      <p class="settings-sub-title">Track account balances and net worth. Opening balance is your balance before any imported transactions.</p>
-      <div id="accounts-settings-list" style="margin-bottom:14px"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <input type="text" id="new-acct-name" placeholder="Account name" style="flex:1;min-width:120px">
-        <select id="new-acct-type" style="width:120px">
-          <option value="chequing">Chequing</option>
-          <option value="savings">Savings</option>
-          <option value="credit">Credit Card</option>
-          <option value="investment">Investment</option>
-          <option value="other">Other</option>
-        </select>
-        <input type="number" id="new-acct-balance" placeholder="Opening $" style="width:100px" step="0.01">
-        <button class="btn btn-sm" onclick="addAccount()">Add Account</button>
-      </div>
-    </div>
-
-    <div class="settings-section" id="goals-panel">
-      <div class="settings-title">Savings Goals</div>
-      <p class="settings-sub-title">Track progress toward financial goals. Contribute savings manually.</p>
-      <div id="goals-settings-list" style="margin-bottom:14px"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <input type="text" id="new-goal-name" placeholder="Goal name" style="flex:1;min-width:120px">
-        <input type="number" id="new-goal-target" placeholder="Target $" style="width:100px" min="1" step="0.01">
-        <input type="text" id="new-goal-icon" placeholder="🎯" style="width:52px;text-align:center" maxlength="2">
-        <button class="btn btn-sm" onclick="addGoal()">Add Goal</button>
-      </div>
-    </div>
-
-    <div class="settings-section" id="schedules-panel">
-      <div class="settings-title">Scheduled Transactions</div>
-      <p class="settings-sub-title">
-        Set up recurring transactions to be auto-posted when due.
-        <button class="btn btn-ghost btn-sm" onclick="postDueSchedules()" style="margin-left:8px">⚡ Post due now</button>
-      </p>
-      <div id="schedules-settings-list" style="margin-bottom:14px"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <input type="text" id="new-sched-name" placeholder="Name" style="flex:1;min-width:100px">
-        <select id="new-sched-type" style="width:100px" onchange="updateCatOptions('new-sched-cat','new-sched-type')">
-          <option value="Expense">Expense</option>
-          <option value="Income">Income</option>
-        </select>
-        <select id="new-sched-cat" style="width:130px"></select>
-        <input type="number" id="new-sched-amount" placeholder="$" style="width:80px" min="0.01" step="0.01">
-        <select id="new-sched-account" style="width:130px"></select>
-        <select id="new-sched-freq" style="width:110px">
-          <option value="monthly">Monthly</option>
-          <option value="weekly">Weekly</option>
-          <option value="biweekly">Biweekly</option>
-          <option value="yearly">Yearly</option>
-        </select>
-        <input type="date" id="new-sched-due" style="width:140px">
-        <button class="btn btn-sm" onclick="addSchedule()">Add</button>
-      </div>
-    </div>
-
-    </div><!-- /accounts tab -->
-
-    <!-- ── Import Tab ── -->
-    <div class="settings-tab-pane" data-tab-pane="import">
-
-    <div class="settings-section">
-      <div class="settings-title" style="display:flex;align-items:center;justify-content:space-between">
-        <span>Import Rules</span>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-ghost btn-sm" onclick="openTemplateModal()">Load Template</button>
-          <button class="btn btn-sm" onclick="openRuleModal()">+ Add Rule</button>
-        </div>
-      </div>
-      <p class="settings-sub-title">
-        Rules run on CSV import to automatically hide, label, or force-show transactions. First match wins by priority.
-      </p>
-      <div style="margin-bottom:12px">
-        <button class="btn btn-ghost btn-sm" onclick="applyAllRules()">⚡ Apply Rules to All Existing Transactions</button>
-      </div>
-      <div id="rules-list"></div>
-    </div>
-
-    </div><!-- /import tab -->
-
-  </div>
-</section>
-
-</div><!-- /main-inner -->
-</main>
-</div><!-- /shell -->
-
-<!-- ══════════════════════════════════════════════════════════════════ -->
-<!-- MODALS                                                             -->
-<!-- ══════════════════════════════════════════════════════════════════ -->
-
-<!-- ADD TRANSACTION -->
-<div class="modal-backdrop" id="add-modal">
-  <div class="modal">
-    <div class="modal-title">Add Transaction</div>
-    <div class="form-grid">
-      <div class="form-group"><label>Date</label><input type="date" id="f-date"></div>
-      <div class="form-group"><label>Type</label>
-        <select id="f-type" onchange="updateCatOptions('f-category','f-type')">
-          <option value="Expense">Expense</option>
-          <option value="Income">Income</option>
-        </select>
-      </div>
-      <div class="form-group full"><label>Name / Description</label>
-        <input type="text" id="f-name" placeholder="e.g. Tim Hortons, Dad car payment">
-      </div>
-      <div class="form-group"><label>Category</label><select id="f-category"></select></div>
-      <div class="form-group"><label>Amount ($)</label>
-        <input type="number" id="f-amount" step="0.01" min="0" placeholder="0.00">
-      </div>
-      <div class="form-group"><label>Account</label>
-        <select id="f-account"></select>
-      </div>
-      <div class="form-group full"><label>Notes (optional)</label>
-        <input type="text" id="f-notes" placeholder="e.g. March car payment to Dad">
-      </div>
-    </div>
-    <div class="form-actions">
-      <button class="btn btn-ghost" onclick="closeModal('add-modal')">Cancel</button>
-      <button class="btn" onclick="submitAdd()">Add Transaction</button>
-    </div>
-  </div>
+  </main>
 </div>
 
-<!-- EDIT TRANSACTION -->
-<div class="modal-backdrop" id="edit-modal">
-  <div class="modal">
-    <div class="modal-title">Edit Transaction</div>
-    <input type="hidden" id="e-id">
-    <div class="form-grid">
-      <div class="form-group"><label>Date</label><input type="date" id="e-date"></div>
-      <div class="form-group"><label>Type</label>
-        <select id="e-type" onchange="updateCatOptions('e-category','e-type')">
-          <option value="Expense">Expense</option><option value="Income">Income</option>
-        </select>
-      </div>
-      <div class="form-group full"><label>Name</label><input type="text" id="e-name"></div>
-      <div class="form-group"><label>Category</label><select id="e-category"></select></div>
-      <div class="form-group"><label>Amount ($)</label>
-        <input type="number" id="e-amount" step="0.01" min="0">
-      </div>
-      <div class="form-group"><label>Account</label>
-        <select id="e-account"></select>
-      </div>
-      <div class="form-group full"><label>Notes</label><input type="text" id="e-notes"></div>
-    </div>
-    <div class="form-actions">
-      <button class="btn btn-red btn-sm" onclick="deleteFromEdit()">Delete</button>
-      <button class="btn btn-ghost btn-sm" id="split-btn" onclick="openSplitUI()">Split</button>
-      <div style="flex:1"></div>
-      <button class="btn btn-ghost" onclick="closeModal('edit-modal')">Cancel</button>
-      <button class="btn" onclick="submitEdit()">Save</button>
-    </div>
-    <div id="split-section" style="display:none">
-      <div class="settings-title" style="margin-top:16px">Split Transaction</div>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Split this into sub-rows. Amounts must add up to the original.</p>
-      <div id="split-rows"></div>
-      <div style="display:flex;gap:8px;margin-top:8px">
-        <button class="btn btn-ghost btn-sm" onclick="addSplitRow()">+ Add Row</button>
-        <div style="flex:1"></div>
-        <span id="split-remaining" style="font-size:12px;color:var(--muted);align-self:center"></span>
-      </div>
-      <div class="form-actions" style="margin-top:8px">
-        <button class="btn btn-ghost btn-sm" onclick="closeSplitUI()">Cancel Split</button>
-        <button class="btn btn-sm" onclick="submitSplit()">Confirm Split</button>
-      </div>
-    </div>
-  </div>
+<!-- FAB -->
+<button class="fab" id="fab-btn" title="Add transaction" onclick="openAddModal()">
+  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+
+<!-- Overlays container -->
+<div id="overlays"></div>
+
+<!-- Undo toast -->
+<div class="undo-toast hidden" id="undo-toast">
+  <div class="toast-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg></div>
+  <span id="toast-msg"></span>
+  <button onclick="doUndo()">Undo</button>
+  <button class="x-btn" onclick="dismissToast()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
 </div>
 
-<!-- BULK CATEGORIZE -->
-<div class="modal-backdrop" id="bulk-cat-modal">
-  <div class="modal" style="width:360px">
-    <div class="modal-title">Categorize Selected</div>
-    <div class="form-group"><label>Category</label><select id="bulk-cat-select"></select></div>
-    <div class="form-actions">
-      <button class="btn btn-ghost" onclick="closeModal('bulk-cat-modal')">Cancel</button>
-      <button class="btn" onclick="submitBulkCategorize()">Apply</button>
-    </div>
-  </div>
-</div>
-
-<!-- AUTO-HIDE SUGGESTIONS -->
-<div class="modal-backdrop" id="rule-suggest-modal">
-  <div class="modal" style="width:480px">
-    <div class="modal-title">Auto-hide future transactions?</div>
-    <p style="font-size:13px;color:var(--muted);margin:0 0 14px">
-      Create import rules so these descriptions are automatically hidden on future CSV imports.
-    </p>
-    <div id="rule-suggest-list" style="max-height:300px;overflow-y:auto"></div>
-    <div class="form-actions" style="margin-top:14px">
-      <button class="btn btn-ghost" onclick="closeModal('rule-suggest-modal')">No thanks</button>
-      <button class="btn" onclick="submitRuleSuggestions()">Create Rules</button>
-    </div>
-  </div>
-</div>
-
-<!-- CSV WIZARD -->
-<div class="modal-backdrop" id="csv-wizard-modal">
-  <div class="modal" style="width:640px">
-    <div id="wizard-step-1">
-      <div class="modal-title">⚠ Unknown Bank Format</div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">We don't recognize this CSV format. Map the columns below so we can import it.</p>
-      <div style="overflow-x:auto;margin-bottom:16px">
-        <table class="txn-table" id="wizard-preview-table" style="font-size:12px"></table>
-      </div>
-      <div class="form-actions">
-        <button class="btn btn-ghost" onclick="closeModal('csv-wizard-modal')">Cancel</button>
-        <button class="btn" onclick="wizardStep(2)">Map Columns →</button>
-      </div>
-    </div>
-    <div id="wizard-step-2" style="display:none">
-      <div class="modal-title">Map Columns</div>
-      <div class="form-grid">
-        <div class="form-group"><label>Date Column</label><select id="wiz-date-col"></select></div>
-        <div class="form-group"><label>Date Format</label>
-          <select id="wiz-date-fmt">
-            <option value="%Y-%m-%d">YYYY-MM-DD</option>
-            <option value="%m/%d/%Y">MM/DD/YYYY</option>
-            <option value="%d/%m/%Y">DD/MM/YYYY</option>
-            <option value="%m-%d-%Y">MM-DD-YYYY</option>
-            <option value="%d-%m-%Y">DD-MM-YYYY</option>
-          </select>
-        </div>
-        <div class="form-group full"><label>Description Column</label><select id="wiz-desc-col"></select></div>
-        <div class="form-group full"><label>Amount Structure</label>
-          <select id="wiz-amt-mode" onchange="toggleAmountMode()">
-            <option value="single">Single column (positive/negative)</option>
-            <option value="split">Two columns (Debit &amp; Credit)</option>
-          </select>
-        </div>
-        <div id="wiz-single-amt" class="form-group full"><label>Amount Column</label><select id="wiz-amt-col"></select></div>
-        <div id="wiz-split-amt" style="display:none" class="form-grid full">
-          <div class="form-group"><label>Debit / Withdrawal Column</label><select id="wiz-debit-col"></select></div>
-          <div class="form-group"><label>Credit / Deposit Column</label><select id="wiz-credit-col"></select></div>
-        </div>
-      </div>
-      <div class="form-actions" style="margin-top:16px">
-        <button class="btn btn-ghost" onclick="wizardStep(1)">← Back</button>
-        <button class="btn" onclick="wizardStep(3)">Name Bank →</button>
-      </div>
-    </div>
-    <div id="wizard-step-3" style="display:none">
-      <div class="modal-title">Name This Bank</div>
-      <div class="form-group" style="margin-bottom:16px">
-        <label>Bank / Account Name</label>
-        <input type="text" id="wiz-bank-name" placeholder="e.g. ATB Financial Chequing" style="width:100%">
-      </div>
-      <button class="btn btn-ghost btn-sm" onclick="wizardPreview()" style="margin-bottom:14px">🔍 Test — preview parsed transactions</button>
-      <div id="wizard-preview-parsed" style="max-height:200px;overflow-y:auto;margin-bottom:14px"></div>
-      <div class="form-actions">
-        <button class="btn btn-ghost" onclick="wizardStep(2)">← Back</button>
-        <button class="btn" onclick="wizardSaveAndImport()">Save Config &amp; Import</button>
-      </div>
-      <div style="margin-top:12px;font-size:11px;color:var(--muted)">
-        💡 Want to share this config? <a href="https://github.com/raz3rbla8e/Boreal" target="_blank" style="color:var(--blue)">Submit on GitHub</a>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- RULE MODAL -->
-<div class="modal-backdrop" id="rule-modal">
-  <div class="modal" style="width:560px">
-    <div class="modal-title" id="rule-modal-title">Add Import Rule</div>
-    <input type="hidden" id="rule-edit-id" value="">
-    <div class="form-group" style="margin-bottom:16px">
-      <label>Rule Name</label>
-      <input type="text" id="rule-name" placeholder="e.g. Hide credit card payments" style="width:100%">
-    </div>
-    <div style="margin-bottom:16px">
-      <label>Conditions <span style="color:var(--muted);text-transform:none;letter-spacing:0">(all must match)</span></label>
-      <div id="rule-conditions-list" style="margin-top:10px"></div>
-      <button class="btn btn-ghost btn-sm" onclick="addConditionRow()" style="margin-top:8px">+ Add Condition</button>
-    </div>
-    <div style="margin-bottom:16px">
-      <label>Action</label>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
-        <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);cursor:pointer">
-          <input type="radio" name="rule-action" value="hide" checked onchange="toggleLabelFields()"> Hide this transaction
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);cursor:pointer">
-          <input type="radio" name="rule-action" value="label" onchange="toggleLabelFields()"> Label as:
-        </label>
-        <div id="rule-label-fields" style="display:none;margin-left:24px;gap:8px">
-          <select id="rule-label-type" style="width:110px" onchange="updateRuleCatOptions()">
-            <option value="Income">Income</option><option value="Expense">Expense</option>
-          </select>
-          <select id="rule-label-category" style="flex:1"></select>
-        </div>
-        <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);cursor:pointer">
-          <input type="radio" name="rule-action" value="pass" onchange="toggleLabelFields()"> Always show (override hide rules)
-        </label>
-      </div>
-    </div>
-    <div class="form-actions">
-      <button class="btn btn-ghost btn-sm" onclick="testRule()" style="margin-right:auto">🔍 Test</button>
-      <button class="btn btn-ghost" onclick="closeModal('rule-modal')">Cancel</button>
-      <button class="btn" onclick="saveRule()">Save Rule</button>
-    </div>
-    <div id="rule-test-results" style="margin-top:14px;display:none;max-height:200px;overflow-y:auto"></div>
-  </div>
-</div>
-
-<!-- TEMPLATE MODAL -->
-<div class="modal-backdrop" id="template-modal">
-  <div class="modal" style="width:500px">
-    <div class="modal-title">Load Rule Template</div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Templates add preset rules to your list. Your existing rules are not affected.</p>
-    <div id="template-list"><div class="empty">Loading…</div></div>
-    <div class="form-actions">
-      <button class="btn btn-ghost" onclick="closeModal('template-modal')">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- CUSTOMIZE DASHBOARD -->
-<div class="modal-backdrop" id="customize-modal">
-  <div class="modal" style="width:420px">
-    <div class="modal-title">Customize Dashboard</div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Toggle panels on/off and drag to reorder. Changes apply instantly.</p>
-    <div id="customize-panel-list"></div>
-    <div class="form-actions" style="margin-top:16px">
-      <button class="btn btn-ghost btn-sm" onclick="resetDashboardLayout()">Reset to Default</button>
-      <div style="flex:1"></div>
-      <button class="btn" onclick="closeModal('customize-modal')">Done</button>
-    </div>
-  </div>
-</div>
-
-<!-- PDF EXPORT -->
-<div class="modal-backdrop" id="pdf-modal">
-  <div class="modal" style="width:380px">
-    <div class="modal-title">Export PDF Report</div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Generate a PDF report for the currently selected month.</p>
-    <div class="form-group" style="margin-bottom:14px">
-      <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);cursor:pointer">
-        <input type="checkbox" id="pdf-include-txns"> Include full transaction list
-      </label>
-    </div>
-    <div class="form-actions">
-      <button class="btn btn-ghost" onclick="closeModal('pdf-modal')">Cancel</button>
-      <button class="btn" onclick="exportPdf()">Download PDF</button>
-    </div>
-  </div>
-</div>
-
-<!-- UNIFIED EXPORT -->
-<div class="modal-backdrop" id="export-modal">
-  <div class="modal" style="width:400px">
-    <div class="modal-title">Export Data</div>
-    <div class="form-group" style="margin-bottom:14px">
-      <label>Format</label>
-      <select id="export-format" onchange="onExportFormatChange()">
-        <option value="csv">CSV (Spreadsheet)</option>
-        <option value="pdf">PDF Report</option>
-      </select>
-    </div>
-    <div class="form-group" style="margin-bottom:14px">
-      <label>Scope</label>
-      <select id="export-scope">
-        <option value="month">Current Month</option>
-        <option value="all">All Transactions</option>
-      </select>
-    </div>
-    <div class="form-group" style="margin-bottom:14px;display:none" id="export-pdf-options">
-      <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);cursor:pointer">
-        <input type="checkbox" id="export-include-txns"> Include full transaction list
-      </label>
-    </div>
-    <div class="form-actions">
-      <button class="btn btn-ghost" onclick="closeModal('export-modal')">Cancel</button>
-      <button class="btn" onclick="doExport()">Export</button>
-    </div>
-  </div>
-</div>
-
-<!-- CONTRIBUTE TO GOAL -->
-<div class="modal-backdrop" id="contribute-modal">
-  <div class="modal" style="width:340px">
-    <div class="modal-title">Add to Goal</div>
-    <input type="hidden" id="contribute-goal-id">
-    <div class="form-group" style="margin-bottom:14px">
-      <label>Amount ($)</label>
-      <input type="number" id="contribute-amount" step="0.01" min="0.01" placeholder="0.00">
-    </div>
-    <div class="form-actions">
-      <button class="btn btn-ghost" onclick="closeModal('contribute-modal')">Cancel</button>
-      <button class="btn" onclick="submitContribute()">Add</button>
-    </div>
-  </div>
-</div>
-
-<!-- TRANSFER -->
-<div class="modal-backdrop" id="transfer-modal">
-  <div class="modal" style="width:400px">
-    <div class="modal-title">Transfer Between Accounts</div>
-    <div class="form-grid">
-      <div class="form-group"><label>Date</label><input type="date" id="t-date"></div>
-      <div class="form-group"><label>Amount ($)</label>
-        <input type="number" id="t-amount" step="0.01" min="0.01" placeholder="0.00">
-      </div>
-      <div class="form-group"><label>From Account</label><select id="t-from"></select></div>
-      <div class="form-group"><label>To Account</label><select id="t-to"></select></div>
-      <div class="form-group full"><label>Notes (optional)</label>
-        <input type="text" id="t-notes" placeholder="e.g. Rent savings transfer">
-      </div>
-    </div>
-    <div class="form-actions">
-      <button class="btn btn-ghost" onclick="closeModal('transfer-modal')">Cancel</button>
-      <button class="btn" onclick="submitTransfer()">Transfer</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── TOAST & UNDO ──────────────────────────────────────────────────── -->
-<div class="toast" id="toast"></div>
-<button class="btn btn-ghost btn-sm" id="undo-btn"
-  style="display:none;position:fixed;bottom:24px;right:24px;z-index:1000;
-  box-shadow:0 4px 20px rgba(0,0,0,0.3);border-radius:var(--radius-sm)"
-  onclick="doUndo()">↩ Undo</button>
-
-<!-- Quick Actions Popover (fixed position, outside sidebar overflow) -->
-<div class="quick-actions-popover" id="quick-actions-popover">
-  <button class="quick-action-item" onclick="openAddModal(); closeQuickActions()">
-    <span>➕</span> Add Transaction
-  </button>
-  <button class="quick-action-item" onclick="openTransferModal(); closeQuickActions()">
-    <span>↔️</span> Transfer
-  </button>
-  <button class="quick-action-item" onclick="openExportModal(); closeQuickActions()">
-    <span>📥</span> Export Data
-  </button>
-  <button class="quick-action-item" onclick="nav('import'); closeQuickActions()">
-    <span>📤</span> Import CSV
-  </button>
-</div>
-
-<!-- ── SCRIPTS ───────────────────────────────────────────────────────── -->
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
-<script>
-  // Sidebar collapse (desktop)
-  function toggleSidebar() {
-    const sb = document.getElementById('sidebar');
-    sb.classList.toggle('collapsed');
-    localStorage.setItem('cf_sidebar_collapsed', sb.classList.contains('collapsed') ? '1' : '0');
-  }
-  // Restore sidebar state
-  if (localStorage.getItem('cf_sidebar_collapsed') === '1') {
-    document.getElementById('sidebar').classList.add('collapsed');
-  }
-  // PWA service worker
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js');
-  }
-</script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ range(10000,99999) | random }}"></script>
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/static/sw.js').catch(()=>{})}</script>
 </body>
 </html>

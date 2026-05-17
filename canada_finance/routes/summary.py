@@ -7,6 +7,38 @@ from canada_finance.models.database import get_db
 summary_bp = Blueprint("summary", __name__)
 
 
+def _generate_insights(income, expenses, prev_exp, by_cat, budgets):
+    """Generate smart insights for the dashboard."""
+    insights = []
+    net = income - expenses
+    # Savings rate insight
+    if income > 0:
+        rate = net / income * 100
+        if rate >= 20:
+            insights.append({"icon": "spark", "tone": "pos", "title": f"{rate:.0f}% savings rate", "detail": "You're saving well this month!"})
+        elif rate < 0:
+            insights.append({"icon": "alert", "tone": "warn", "title": "Spending exceeds income", "detail": f"You're ${abs(net):,.0f} over budget this month."})
+    # Month-over-month change
+    if prev_exp and expenses:
+        change = (expenses - prev_exp) / prev_exp * 100
+        if change > 15:
+            insights.append({"icon": "trending", "tone": "warn", "title": f"Spending up {change:.0f}%", "detail": "Compared to last month."})
+        elif change < -10:
+            insights.append({"icon": "trending", "tone": "pos", "title": f"Spending down {abs(change):.0f}%", "detail": "Nice — you cut spending vs last month."})
+    # Over-budget categories
+    for b in budgets:
+        if b["limit"] and b["spent"] > b["limit"]:
+            over = b["spent"] - b["limit"]
+            insights.append({"icon": "alert", "tone": "warn", "title": f"{b['category']} over budget", "detail": f"${over:,.0f} over the ${b['limit']:,.0f} limit."})
+    # Top spending category spike
+    for cat in by_cat[:1]:
+        if cat.get("prev_total") and cat["total"] > 0:
+            change = (cat["total"] - cat["prev_total"]) / cat["prev_total"] * 100 if cat["prev_total"] else 0
+            if change > 30:
+                insights.append({"icon": "trending", "tone": "accent", "title": f"{cat['category']} up {change:.0f}%", "detail": f"${cat['total']:,.0f} this month vs ${cat['prev_total']:,.0f} last month."})
+    return insights[:4]  # Cap at 4
+
+
 @summary_bp.route("/api/months")
 def api_months():
     db = get_db()
@@ -75,6 +107,14 @@ def api_summary():
             "prev_total": prev_cat_map.get(cat, 0),
             "budget": budgets.get(cat),
         })
+    # Build budgets list with spent amounts
+    cat_spent = {r["category"]: r["total"] for r in by_cat}
+    budgets_out = [
+        {"category": cat, "spent": cat_spent.get(cat, 0), "limit": limit}
+        for cat, limit in budgets.items()
+    ]
+    # Generate insights
+    insights = _generate_insights(income, expenses, prev_exp, by_cat_out, budgets_out)
     return jsonify({
         "income": income,
         "expenses": expenses,
@@ -83,6 +123,8 @@ def api_summary():
         "savings_rate": round((income - expenses) / income * 100, 1) if income > 0 else 0,
         "by_category": by_cat_out,
         "income_by_category": [{"category": r["category"], "total": r["total"]} for r in income_by_cat],
+        "budgets": budgets_out,
+        "insights": insights,
     })
 
 

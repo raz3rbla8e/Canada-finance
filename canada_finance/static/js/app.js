@@ -1,2524 +1,2620 @@
-// ── SECURITY: HTML ESCAPING ───────────────────────────────────────────────────
-function escapeHtml(str) {
+// ══════════════════════════════════════════════════════════════
+// BOREAL — app.js  (Part 1: Core infrastructure)
+// ══════════════════════════════════════════════════════════════
+
+// ── HTML ESCAPING ─────────────────────────────────────────────
+function esc(str) {
   if (str == null) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-function escapeAttr(str) {
-  return escapeHtml(str);
+// ── IN-APP CONFIRM / PROMPT MODALS ───────────────────────────
+function appConfirm(msg, { title = 'Confirm', danger = false } = {}) {
+  return new Promise(resolve => {
+    const id = 'app-confirm-' + Date.now();
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="${id}">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+        <div class="modal-h"><h3>${esc(title)}</h3></div>
+        <div class="modal-body" style="font-size:14px;color:var(--ink-2)">${esc(msg)}</div>
+        <div class="modal-foot">
+          <button class="btn" id="${id}-no">Cancel</button>
+          <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="${id}-yes">${danger ? 'Delete' : 'Confirm'}</button>
+        </div>
+      </div>
+    </div>`);
+    const close = (v) => { document.getElementById(id)?.remove(); resolve(v); };
+    document.getElementById(id).addEventListener('click', () => close(false));
+    document.getElementById(`${id}-no`).addEventListener('click', () => close(false));
+    document.getElementById(`${id}-yes`).addEventListener('click', () => close(true));
+  });
 }
 
-// ── API FETCH WRAPPER ─────────────────────────────────────────────────────────
+function appPrompt(msg, { title = 'Input', defaultVal = '', placeholder = '' } = {}) {
+  return new Promise(resolve => {
+    const id = 'app-prompt-' + Date.now();
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="${id}">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+        <div class="modal-h"><h3>${esc(title)}</h3></div>
+        <div class="modal-body">
+          <div style="font-size:14px;color:var(--ink-2);margin-bottom:12px">${esc(msg)}</div>
+          <div class="field"><input id="${id}-input" value="${esc(defaultVal)}" placeholder="${esc(placeholder)}" inputmode="decimal"></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn" id="${id}-cancel">Cancel</button>
+          <button class="btn btn-primary" id="${id}-ok">OK</button>
+        </div>
+      </div>
+    </div>`);
+    const close = (v) => { document.getElementById(id)?.remove(); resolve(v); };
+    document.getElementById(id).addEventListener('click', () => close(null));
+    document.getElementById(`${id}-cancel`).addEventListener('click', () => close(null));
+    document.getElementById(`${id}-ok`).addEventListener('click', () => close(document.getElementById(`${id}-input`).value));
+    document.getElementById(`${id}-input`).addEventListener('keydown', (e) => { if (e.key === 'Enter') close(document.getElementById(`${id}-input`).value); });
+    setTimeout(() => document.getElementById(`${id}-input`)?.focus(), 50);
+  });
+}
+
+// ── CSRF + API ────────────────────────────────────────────────
 let _csrfToken = null;
-
 async function _ensureCsrf() {
   if (_csrfToken) return _csrfToken;
-  try {
-    const res = await fetch('/api/csrf-token');
-    const data = await res.json();
-    _csrfToken = data.csrf_token;
-  } catch(e) { _csrfToken = ''; }
+  try { const r = await fetch('/api/csrf-token'); const d = await r.json(); _csrfToken = d.csrf_token; } catch(e) { _csrfToken = ''; }
   return _csrfToken;
 }
-
-async function apiFetch(url, opts = {}) {
+async function api(url, methodOrOpts, body) {
   try {
-    // Attach CSRF token to mutating requests
+    let opts = {};
+    if (typeof methodOrOpts === 'string') {
+      opts.method = methodOrOpts;
+      if (body) { opts.headers = { 'Content-Type': 'application/json' }; opts.body = JSON.stringify(body); }
+    } else if (methodOrOpts) {
+      opts = methodOrOpts;
+    }
     const method = (opts.method || 'GET').toUpperCase();
     if (method !== 'GET' && method !== 'HEAD') {
       const token = await _ensureCsrf();
       opts.headers = opts.headers || {};
       opts.headers['X-CSRF-Token'] = token;
+      if (!opts.headers['Content-Type'] && opts.body && typeof opts.body === 'string') opts.headers['Content-Type'] = 'application/json';
     }
     const res = await fetch(url, opts);
     if (!res.ok) {
       let msg = `Server error (${res.status})`;
-      try { const body = await res.json(); if (body.error) msg = body.error; } catch(e) {}
-      toast(msg, 'error');
-      return null;
+      try { const b = await res.json(); if (b.error) msg = b.error; } catch(e) {}
+      showToast(msg); return null;
     }
     return await res.json();
-  } catch(e) {
-    toast('Network error — is the server running?', 'error');
-    return null;
-  }
+  } catch(e) { console.error('API error:', e); showToast('Network error — is the server running?'); return null; }
 }
 
-let EXPENSE_CATS = [];
-let INCOME_CATS = [];
-let ALL_CATEGORIES = [];
-let isDemo = false;
-const PALETTE = ["#6ee7b7","#f59e0b","#60a5fa","#a78bfa","#f87171","#34d399",
-  "#fbbf24","#818cf8","#fb7185","#4ade80","#e879f9","#38bdf8","#fb923c","#a3e635"];
-
-let months = [], currentMonthIdx = 0, donutChart = null;
-let currentYear = new Date().getFullYear();
-
-// ── DASHBOARD LAYOUT CUSTOMIZATION ────────────────────────────────────────────
-const DEFAULT_PANELS = [
-  {id: 'spending-by-category', label: 'Spending by Category', visible: true},
-  {id: 'donut-chart', label: 'Breakdown Chart', visible: true},
-  {id: 'averages', label: 'Monthly Averages', visible: true},
-  {id: 'recent-txns', label: 'Recent Transactions', visible: true},
-  {id: 'recurring', label: 'Recurring & Subscriptions', visible: true},
-  {id: 'spending-trends', label: 'Spending Trends', visible: true},
-  {id: 'savings-goals', label: 'Savings Goals', visible: true},
-  {id: 'net-worth', label: 'Net Worth', visible: true},
-  {id: 'account-balances', label: 'Account Balances', visible: true},
-];
-let dashboardLayout = null;
-
-function getDashboardLayout() {
-  return dashboardLayout || DEFAULT_PANELS.map(p => ({...p}));
+// ── ICON SVG SYSTEM ───────────────────────────────────────────
+const ICONS = {
+  dashboard: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  list: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+  wallet: '<path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 1 0-4h12"/><circle cx="17" cy="13" r="1.2"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  upload: '<path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4M12 3v12M7 8l5-5 5 5"/>',
+  cog: '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.15-1.43l2-1.55-2-3.46-2.36.85a7 7 0 0 0-2.48-1.43L13.5 2h-3l-.51 2.98a7 7 0 0 0-2.48 1.43l-2.36-.85-2 3.46 2 1.55A7 7 0 0 0 5 12c0 .49.05.96.15 1.43l-2 1.55 2 3.46 2.36-.85a7 7 0 0 0 2.48 1.43L10.5 22h3l.51-2.98a7 7 0 0 0 2.48-1.43l2.36.85 2-3.46-2-1.55c.1-.47.15-.94.15-1.43z"/>',
+  chev_l: '<path d="M14 6l-6 6 6 6"/>',
+  chev_r: '<path d="M10 6l6 6-6 6"/>',
+  chev_d: '<path d="M6 9l6 6 6-6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/>',
+  download: '<path d="M12 3v12M7 11l5 4 5-4M4 21h16"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 21a2 2 0 0 0 4 0"/>',
+  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>',
+  arrow_up: '<path d="M7 17L17 7M9 7h8v8"/>',
+  arrow_dn: '<path d="M7 7l10 10M9 17h8V9"/>',
+  arrow_r: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  arrow_lr: '<path d="M3 12h18"/><path d="M7 8l-4 4 4 4M17 8l4 4-4 4"/>',
+  check: '<path d="M4 12l5 5L20 6"/>',
+  x: '<path d="M5 5l14 14M19 5L5 19"/>',
+  pause: '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>',
+  play: '<path d="M6 4l14 8-14 8z"/>',
+  edit: '<path d="M16 3l5 5L8 21H3v-5z"/>',
+  trash: '<path d="M4 6h16M9 6V4h6v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/>',
+  rules: '<path d="M4 6h10M4 12h7M4 18h10"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  eye_off: '<path d="M3 3l18 18M10.7 5.1A11 11 0 0 1 22 12s-1 2-2.5 3.5M6.7 6.7C4 8.5 2 12 2 12s3.5 7 10 7c1.7 0 3.2-.5 4.5-1.2M9.9 9.9a3 3 0 1 0 4.2 4.2"/>',
+  bars: '<rect x="4" y="13" width="3" height="7" rx="1"/><rect x="10.5" y="9" width="3" height="11" rx="1"/><rect x="17" y="5" width="3" height="15" rx="1"/>',
+  pie: '<path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M12 3v9h9a9 9 0 0 0-9-9z"/>',
+  spark: '<path d="M3 17l4-6 4 3 5-8 5 6"/>',
+  alert: '<path d="M12 2L2 22h20L12 2z"/><path d="M12 10v4"/><circle cx="12" cy="18" r="0.5"/>',
+  trending: '<path d="M3 17l4-6 4 3 5-8 5 6"/>',
+  funnel: '<path d="M3 5h18l-7 9v6l-4-2v-4z"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  sliders: '<path d="M4 6h12M4 12h7M4 18h16"/><circle cx="19" cy="6" r="2"/><circle cx="14" cy="12" r="2"/><circle cx="8" cy="18" r="2"/>',
+};
+function icon(name, size=16) {
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon">${ICONS[name]||''}</svg>`;
 }
 
-function loadDashboardLayout(settings) {
-  try {
-    if (settings && settings.dashboard_layout) {
-      const saved = JSON.parse(settings.dashboard_layout);
-      if (Array.isArray(saved) && saved.length) {
-        const savedIds = new Set(saved.map(p => p.id));
-        const merged = [...saved];
-        DEFAULT_PANELS.forEach(dp => { if (!savedIds.has(dp.id)) merged.push({...dp}); });
-        dashboardLayout = merged.filter(p => DEFAULT_PANELS.some(dp => dp.id === p.id));
-        return;
-      }
-    }
-  } catch(e) {}
-  dashboardLayout = null;
+// ── FORMAT HELPERS ────────────────────────────────────────────
+function fmtParts(n) {
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  const [d, c] = abs.toFixed(2).split('.');
+  return { sign, dollars: d.replace(/\B(?=(\d{3})+(?!\d))/g, ','), cents: c };
+}
+function fmtCurrency(n, hideCents) {
+  const { sign, dollars, cents } = fmtParts(n);
+  return hideCents ? `${sign}$${dollars}` : `${sign}$${dollars}.${cents}`;
+}
+function fmtCurrencyHTML(n) {
+  const { sign, dollars, cents } = fmtParts(n);
+  return `${sign}$${dollars}<span class="cents">.${cents}</span>`;
+}
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+}
+function fmtDateLong(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function applyDashboardLayout() {
-  const layout = getDashboardLayout();
-  const container = document.getElementById('dashboard-panels');
-  if (!container) return;
-  layout.forEach(p => {
-    const panel = container.querySelector(`[data-panel-id="${p.id}"]`);
-    if (panel) {
-      container.appendChild(panel);
-      if (p.visible) panel.classList.remove('panel-hidden');
-      else panel.classList.add('panel-hidden');
-    }
+// ── CATEGORY HELPERS ──────────────────────────────────────────
+const CAT_COLORS = {
+  'Groceries': '#5b9c6e', 'Dining & Coffee': '#c08a4e', 'Eating Out': '#c08a4e',
+  'Transport': '#6b8eb5', 'Transportation': '#6b8eb5', 'Fuel': '#a47c5b',
+  'Subscriptions': '#9b6fb7', 'Shopping': '#c7798d', 'Rent & Housing': '#4a7a8f', 'Rent': '#4a7a8f',
+  'Utilities': '#8a96a3', 'Phone & Internet': '#7c8aab', 'Health': '#76a89c',
+  'Fitness': '#7ba072', 'Entertainment': '#b08bbf', 'Alcohol': '#9c5a5a',
+  'Income': '#3f7f5c', 'Salary': '#3f7f5c', 'Freelance': '#5a8db5',
+  'Transfer': '#9aa5b3', 'Uncategorized': '#b8b0a3',
+};
+function catColor(name) { return CAT_COLORS[name] || '#b8b0a3'; }
+function catPill(name) {
+  const c = catColor(name);
+  return `<span class="cat-pill"><span class="dot" style="background:${c}"></span>${esc(name)}</span>`;
+}
+function merchantGlyph(name, color) {
+  const ch = (name || '?').replace(/^(THE |INTERAC )/i, '').trim()[0]?.toUpperCase() || '?';
+  const style = color ? `color:${color};background:${color}12;border-color:${color}30` : '';
+  return `<div class="merchant-glyph" style="${style}">${ch}</div>`;
+}
+
+// ── STATE ─────────────────────────────────────────────────────
+let STATE = {
+  view: 'dashboard',
+  months: [],
+  monthIdx: 0,
+  categories: [],
+  expenseCats: [],
+  incomeCats: [],
+  settings: {},
+  isDemo: false,
+};
+
+function currentMonth() {
+  return STATE.months[STATE.monthIdx] || null;
+}
+
+// ── TOAST SYSTEM ──────────────────────────────────────────────
+let _toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('undo-toast');
+  const msgEl = document.getElementById('toast-msg');
+  if (!el || !msgEl) return;
+  msgEl.textContent = msg;
+  el.classList.remove('hidden');
+  el.style.animation = 'none'; el.offsetHeight; el.style.animation = '';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(dismissToast, 7000);
+}
+function dismissToast() {
+  const el = document.getElementById('undo-toast');
+  if (el) el.classList.add('hidden');
+  clearTimeout(_toastTimer);
+}
+async function doUndo() {
+  dismissToast();
+  const r = await api('/api/undo', { method: 'POST' });
+  if (r) { showToast('Undone'); refreshCurrentView(); }
+}
+
+// ── NAVIGATION ────────────────────────────────────────────────
+function navigateTo(view) {
+  STATE.view = view;
+  // Update sidebar active state
+  document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === view);
   });
+  // Update topbar crumb
+  const labels = { dashboard:'Dashboard', transactions:'Transactions', budgets:'Budgets', accounts:'Accounts', year:'Year review', import:'Import', schedules:'Scheduled', rules:'Rules', settings:'Settings' };
+  document.getElementById('topbar-crumb').textContent = labels[view] || view;
+  // Render view
+  renderView(view);
+  // Update nav count badges
+  updateNavCounts();
 }
-
-function isPanelVisible(panelId) {
-  const layout = getDashboardLayout();
-  const p = layout.find(x => x.id === panelId);
-  return p ? p.visible : true;
-}
-
-function saveDashboardLayout(layout) {
-  dashboardLayout = layout;
-  apiFetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({dashboard_layout: JSON.stringify(layout)})});
-}
-
-// ── COLLAPSIBLE PANELS ────────────────────────────────────────────────────────
-function initCollapsiblePanels() {
-  const container = document.getElementById('dashboard-panels');
-  if (!container) return;
-  const collapsed = JSON.parse(localStorage.getItem('panelCollapsed') || '{}');
-  container.querySelectorAll('.panel[data-panel-id]').forEach(panel => {
-    const title = panel.querySelector('.panel-title');
-    if (!title || title.querySelector('.panel-collapse-chevron')) return;
-    // Add chevron
-    const chevron = document.createElement('span');
-    chevron.className = 'panel-collapse-chevron';
-    chevron.textContent = '▾';
-    title.insertBefore(chevron, title.firstChild);
-    // Restore collapsed state
-    if (collapsed[panel.dataset.panelId]) panel.classList.add('panel-collapsed');
-    // Click handler on title
-    title.addEventListener('click', function(e) {
-      // Don't collapse if clicking a button inside the title
-      if (e.target.closest('button')) return;
-      panel.classList.toggle('panel-collapsed');
-      const state = JSON.parse(localStorage.getItem('panelCollapsed') || '{}');
-      state[panel.dataset.panelId] = panel.classList.contains('panel-collapsed');
-      localStorage.setItem('panelCollapsed', JSON.stringify(state));
-    });
-  });
-}
-
-// ── AUTO-HIDE EMPTY PANELS ────────────────────────────────────────────────────
-function autoHideEmptyPanels() {
-  const container = document.getElementById('dashboard-panels');
-  if (!container) return;
-  container.querySelectorAll('.panel[data-panel-id]').forEach(panel => {
-    const id = panel.dataset.panelId;
-    // Skip user-hidden panels (they're already hidden via customize)
-    if (panel.classList.contains('panel-hidden')) return;
-    let hasData = true;
-    switch(id) {
-      case 'spending-by-category': {
-        const el = document.getElementById('cat-list');
-        hasData = el && el.children.length > 0 && !el.querySelector(':scope > .empty:only-child');
-        break;
-      }
-      case 'donut-chart':
-        hasData = !!donutChart;
-        break;
-      case 'averages': {
-        const el = document.getElementById('averages-list');
-        hasData = el && el.children.length > 0 && !el.querySelector(':scope > .empty:only-child');
-        break;
-      }
-      case 'recent-txns': {
-        const el = document.getElementById('recent-txns');
-        hasData = el && el.children.length > 0 && !el.querySelector('.empty');
-        break;
-      }
-      case 'recurring': {
-        const el = document.getElementById('recurring-list');
-        hasData = el && el.children.length > 0 && !el.querySelector(':scope > .empty:only-child');
-        break;
-      }
-      case 'spending-trends':
-        hasData = !!trendsChart;
-        break;
-      case 'savings-goals': {
-        const el = document.getElementById('goals-dashboard-list');
-        hasData = el && el.children.length > 0 && !el.querySelector(':scope > .empty:only-child');
-        break;
-      }
-      case 'net-worth': {
-        const wrap = panel.querySelector('.chart-wrap');
-        hasData = wrap && !wrap.querySelector('.empty') && !!document.getElementById('net-worth-chart');
-        break;
-      }
-      case 'account-balances': {
-        const el = document.getElementById('account-balances-list');
-        hasData = el && el.children.length > 0 && !el.querySelector(':scope > .empty:only-child');
-        break;
-      }
-    }
-    if (hasData) panel.classList.remove('panel-auto-hidden');
-    else panel.classList.add('panel-auto-hidden');
-  });
-}
-
-function openCustomizeModal() {
-  renderCustomizeList('customize-panel-list');
-  document.getElementById('customize-modal').classList.add('open');
-}
-
-function renderCustomizeList(containerId) {
-  const layout = getDashboardLayout();
-  const el = document.getElementById(containerId);
-  if (!el) return;
-  el.innerHTML = layout.map((p, i) => `
-    <div class="customize-item" draggable="true" data-panel-id="${escapeAttr(p.id)}">
-      <span class="drag-handle">&#x2807;</span>
-      <div class="customize-arrows">
-        <button class="btn-icon" onclick="movePanelInList('${containerId}',${i},-1)" ${i===0?'disabled style="opacity:.3"':''}>&#x25B2;</button>
-        <button class="btn-icon" onclick="movePanelInList('${containerId}',${i},1)" ${i===layout.length-1?'disabled style="opacity:.3"':''}>&#x25BC;</button>
-      </div>
-      <span class="customize-label">${escapeHtml(p.label)}</span>
-      <label class="toggle" onclick="event.stopPropagation()">
-        <input type="checkbox" ${p.visible ? 'checked' : ''} onchange="togglePanelVisibility('${escapeAttr(p.id)}',this.checked)">
-        <span class="toggle-slider"></span>
-      </label>
-    </div>`).join('');
-  initCustomizeDragDrop(el);
-}
-
-function initCustomizeDragDrop(container) {
-  let dragEl = null;
-  let dropped = false;
-  container.querySelectorAll('.customize-item').forEach(item => {
-    item.addEventListener('dragstart', e => {
-      dragEl = item; dropped = false; item.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', '');
-    });
-    item.addEventListener('dragend', () => {
-      item.classList.remove('dragging');
-      container.querySelectorAll('.customize-item').forEach(i => i.classList.remove('drag-over'));
-      if (dropped) onDragReorder(container);
-      dragEl = null; dropped = false;
-    });
-    item.addEventListener('dragover', e => {
-      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-      if (item !== dragEl) item.classList.add('drag-over');
-    });
-    item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
-    item.addEventListener('drop', e => {
-      e.preventDefault();
-      if (dragEl && dragEl !== item) {
-        const items = [...container.querySelectorAll('.customize-item')];
-        const from = items.indexOf(dragEl), to = items.indexOf(item);
-        if (from < to) item.after(dragEl); else item.before(dragEl);
-        dropped = true;
-      }
-      container.querySelectorAll('.customize-item').forEach(i => i.classList.remove('drag-over'));
-    });
-  });
-}
-
-function onDragReorder(container) {
-  const layout = [...container.querySelectorAll('.customize-item')].map(item => ({
-    id: item.dataset.panelId,
-    label: DEFAULT_PANELS.find(p => p.id === item.dataset.panelId)?.label || '',
-    visible: item.querySelector('input[type="checkbox"]').checked
-  }));
-  saveDashboardLayout(layout);
-  applyDashboardLayout();
-  refreshAllCustomizeLists();
-}
-
-function movePanelInList(containerId, idx, dir) {
-  const layout = getDashboardLayout();
-  const newIdx = idx + dir;
-  if (newIdx < 0 || newIdx >= layout.length) return;
-  [layout[idx], layout[newIdx]] = [layout[newIdx], layout[idx]];
-  saveDashboardLayout(layout);
-  applyDashboardLayout();
-  refreshAllCustomizeLists();
-}
-
-function togglePanelVisibility(panelId, visible) {
-  const layout = getDashboardLayout();
-  const p = layout.find(x => x.id === panelId);
-  if (p) p.visible = visible;
-  saveDashboardLayout(layout);
-  applyDashboardLayout();
-  if (visible && months.length) {
-    if (panelId === 'averages') renderAverages();
-    if (panelId === 'recurring') renderRecurring();
-    if (panelId === 'spending-trends') renderTrends();
-    if (panelId === 'savings-goals') renderGoalsDashboard();
-    if (panelId === 'net-worth') renderNetWorth();
-    if (panelId === 'account-balances') renderAccountBalances();
-  }
-  refreshAllCustomizeLists();
-}
-
-function refreshAllCustomizeLists() {
-  ['customize-panel-list','settings-panel-list'].forEach(id => {
-    if (document.getElementById(id)) renderCustomizeList(id);
-  });
-}
-
-function resetDashboardLayout() {
-  dashboardLayout = null;
-  saveDashboardLayout(DEFAULT_PANELS.map(p => ({...p})));
-  applyDashboardLayout();
-  refreshAllCustomizeLists();
-  toast('Dashboard reset to default \u2713','success');
-  if (months.length) { renderAverages(); renderRecurring(); }
-}
-
-async function loadCategories() {
-  ALL_CATEGORIES = await apiFetch('/api/categories') || [];
-  EXPENSE_CATS = ALL_CATEGORIES.filter(c=>c.type==='Expense').map(c=>c.name);
-  INCOME_CATS = ALL_CATEGORIES.filter(c=>c.type==='Income').map(c=>c.name);
-  EXPENSE_CATS.push('UNCATEGORIZED');
-}
-
-// ── THEME ─────────────────────────────────────────────────────────────────────
-function toggleTheme() {
-  const dark = document.getElementById('theme-toggle').checked;
-  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-  if (isDemo) return; // Don't save theme in demo mode
-  apiFetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({theme: dark ? 'dark' : 'light'})});
-}
-
-// ── DEMO MODE ─────────────────────────────────────────────────────────────────
-function applyDemoRestrictions() {
-  // Disable sidebar buttons that are blocked in demo mode
-  document.querySelectorAll('.nav-btn').forEach(btn => {
-    const onclick = btn.getAttribute('onclick') || '';
-    if (onclick.includes("nav('import')")) {
-      btn.classList.add('demo-disabled');
-      btn.setAttribute('onclick', "toast('Import is disabled in demo mode','error')");
-    }
-    if (onclick.includes('openAddModal')) {
-      btn.classList.add('demo-disabled');
-      btn.setAttribute('onclick', "toast('Adding transactions is disabled in demo mode','error')");
-    }
-  });
-  // Disable the import drop zone on page load
-  applyDemoToImport();
-}
-
-function applyDemoToTransactions() {
-  if (!isDemo) return;
-  // Hide delete buttons (inline X) in transaction rows
-  document.querySelectorAll('.del-btn').forEach(el => el.style.display = 'none');
-  // Hide bulk delete button
-  const bulkDel = document.querySelector('#bulk-toolbar .btn-sm[onclick="bulkDelete()"]');
-  if (bulkDel) bulkDel.style.display = 'none';
-  // Disable inline "+ Add" button in filter row
-  const addBtn = document.querySelector('#sec-transactions .filter-row .btn-sm[onclick="openAddModal()"]');
-  if (addBtn) {
-    addBtn.classList.add('demo-disabled');
-    addBtn.setAttribute('onclick', "toast('Adding transactions is disabled in demo mode','error')");
-  }
-}
-
-function applyDemoToEditModal() {
-  if (!isDemo) return;
-  // Hide delete button in edit modal
-  const delBtn = document.querySelector('#edit-modal .btn-red');
-  if (delBtn) delBtn.style.display = 'none';
-}
-
-function applyDemoToSettings() {
-  if (!isDemo) return;
-  // Disable add category button
-  const addCatBtn = document.querySelector('#sec-settings .btn[onclick="addCategory()"]');
-  if (addCatBtn) { addCatBtn.classList.add('demo-disabled'); addCatBtn.setAttribute('onclick', "toast('Disabled in demo mode','error')"); }
-  // Disable set budget button
-  const budgetBtn = document.querySelector('#sec-settings .btn[onclick="saveBudget()"]');
-  if (budgetBtn) { budgetBtn.classList.add('demo-disabled'); budgetBtn.setAttribute('onclick', "toast('Disabled in demo mode','error')"); }
-  // Disable add rule button
-  const addRuleBtn = document.querySelector('#sec-settings .btn[onclick="openRuleModal()"]');
-  if (addRuleBtn) { addRuleBtn.classList.add('demo-disabled'); addRuleBtn.setAttribute('onclick', "toast('Disabled in demo mode','error')"); }
-  // Disable load template button
-  const templateBtn = document.querySelector('#sec-settings .btn[onclick="openTemplateModal()"]');
-  if (templateBtn) { templateBtn.classList.add('demo-disabled'); templateBtn.setAttribute('onclick', "toast('Disabled in demo mode','error')"); }
-  // Hide category rename/delete buttons
-  document.querySelectorAll('#expense-cat-list .btn-icon, #income-cat-list .btn-icon').forEach(btn => {
-    const onclick = btn.getAttribute('onclick') || '';
-    if (onclick.includes('renameCategory') || onclick.includes('deleteCategory')) {
-      btn.style.display = 'none';
-    }
-  });
-  // Hide budget remove buttons
-  document.querySelectorAll('#budget-list .btn-red').forEach(btn => btn.style.display = 'none');
-  // Hide learned merchant remove buttons
-  document.querySelectorAll('#learned-list .btn-ghost').forEach(btn => {
-    const onclick = btn.getAttribute('onclick') || '';
-    if (onclick.includes('deleteLearned')) btn.style.display = 'none';
-  });
-}
-
-function applyDemoToImport() {
-  if (!isDemo) return;
-  const dropZone = document.getElementById('drop-zone');
-  if (dropZone) {
-    dropZone.classList.add('demo-disabled');
-    dropZone.setAttribute('onclick', '');
-    dropZone.querySelector('strong').textContent = 'Import is disabled in demo mode';
-    dropZone.querySelector('p').textContent = 'Download the app to import your own bank data.';
-  }
-}
-
-async function resetDemo() {
-  if (!confirm('Reset all demo data to its original state?')) return;
-  const res = await fetch('/api/demo/reset', {method:'POST'});
-  if (res.ok) {
-    toast('Demo data reset ✓', 'success');
-    setTimeout(() => location.reload(), 500);
-  } else {
-    toast('Reset failed', 'error');
-  }
-}
-
-// ── INIT ──────────────────────────────────────────────────────────────────────
-async function init() {
-  // Check demo mode
-  const demoRes = await apiFetch('/api/demo');
-  if (demoRes && demoRes.demo) {
-    isDemo = true;
-    document.getElementById('demo-banner').style.display = 'flex';
-    document.title = '[Demo] Boreal';
-    applyDemoRestrictions();
-  }
-
-  // Load categories from DB
-  await loadCategories();
-
-  // Load settings
-  const settings = await apiFetch('/api/settings') || {theme:'dark'};
-  const dark = settings.theme !== 'light';
-  document.getElementById('theme-toggle').checked = dark;
-  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-  loadDashboardLayout(settings);
-
-  months = await apiFetch('/api/months') || [];
-  if (!months.length) {
-    document.getElementById('empty-state').style.display = 'flex';
-    document.getElementById('dashboard-content').style.display = 'none';
-    populateCatFilter();
-    populateAccountFilter();
-    updateCatOptions('f-category','f-type');
-    populateBudgetCat();
-    updateHiddenCount();
-    renderAverages();
-    renderRecurring();
-    return;
-  }
-  document.getElementById('empty-state').style.display = 'none';
-  document.getElementById('dashboard-content').style.display = '';
-  applyDashboardLayout();
-  initCollapsiblePanels();
-  currentMonthIdx = 0;
-  document.getElementById('f-date').value = new Date().toISOString().slice(0,10);
-  populateCatFilter();
-  populateAccountFilter();
-  updateCatOptions('f-category','f-type');
-  populateBudgetCat();
-  renderMonth();
-  loadSettings();
-  updateHiddenCount();
-  autoPostSchedules();
-}
-
-const fmt = n => (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
-const fmtMonth = m => { const [y,mo]=m.split('-'); return new Date(y,mo-1).toLocaleString('default',{month:'long',year:'numeric'}); };
-
-// ── MONTH NAV ─────────────────────────────────────────────────────────────────
-function changeMonth(dir) {
-  currentMonthIdx = Math.max(0, Math.min(months.length-1, currentMonthIdx-dir));
-  renderMonth();
-}
-
-async function renderMonth() {
-  const m = months[currentMonthIdx];
-  const monthEl = document.getElementById('month-display');
-  // Update only the text node, preserve the month-menu child
-  const textNode = Array.from(monthEl.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
-  if (textNode) textNode.textContent = fmtMonth(m);
-  else monthEl.insertBefore(document.createTextNode(fmtMonth(m)), monthEl.firstChild);
-  const [summary, txnData] = await Promise.all([
-    apiFetch(`/api/summary?month=${m}`),
-    apiFetch(`/api/transactions?month=${m}`),
+async function updateNavCounts() {
+  const [txRes, schedRes, rulesRes] = await Promise.all([
+    api('/api/transactions?limit=1'),
+    api('/api/schedules'),
+    api('/api/rules'),
   ]);
-  if (!summary || !txnData) return;
-  const txns = txnData.transactions || txnData;
-  renderCards(summary, txns);
-  renderCatList(summary.by_category);
-  renderDonut(summary.by_category);
-  renderRecentTxns(txns.filter(t=>t.type==='Expense').slice(0,6));
-  renderBudgetAlerts(summary.by_category);
-  const renderPromises = [];
-  if (isPanelVisible('averages')) renderPromises.push(renderAverages());
-  if (isPanelVisible('recurring')) renderPromises.push(renderRecurring());
-  if (isPanelVisible('spending-trends')) renderPromises.push(renderTrends());
-  if (isPanelVisible('savings-goals')) renderPromises.push(renderGoalsDashboard());
-  if (isPanelVisible('net-worth')) renderPromises.push(renderNetWorth());
-  if (isPanelVisible('account-balances')) renderPromises.push(renderAccountBalances());
-  await Promise.all(renderPromises);
-  autoHideEmptyPanels();
-  if (document.getElementById('sec-transactions').classList.contains('active')) loadTransactions();
+  const txEl = document.getElementById('nav-txn-count');
+  const schedEl = document.getElementById('nav-sched-count');
+  const rulesEl = document.getElementById('nav-rules-count');
+  if (txEl && txRes) txEl.textContent = txRes.total || '';
+  if (schedEl && schedRes) schedEl.textContent = (schedRes.length || '') ;
+  if (rulesEl && rulesRes) rulesEl.textContent = (rulesRes.length || '');
 }
 
-// ── CARDS ─────────────────────────────────────────────────────────────────────
-function renderCards(s, txns) {
-  document.getElementById('card-income').textContent = fmt(s.income);
-  const srcs = s.income_by_category.map(c=>`${c.category}: ${fmt(c.total)}`).join(' · ');
-  document.getElementById('card-income-src').textContent = srcs || '—';
-
-  document.getElementById('card-expense').textContent = fmt(s.expenses);
-  const diff = s.expenses - s.prev_expenses;
-  const vsEl = document.getElementById('card-expense-vs');
-  if (s.prev_expenses > 0) {
-    vsEl.textContent = (diff>=0?'↑ ':'↓ ') + fmt(Math.abs(diff)) + ' vs last month';
-    vsEl.className = 'card-sub ' + (diff>0?'down':'up');
-  } else { vsEl.textContent = txns.filter(t=>t.type==='Expense').length + ' transactions'; vsEl.className='card-sub'; }
-
-  const net = document.getElementById('card-net');
-  net.textContent = (s.net<0?'-':'+') + fmt(s.net);
-  net.className = 'card-value ' + (s.net>=0?'green':'red');
-  document.getElementById('card-net-sub').textContent = 'income − expenses';
-
-  document.getElementById('card-rate').textContent = s.savings_rate + '%';
-  const rateEl = document.getElementById('card-rate-sub');
-  rateEl.textContent = s.savings_rate >= 20 ? '🎯 great saving!' : s.savings_rate >= 10 ? 'of income saved' : 'of income saved';
-  rateEl.className = 'card-sub ' + (s.savings_rate>=20?'up':s.savings_rate<0?'down':'');
-}
-
-// ── CAT LIST ──────────────────────────────────────────────────────────────────
-function renderCatList(cats) {
-  const max = cats[0]?.total || 1;
-  document.getElementById('cat-list').innerHTML = cats.length ? cats.map(c => {
-    const hasBudget = c.budget && c.budget > 0;
-    const barWidth = hasBudget ? Math.min(c.total/c.budget*100,100).toFixed(0) : 0;
-    const barColor = hasBudget ? (c.total>c.budget?'var(--red)':c.total>c.budget*.8?'var(--amber)':'var(--accent)') : 'var(--accent)';
-    return `<div class="cat-row" onclick="filterByCat('${escapeAttr(c.category)}')">
-      <span class="cat-name">${escapeHtml(c.category)}</span>
-      ${hasBudget ? `<div class="cat-bar-wrap"><div class="cat-bar" style="width:${barWidth}%;background:${barColor}"></div></div>` : ''}
-      ${hasBudget ? `<span class="cat-budget ${c.total>c.budget?'over':''}">${Math.round(c.total/c.budget*100)}%</span>` : ''}
-      <span class="cat-amt">${fmt(c.total)}</span>
-    </div>`;
-  }).join('') : '<div class="empty">No expenses this month</div>';
-}
-
-// ── DONUT ─────────────────────────────────────────────────────────────────────
-function renderDonut(cats) {
-  const ctx = document.getElementById('donut-chart').getContext('2d');
-  if (donutChart) donutChart.destroy();
-  if (!cats.length) return;
-  donutChart = new Chart(ctx, {
-    type:'doughnut',
-    data:{ labels:cats.map(c=>c.category), datasets:[{data:cats.map(c=>c.total),
-      backgroundColor:PALETTE, borderWidth:2, borderColor:getComputedStyle(document.documentElement).getPropertyValue('--surface').trim()}]},
-    options:{cutout:'68%',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${fmt(c.raw)}`}}}}
-  });
-}
-
-// ── RECURRING ─────────────────────────────────────────────────────────────────
-async function renderAverages() {
-  const data = await apiFetch('/api/averages') || [];
-  const el = document.getElementById('averages-list');
-  if (!data.length) { el.innerHTML = '<div class="empty">Not enough data yet</div>'; return; }
-  const maxAvg = data[0].avg_monthly || 1;
-  const n = data[0].months_seen;
-  document.getElementById('avg-subtitle').textContent = `last ${n} month${n!==1?'s':''}`;
-  el.innerHTML = data.map(r => `
-    <div class="cat-row" onclick="filterByCat('${escapeAttr(r.category)}')" style="cursor:pointer">
-      <span class="cat-name">${escapeHtml(r.category)}</span>
-      <span class="cat-amt" style="margin-left:auto">${fmt(r.avg_monthly)}<span style="color:var(--muted);font-size:10px">/mo</span></span>
-    </div>`).join('');
-}
-
-// ── RECURRING / SUBSCRIPTIONS ─────────────────────────────────────────────────
-async function renderRecurring() {
-  const data = await apiFetch('/api/recurring') || {};
-  const el = document.getElementById('recurring-list');
-  const sub = document.getElementById('recurring-subtitle');
-  const items = data.recurring || [];
-  if (!items.length) { el.innerHTML = '<div class="empty">Not enough data yet (need 3+ months)</div>'; sub.textContent=''; return; }
-  sub.textContent = `${items.length} detected · ${fmt(data.total_monthly_committed)}/mo committed`;
-  el.innerHTML = items.map(r => {
-    const priceNote = r.price_changed
-      ? `<span style="color:var(--amber);font-size:10px;margin-left:4px">⚠ price changed (${fmt(r.min_amount)}→${fmt(r.max_amount)})</span>`
-      : '';
-    return `<div class="cat-row">
-      <span class="cat-name">${escapeHtml(r.name)}${priceNote}</span>
-      <span class="badge" style="margin-left:auto;margin-right:8px">${escapeHtml(r.category)}</span>
-      <span class="cat-amt">${fmt(r.avg_amount)}<span style="color:var(--muted);font-size:10px">/mo</span></span>
-    </div>`;
-  }).join('');
-}
-
-// ── RECENT TXNS ───────────────────────────────────────────────────────────────
-function renderRecentTxns(txns) {
-  document.getElementById('recent-txns').innerHTML = txns.length
-    ? txns.map(t=>`<tr onclick="openEditModal(${escapeAttr(JSON.stringify(t))})">
-        <td style="font-family:var(--mono);color:var(--muted);font-size:11px">${escapeHtml(t.date)}</td>
-        <td>${escapeHtml(t.name)}</td>
-        <td><span class="badge">${escapeHtml(t.category)}</span></td>
-        <td style="text-align:right" class="amt-expense">${fmt(t.amount)}</td>
-      </tr>`).join('')
-    : '<tr><td colspan="4" class="empty">No transactions</td></tr>';
-}
-
-// ── SEARCH & TRANSACTIONS ─────────────────────────────────────────────────────
-let searchTimer = null;
-function onSearchInput() { clearTimeout(searchTimer); searchTimer = setTimeout(loadTransactions, 180); }
-function clearSearch() { document.getElementById('search-input').value=''; loadTransactions(); }
-
-async function loadTransactions() {
-  const m = months[currentMonthIdx] || '';
-  const typ = document.getElementById('filter-type')?.value || '';
-  const cat = document.getElementById('filter-cat')?.value || '';
-  const acct = document.getElementById('filter-account')?.value || '';
-  const search = document.getElementById('search-input')?.value.trim() || '';
-  const banner = document.getElementById('search-banner');
-  const hiddenParam = showingHidden ? '&hidden=1' : '';
-  const acctParam = acct ? `&account=${encodeURIComponent(acct)}` : '';
-
-  const url = search
-    ? `/api/transactions?search=${encodeURIComponent(search)}&type=${encodeURIComponent(typ)}${hiddenParam}&limit=50&offset=0`
-    : `/api/transactions?month=${m}&type=${encodeURIComponent(typ)}&category=${encodeURIComponent(cat)}${acctParam}${hiddenParam}&limit=50&offset=0`;
-
-  const data = await apiFetch(url);
-  if (!data) return;
-  const txns = data.transactions || data;
-  const hasMore = data.has_more || false;
-  const total = data.total || txns.length;
-  const tbody = document.getElementById('all-txns');
-  const empty = document.getElementById('txn-empty');
-  const loadMoreBtn = document.getElementById('load-more-btn');
-
-  // Store current query for "Load More"
-  loadTransactions._lastUrl = url.replace(/&offset=\d+/, '').replace(/&limit=\d+/, '');
-  loadTransactions._currentOffset = txns.length;
-
-  if (search) {
-    const expTotal = txns.reduce((s,t)=>t.type==='Expense'?s+t.amount:s,0);
-    banner.style.display='block';
-    banner.innerHTML = `${total} result${total!==1?'s':''} for "<strong>${escapeHtml(search)}</strong>"` +
-      (expTotal>0?` &nbsp;·&nbsp; ${fmt(expTotal)} total`:'') +
-      ` &nbsp;<span style="cursor:pointer;color:var(--accent)" onclick="clearSearch()">✕ clear</span>`;
-  } else { banner.style.display='none'; }
-
-  if (!txns.length) { tbody.innerHTML=''; empty.style.display='block'; empty.textContent = showingHidden ? 'No hidden transactions' : 'No transactions found'; if(loadMoreBtn) loadMoreBtn.style.display='none'; return; }
-  empty.style.display='none';
-  tbody.innerHTML = renderTxnRows(txns);
-  if (loadMoreBtn) loadMoreBtn.style.display = hasMore ? '' : 'none';
-  applyDemoToTransactions();
-}
-
-function renderTxnRows(txns) {
-  return txns.map(t=>{
-    const actionBtn = showingHidden
-      ? `<button class="btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="event.stopPropagation();unhideTx(${t.id})">Unhide</button>`
-      : `<button class="del-btn" onclick="event.stopPropagation();deleteTx(${t.id})">×</button>`;
-    return `<tr onclick="openEditModal(${escapeAttr(JSON.stringify(t))})" class="${selectedIds.has(t.id)?'selected':''}">
-    <td><input type="checkbox" ${selectedIds.has(t.id)?'checked':''} onclick="event.stopPropagation();toggleSelect(${t.id},this)"></td>
-    <td style="font-family:var(--mono);color:var(--muted);font-size:11px">${escapeHtml(t.date)}</td>
-    <td>${escapeHtml(t.name)}</td>
-    <td><span class="badge">${escapeHtml(t.category)}</span></td>
-    <td style="color:var(--muted);font-size:11px">${escapeHtml(t.account)}</td>
-    <td><span class="badge ${escapeAttr(t.type.toLowerCase())}">${escapeHtml(t.type)}</span></td>
-    <td style="text-align:right" class="${t.type==='Income'?'amt-income':'amt-expense'}">${fmt(t.amount)}</td>
-    <td>${actionBtn}</td>
-  </tr>`;
-  }).join('');
-}
-
-async function loadMoreTransactions() {
-  const offset = loadTransactions._currentOffset || 0;
-  const baseUrl = loadTransactions._lastUrl || '';
-  if (!baseUrl) return;
-  const url = `${baseUrl}&limit=50&offset=${offset}`;
-  const data = await apiFetch(url);
-  if (!data) return;
-  const txns = data.transactions || data;
-  const hasMore = data.has_more || false;
-  const tbody = document.getElementById('all-txns');
-  const loadMoreBtn = document.getElementById('load-more-btn');
-  tbody.innerHTML += renderTxnRows(txns);
-  loadTransactions._currentOffset = offset + txns.length;
-  if (loadMoreBtn) loadMoreBtn.style.display = hasMore ? '' : 'none';
-}
-
-async function deleteTx(id) {
-  if (!confirm('Delete this transaction?')) return;
-  await apiFetch(`/api/delete/${id}`, {method:'DELETE'});
-  toast('Deleted','success'); showUndoButton(); renderMonth(); loadTransactions();
-}
-function filterByCat(cat) {
-  nav('transactions');
-  document.getElementById('filter-cat').value = cat;
-  document.getElementById('filter-type').value = 'Expense';
-  loadTransactions();
-}
-function populateCatFilter() {
-  const sel = document.getElementById('filter-cat');
-  const current = sel.value;
-  sel.innerHTML = '<option value="">All</option>';
-  [...EXPENSE_CATS,...INCOME_CATS].forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});
-  if (current) sel.value = current;
-}
-async function populateAccountFilter() {
-  const sel = document.getElementById('filter-account');
-  if (!sel) return;
-  const current = sel.value;
-  const accounts = await apiFetch('/api/accounts') || [];
-  sel.innerHTML = '<option value="">All Accounts</option>';
-  accounts.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;sel.appendChild(o);});
-  if (current) sel.value = current;
-  // Also populate account dropdowns in Add/Edit modals
-  populateModalAccountDropdowns(accounts);
-}
-
-function populateModalAccountDropdowns(accounts) {
-  const defaults = ['Cash', 'Other'];
-  const allAccounts = [...new Set([...accounts, ...defaults])];
-  ['f-account', 'e-account'].forEach(id => {
-    const sel = document.getElementById(id);
-    if (!sel) return;
-    const current = sel.value;
-    sel.innerHTML = allAccounts.map(a => `<option value="${escapeAttr(a)}">${escapeHtml(a)}</option>`).join('');
-    if (current && allAccounts.includes(current)) sel.value = current;
-  });
-}
-
-// ── BULK SELECTION ────────────────────────────────────────────────────────────
-let selectedIds = new Set();
-function toggleSelect(id, el) {
-  if (selectedIds.has(id)) { selectedIds.delete(id); el.closest('tr').classList.remove('selected'); }
-  else { selectedIds.add(id); el.closest('tr').classList.add('selected'); }
-  updateBulkToolbar();
-}
-function updateBulkToolbar() {
-  const bar = document.getElementById('bulk-toolbar');
-  if (selectedIds.size > 0) { bar.style.display='flex'; document.getElementById('bulk-count').textContent=`${selectedIds.size} selected`; }
-  else { bar.style.display='none'; }
-}
-function clearSelection() { selectedIds.clear(); document.querySelectorAll('#all-txns tr.selected').forEach(r=>r.classList.remove('selected')); updateBulkToolbar(); }
-async function bulkDelete() {
-  if (!confirm(`Delete ${selectedIds.size} transaction(s)?`)) return;
-  await apiFetch('/api/bulk-delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids:[...selectedIds]})});
-  toast(`Deleted ${selectedIds.size}`,'success'); showUndoButton(); clearSelection(); renderMonth(); loadTransactions();
-}
-async function bulkCategorize() {
-  const sel = document.getElementById('bulk-cat-select');
-  sel.innerHTML = EXPENSE_CATS.map(c=>`<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('');
-  document.getElementById('bulk-cat-modal').classList.add('open');
-}
-async function submitBulkCategorize() {
-  const cat = document.getElementById('bulk-cat-select').value;
-  if (!cat) return;
-  closeModal('bulk-cat-modal');
-  const res = await apiFetch('/api/bulk-categorize', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids:[...selectedIds], category:cat})});
-  let msg = `Categorized ${selectedIds.size} → ${cat}`;
-  if (res && res.learned) msg += ` · learned ${res.learned} merchant${res.learned===1?'':'s'}`;
-  if (res && res.retro_fixed) msg += ` · fixed ${res.retro_fixed} other`;
-  toast(msg,'success'); clearSelection(); renderMonth(); loadTransactions();
-}
-async function bulkHide() {
-  const ids = [...selectedIds];
-  await apiFetch('/api/bulk-hide', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids})});
-  toast(`Hidden ${ids.length}`,'success');
-  // Ask if user wants to create auto-hide rules for future imports
-  const suggestions = await apiFetch('/api/suggest-hide-rules', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids})});
-  clearSelection(); renderMonth(); loadTransactions(); updateHiddenCount();
-  if (suggestions && suggestions.suggestions && suggestions.suggestions.length > 0) {
-    showRuleSuggestionModal(suggestions.suggestions);
+function renderView(view) {
+  const c = document.getElementById('view-container');
+  switch(view) {
+    case 'dashboard': renderDashboard(c); break;
+    case 'transactions': renderTransactions(c); break;
+    case 'budgets': renderBudgets(c); break;
+    case 'accounts': renderAccounts(c); break;
+    case 'year': renderYear(c); break;
+    case 'import': renderImport(c); break;
+    case 'schedules': renderSchedules(c); break;
+    case 'rules': renderRules(c); break;
+    case 'settings': renderSettings(c); break;
+    default: renderDashboard(c);
   }
 }
-async function bulkUnhide() {
-  await apiFetch('/api/bulk-unhide', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids:[...selectedIds]})});
-  toast(`Unhidden ${selectedIds.size}`,'success'); clearSelection(); renderMonth(); loadTransactions(); updateHiddenCount();
+
+function refreshCurrentView() { renderView(STATE.view); }
+
+async function refreshMonths() {
+  const months = await api('/api/months');
+  if (months && months.length) {
+    STATE.months = months;
+    if (STATE.monthIdx >= months.length) STATE.monthIdx = 0;
+    updateMonthLabel();
+  }
 }
 
-// ── RULE SUGGESTION MODAL ─────────────────────────────────────────────────────
-function showRuleSuggestionModal(suggestions) {
-  const list = document.getElementById('rule-suggest-list');
-  list.innerHTML = suggestions.map((s, i) => `
-    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
-      <input type="checkbox" checked data-idx="${i}" data-desc="${escapeAttr(s.description)}">
-      <span style="flex:1;font-size:13px">${escapeHtml(s.description)}</span>
-      <span style="font-size:11px;color:var(--muted)">${s.count} txn${s.count!==1?'s':''}</span>
-    </label>
-  `).join('');
-  document.getElementById('rule-suggest-modal').classList.add('open');
+// ── MONTH PICKER ──────────────────────────────────────────────
+function updateMonthLabel() {
+  const m = currentMonth();
+  const el = document.getElementById('month-label');
+  if (!el) return;
+  if (!m) { el.textContent = 'No data'; return; }
+  const [y, mo] = m.split('-');
+  const d = new Date(parseInt(y), parseInt(mo) - 1, 1);
+  el.textContent = d.toLocaleString('en-CA', { month: 'long', year: 'numeric' });
+}
+function stepMonth(delta) {
+  // months array is DESC (newest first), so stepping forward in time = decreasing index
+  const newIdx = STATE.monthIdx - delta;
+  if (newIdx >= 0 && newIdx < STATE.months.length) {
+    STATE.monthIdx = newIdx;
+    updateMonthLabel();
+    refreshCurrentView();
+  }
 }
 
-async function submitRuleSuggestions() {
-  const checkboxes = document.querySelectorAll('#rule-suggest-list input[type="checkbox"]:checked');
-  if (checkboxes.length === 0) {
-    closeModal('rule-suggest-modal');
+// ── THEME ─────────────────────────────────────────────────────
+function applyTheme(theme) {
+  if (theme === 'dark') {
+    document.documentElement.classList.add('dark');
+    document.getElementById('theme-label').textContent = 'Light mode';
+    document.getElementById('theme-icon').innerHTML = ICONS.sun;
+  } else {
+    document.documentElement.classList.remove('dark');
+    document.getElementById('theme-label').textContent = 'Dark mode';
+    document.getElementById('theme-icon').innerHTML = ICONS.moon;
+  }
+}
+function toggleTheme() {
+  const isDark = document.documentElement.classList.contains('dark');
+  const newTheme = isDark ? 'light' : 'dark';
+  applyTheme(newTheme);
+  STATE.settings.theme = newTheme;
+  api('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ theme: newTheme }) });
+}
+
+
+// ── KEYBOARD SHORTCUTS ────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault(); openCommandPalette();
+  }
+  if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+    e.preventDefault(); openCommandPalette();
+  }
+  if (e.key === 'Escape') {
+    closeOverlays();
+  }
+});
+
+function closeOverlays() {
+  document.getElementById('overlays').innerHTML = '';
+}
+
+// ── SVG CHARTS ────────────────────────────────────────────────
+function svgSparkline(values, w=80, h=24, stroke='var(--accent)') {
+  if (!values || !values.length) return '';
+  const min = Math.min(...values), max = Math.max(...values), range = max - min || 1;
+  const step = w / (values.length - 1);
+  const pts = values.map((v,i) => `${(i*step).toFixed(1)},${(h-((v-min)/range)*h).toFixed(1)}`).join(' ');
+  return `<svg class="kpi-spark" width="${w}" height="${h}" fill="none"><polyline points="${pts}" stroke="${stroke}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function svgNetWorthChart(data) {
+  if (!data || !data.length) return '<div class="chart-wrap"></div>';
+  const w=760, h=220, pad=28;
+  const vals = data.map(d => d.v || d.net_worth || 0);
+  const labels = data.map(d => d.m || d.month || '');
+  const min = Math.min(...vals), max = Math.max(...vals), range = max-min||1;
+  const step = (w-pad*2)/(vals.length-1);
+  const pts = vals.map((v,i) => [pad+i*step, h-pad-((v-min)/range)*(h-pad*2)]);
+  const path = pts.map(([x,y],i) => (i===0?`M${x},${y}`:`L${x},${y}`)).join(' ');
+  const area = `${path} L${pts[pts.length-1][0]},${h-pad} L${pts[0][0]},${h-pad} Z`;
+  const gridLines = [0.25,0.5,0.75].map(p =>
+    `<line x1="${pad}" x2="${w-pad}" y1="${pad+p*(h-pad*2)}" y2="${pad+p*(h-pad*2)}" stroke="var(--line-1)" stroke-width="1" stroke-dasharray="2 4"/>`
+  ).join('');
+  const dots = pts.map(([x,y],i) => i===pts.length-1 ? `<circle cx="${x}" cy="${y}" r="4" fill="var(--accent)"/>` : '').join('');
+  const lbls = labels.map((l,i) => `<text x="${pad+i*step}" y="${h-6}" text-anchor="middle" font-size="10" fill="var(--ink-3)" font-family="var(--font-sans)">${esc(String(l).split(' ')[0])}</text>`).join('');
+  return `<div class="chart-wrap"><svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <defs><linearGradient id="nw-grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--accent)" stop-opacity="0.22"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
+    ${gridLines}<path d="${area}" fill="url(#nw-grad)"/><path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>${dots}${lbls}
+  </svg></div>`;
+}
+
+function svgDoughnut(slices, size=140) {
+  const total = slices.reduce((s,x) => s+x.value, 0) || 1;
+  const r = size/2-14, c = size/2;
+  let a = -Math.PI/2;
+  const arcs = slices.map(s => {
+    const frac = s.value/total;
+    const a1 = a + frac*Math.PI*2;
+    const large = frac > 0.5 ? 1 : 0;
+    const x0=c+r*Math.cos(a), y0=c+r*Math.sin(a);
+    const x1=c+r*Math.cos(a1), y1=c+r*Math.sin(a1);
+    const d = `M${x0},${y0} A${r},${r} 0 ${large} 1 ${x1},${y1}`;
+    a = a1;
+    return `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="22" stroke-linecap="butt"/>`;
+  }).join('');
+  return `<svg width="${size}" height="${size}"><circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--line-1)" stroke-width="22"/>${arcs}</svg>`;
+}
+
+function svgSpendBars(history) {
+  if (!history || !history.length) return '';
+  const max = Math.max(...history.map(h => Math.max(h.income||0, h.expenses||0)));
+  return `<div class="bars">${history.map((h,i) => {
+    const iPct = max ? (h.income/max)*100 : 0;
+    const ePct = max ? (h.expenses/max)*100 : 0;
+    const isCurrent = i === history.length - 1;
+    return `<div style="flex:1;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:flex-end;gap:3px;height:160px;justify-content:center">
+        <div class="bar-pos" style="width:12px;height:${iPct}%;min-height:2px" title="Income ${fmtCurrency(h.income)}"></div>
+        <div class="bar-neg" style="width:12px;height:${ePct}%;min-height:2px" title="Expenses ${fmtCurrency(h.expenses)}"></div>
+      </div>
+      <div class="bar-label" style="${isCurrent?'color:var(--ink-1);font-weight:600':''}">${esc(h.m||h.month||'')}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// COMMAND PALETTE
+// ══════════════════════════════════════════════════════════════
+function openCommandPalette() {
+  const navCmds = [
+    { title:'Go to Dashboard', group:'Navigate', icon:'dashboard', action:()=>navigateTo('dashboard') },
+    { title:'Go to Transactions', group:'Navigate', icon:'list', action:()=>navigateTo('transactions') },
+    { title:'Go to Budgets', group:'Navigate', icon:'target', action:()=>navigateTo('budgets') },
+    { title:'Go to Accounts', group:'Navigate', icon:'wallet', action:()=>navigateTo('accounts') },
+    { title:'Go to Year review', group:'Navigate', icon:'bars', action:()=>navigateTo('year') },
+    { title:'Go to Import', group:'Navigate', icon:'upload', action:()=>navigateTo('import') },
+    { title:'Go to Scheduled', group:'Navigate', icon:'clock', action:()=>navigateTo('schedules') },
+    { title:'Go to Rules', group:'Navigate', icon:'rules', action:()=>navigateTo('rules') },
+    { title:'Go to Settings', group:'Navigate', icon:'cog', action:()=>navigateTo('settings') },
+  ];
+  const actionCmds = [
+    { title:'Add transaction', group:'Action', icon:'plus', action:()=>openAddModal() },
+    { title:'Import CSV / OFX file', group:'Action', icon:'upload', action:()=>navigateTo('import') },
+    { title:'Toggle dark mode', group:'Action', icon:'moon', action:()=>toggleTheme() },
+    { title:'Export transactions to CSV', group:'Action', icon:'download', action:()=>{ window.location.href='/api/export?month='+(currentMonth()||''); } },
+    { title:'Download backup of finance.db', group:'Action', icon:'download', action:()=>{ window.location.href='/api/backup'; } },
+  ];
+  const all = [...navCmds, ...actionCmds];
+  let active = 0, filtered = all;
+
+  function render(q) {
+    filtered = q ? all.filter(c => c.title.toLowerCase().includes(q.toLowerCase())) : all;
+    active = 0;
+    const groups = {};
+    filtered.forEach(c => { groups[c.group] = groups[c.group] || []; groups[c.group].push(c); });
+    let idx = -1;
+    let listHTML = '';
+    if (!filtered.length) {
+      listHTML = `<div style="padding:24px 12px;text-align:center;color:var(--ink-3);font-size:13px">No matches for "${esc(q)}"</div>`;
+    } else {
+      for (const [group, items] of Object.entries(groups)) {
+        listHTML += `<div class="cmd-group">${esc(group)}</div>`;
+        items.forEach(c => {
+          idx++;
+          listHTML += `<div class="cmd-item ${idx===active?'active':''}" data-idx="${idx}" onmouseenter="this.parentElement.parentElement.querySelectorAll('.cmd-item').forEach(x=>x.classList.remove('active'));this.classList.add('active')" onclick="cmdExec(${idx})">${icon(c.icon,15)}<span>${esc(c.title)}</span></div>`;
+        });
+      }
+    }
+    document.getElementById('cmd-list').innerHTML = listHTML;
+  }
+
+  window._cmdFiltered = () => filtered;
+  window.cmdExec = (i) => { if (filtered[i]) { closeOverlays(); filtered[i].action(); } };
+
+  const ol = document.getElementById('overlays');
+  ol.innerHTML = `<div class="cmd-back" onclick="closeOverlays()">
+    <div class="cmd" onclick="event.stopPropagation()">
+      <div class="cmd-input">${icon('search',16)}<input id="cmd-input" placeholder="Type a command, navigate, or search…"><span class="kbd">esc</span></div>
+      <div class="cmd-list" id="cmd-list"></div>
+      <div class="cmd-foot"><span><span class="kbd">↑↓</span> navigate</span><span><span class="kbd">↵</span> open</span><span><span class="kbd">esc</span> close</span></div>
+    </div>
+  </div>`;
+
+  render('');
+  const inp = document.getElementById('cmd-input');
+  setTimeout(() => inp?.focus(), 30);
+  inp.addEventListener('input', () => render(inp.value));
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(active+1, filtered.length-1); render(inp.value); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(active-1, 0); render(inp.value); }
+    if (e.key === 'Enter') { e.preventDefault(); window.cmdExec(active); }
+    if (e.key === 'Escape') { e.preventDefault(); closeOverlays(); }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// ADD TRANSACTION MODAL
+// ══════════════════════════════════════════════════════════════
+function openAddModal() {
+  closeOverlays();
+  const today = new Date().toISOString().slice(0,10);
+  const catOpts = STATE.expenseCats.map(c => `<option value="${esc(c.name)}">${esc(c.icon||'')} ${esc(c.name)}</option>`).join('');
+  const incOpts = STATE.incomeCats.map(c => `<option value="${esc(c.name)}">${esc(c.icon||'')} ${esc(c.name)}</option>`).join('');
+  // Fetch accounts for dropdown
+  api('/api/accounts-list').then(accts => {
+    const acctOpts = (accts||[]).map(a => `<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
+    const el = document.getElementById('add-account');
+    if (el) el.innerHTML = acctOpts + '<option value="">Other…</option>';
+  });
+  const ol = document.getElementById('overlays');
+  ol.innerHTML = `<div class="modal-back" onclick="closeOverlays()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-h"><h3>Add transaction</h3><button class="icon-btn" onclick="closeOverlays()">${icon('x',14)}</button></div>
+      <div class="modal-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>Date</label><input type="date" id="add-date" value="${today}"></div>
+          <div class="field"><label>Type</label><select id="add-type" onchange="updateAddCats()"><option value="Expense">Expense</option><option value="Income">Income</option></select></div>
+        </div>
+        <div class="field"><label>Description</label><input id="add-name" placeholder="e.g. Loblaws #1042"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>Category</label><select id="add-cat">${catOpts}</select></div>
+          <div class="field"><label>Amount</label><input id="add-amount" placeholder="25.00" inputmode="decimal"></div>
+        </div>
+        <div class="field"><label>Account</label><select id="add-account"><option value="">Loading…</option></select></div>
+        <div class="field"><label>Notes (optional)</label><input id="add-notes" placeholder=""></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeOverlays()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitAdd()">Add transaction</button>
+      </div>
+    </div>
+  </div>`;
+}
+window.updateAddCats = function() {
+  const type = document.getElementById('add-type').value;
+  const cats = type === 'Income' ? STATE.incomeCats : STATE.expenseCats;
+  document.getElementById('add-cat').innerHTML = cats.map(c => `<option value="${esc(c.name)}">${esc(c.icon||'')} ${esc(c.name)}</option>`).join('');
+};
+async function submitAdd() {
+  const date = document.getElementById('add-date').value;
+  const type = document.getElementById('add-type').value;
+  const name = document.getElementById('add-name').value.trim();
+  const category = document.getElementById('add-cat').value;
+  const amount = parseFloat(document.getElementById('add-amount').value);
+  const account = document.getElementById('add-account').value.trim();
+  const notes = document.getElementById('add-notes').value.trim();
+  if (!name || isNaN(amount) || !account) { showToast('Please fill in description, amount, and account'); return; }
+  const r = await api('/api/add', 'POST', { date, type, name, category, amount, account, notes });
+  if (r) { closeOverlays(); showToast(`Transaction added · ${type==='Income'?'+':'−'}$${amount.toFixed(2)} ${category}`); await refreshMonths(); refreshCurrentView(); }
+}
+
+// ══════════════════════════════════════════════════════════════
+// PLACEHOLDER VIEW RENDERERS (will be filled in next chunks)
+// ══════════════════════════════════════════════════════════════
+async function renderDashboard(c) { c.innerHTML = '<div class="page"><div class="page-title" style="color:var(--ink-3)">Loading dashboard…</div></div>'; try { await refreshMonths(); await _renderDashboard(c); } catch(e) { console.error('Dashboard error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderTransactions(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderTransactions(c); } catch(e) { console.error('Transactions error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderBudgets(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderBudgets(c); } catch(e) { console.error('Budgets error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderAccounts(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderAccounts(c); } catch(e) { console.error('Accounts error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderYear(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderYear(c); } catch(e) { console.error('Year error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderImport(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderImport(c); } catch(e) { console.error('Import error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderSchedules(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderSchedules(c); } catch(e) { console.error('Schedules error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderRules(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderRules(c); } catch(e) { console.error('Rules error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderSettings(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderSettings(c); } catch(e) { console.error('Settings error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
+async function init() {
+  // Load categories
+  const cats = await api('/api/categories');
+  if (cats) {
+    STATE.categories = cats;
+    STATE.expenseCats = cats.filter(c => c.type === 'Expense');
+    STATE.incomeCats = cats.filter(c => c.type === 'Income');
+  }
+  // Load settings
+  const settings = await api('/api/settings');
+  if (settings) {
+    STATE.settings = settings;
+    if (settings.theme) applyTheme(settings.theme);
+  }
+  // Load months
+  const months = await api('/api/months');
+  if (months && months.length) {
+    STATE.months = months;
+    STATE.monthIdx = 0; // most recent
+    updateMonthLabel();
+  }
+  // Check demo
+  const demo = await api('/api/demo');
+  if (demo) STATE.isDemo = demo.demo;
+  // Check if DB exists
+  const health = await api('/api/health');
+  if (health && !health.db_exists) {
+    // Show onboarding
+    STATE.view = 'onboarding';
+    renderOnboarding(document.getElementById('view-container'));
     return;
   }
-  const rules = [];
-  checkboxes.forEach(cb => {
-    const desc = cb.dataset.desc;
-    rules.push({
-      name: `Auto-hide: ${desc}`,
-      action: 'hide',
-      conditions: [{field: 'description', operator: 'contains', value: desc}],
+  // Render initial view
+  navigateTo('dashboard');
+}
+
+function renderOnboarding(c) {
+  c.innerHTML = `<div class="page"><div class="onboarding">
+    <div class="brand-mark-lg"><svg viewBox="0 0 24 24" width="32" height="32" fill="none"><path d="M12 3 L7 10 L9.5 10 L6.5 14 L9 14 L5 19 L19 19 L15 14 L17.5 14 L14.5 10 L17 10 Z" fill="currentColor" opacity="0.95"/><rect x="11" y="19" width="2" height="3" rx="0.5" fill="currentColor" opacity="0.6"/></svg></div>
+    <h1>Welcome to Boreal.</h1>
+    <p class="lede">A personal finance dashboard that lives on your computer. Drop in a bank export, and you'll see your money in 30 seconds — no signup, no cloud, no tracking.</p>
+    <div class="onb-cards">
+      <div class="onb-card" onclick="navigateTo('import')">
+        <div class="ic">${icon('upload',18)}</div>
+        <h3>Import a CSV</h3>
+        <p>Drop a file from your bank — Boreal recognizes 10+ Canadian banks and walks you through unknown ones.</p>
+      </div>
+      <div class="onb-card" onclick="loadSampleData()">
+        <div class="ic">${icon('spark',18)}</div>
+        <h3>Try sample data</h3>
+        <p>Explore the app with a fully-populated demo — transactions, accounts, budgets, goals.</p>
+      </div>
+      <div class="onb-card" onclick="navigateTo('dashboard')">
+        <div class="ic">${icon('edit',18)}</div>
+        <h3>Start blank</h3>
+        <p>Add transactions manually, set up accounts and budgets as you go.</p>
+      </div>
+    </div>
+    <div style="margin-top:32px;font-size:12px;color:var(--ink-3)">Your data stays in <span class="mono">finance.db</span> · 0 external requests</div>
+  </div></div>`;
+}
+
+async function loadSampleData() {
+  const r = await api('/api/demo/reset', { method: 'POST' });
+  if (r) { showToast('Sample data loaded'); location.reload(); }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+// ══════════════════════════════════════════════════════════════
+// DASHBOARD VIEW
+// ══════════════════════════════════════════════════════════════
+async function _renderDashboard(c) {
+  const month = currentMonth();
+  const [summary, trends, recurring, goals, accounts, netWorth] = await Promise.all([
+    month ? api(`/api/summary?month=${month}`) : null,
+    api('/api/trends?months=12'),
+    api('/api/recurring'),
+    api('/api/goals'),
+    api('/api/accounts-list'),
+    api('/api/net-worth'),
+  ]);
+  if (!summary) { c.innerHTML = '<div class="page"><div class="page-title">No data yet</div><div class="page-sub">Import a bank CSV or add transactions manually to get started.</div></div>'; return; }
+
+  const income = summary.income || 0;
+  const expenses = summary.expenses || 0;
+  const net = income - expenses;
+  const savingsRate = income > 0 ? (net / income * 100) : 0;
+  const totalBalance = (accounts || []).reduce((s,a) => s + (a.balance||0), 0);
+  const nwData = (netWorth || []).map(d => ({ m: d.month, v: d.net_worth }));
+  const prevNW = nwData.length >= 2 ? nwData[nwData.length-2].v : totalBalance;
+  const deltaNW = prevNW ? ((totalBalance - prevNW) / Math.abs(prevNW) * 100) : 0;
+  const byCat = summary.by_category || [];
+  const topCats = byCat.filter(x => x.total > 0).sort((a,b) => b.total - a.total).slice(0, 6);
+  const totalExp = topCats.reduce((s,x) => s + x.total, 0);
+  const budgets = summary.budgets || [];
+  const recList = recurring?.recurring || (Array.isArray(recurring) ? recurring : []);
+  const trendHistory = (trends || []).map(t => { const [y,mo] = (t.month||'').split('-').map(Number); return { m: mo ? new Date(y,mo-1,15).toLocaleString('en-CA',{month:'short'}) : t.month, income: t.income, expenses: t.expenses }; });
+  // Calculate deltas vs last month
+  const prevMonth = trendHistory.length >= 2 ? trendHistory[trendHistory.length - 2] : null;
+  const incomeDelta = prevMonth && prevMonth.income ? ((income - prevMonth.income) / prevMonth.income * 100) : 0;
+  const expDelta = prevMonth && prevMonth.expenses ? ((expenses - prevMonth.expenses) / prevMonth.expenses * 100) : 0;
+  const prevMonthName = prevMonth ? prevMonth.m : 'last month';
+
+  // Insights
+  let insightsHTML = '';
+  if (summary.insights && summary.insights.length) {
+    insightsHTML = `<div class="insights">${summary.insights.map(i => {
+      const toneMap = { warn:['var(--warn-soft)','var(--warn)'], accent:['var(--accent-soft)','var(--accent)'], pos:['var(--pos-soft)','var(--pos)'] };
+      const [bg,fg] = toneMap[i.tone] || toneMap.accent;
+      return `<div class="insight"><div class="icon-circle" style="background:${bg};color:${fg}">${icon(i.icon||'spark',15)}</div><div><div class="ttl">${esc(i.title)}</div><div class="dt">${esc(i.detail)}</div></div></div>`;
+    }).join('')}</div>`;
+  }
+
+  // Build page
+  c.innerHTML = `<div class="page">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Dashboard</div>
+        <div class="page-sub">You saved ${fmtCurrency(net,true)} this month — ${savingsRate.toFixed(0)}% savings rate.</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="window.location.href='/api/export?month=${month||''}'">${icon('download',14)} Export</button>
+        <button class="btn btn-primary" onclick="openAddModal()">${icon('plus',14)} Add transaction</button>
+      </div>
+    </div>
+
+    ${insightsHTML}
+
+    <div class="kpi-grid">
+      <div class="kpi hero-aurora" style="grid-column:span 2;padding:20px 22px">
+        <div class="kpi-label">Net worth</div>
+        <div class="kpi-value">${fmtCurrencyHTML(totalBalance)}</div>
+        <div class="kpi-delta">
+          <span class="chip chip-up">${icon('arrow_up',11)} ${deltaNW.toFixed(1)}%</span>
+          <span>vs last month</span>
+        </div>
+        ${svgSparkline(nwData.map(d=>d.v), 120, 36, 'rgba(255,255,255,0.7)')}
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Income</div>
+        <div class="kpi-value" style="color:var(--pos)">${fmtCurrencyHTML(income)}</div>
+        <div class="kpi-delta">
+          <span class="chip ${incomeDelta >= 0 ? 'chip-up' : 'chip-dn'}">${icon(incomeDelta >= 0 ? 'arrow_up' : 'arrow_dn', 11)} ${Math.abs(incomeDelta).toFixed(1)}%</span>
+          <span>vs ${prevMonthName}</span>
+        </div>
+        ${svgSparkline(trendHistory.map(h=>h.income), 80, 24, 'var(--pos)')}
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Expenses</div>
+        <div class="kpi-value">${fmtCurrencyHTML(expenses)}</div>
+        <div class="kpi-delta">
+          <span class="chip ${expDelta <= 0 ? 'chip-up' : 'chip-dn'}">${icon(expDelta <= 0 ? 'arrow_dn' : 'arrow_up', 11)} ${Math.abs(expDelta).toFixed(1)}%</span>
+          <span>vs ${prevMonthName}</span>
+        </div>
+        ${svgSparkline(trendHistory.map(h=>h.expenses), 80, 24, 'var(--ink-3)')}
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:16px">
+      <div class="card">
+        <div class="card-h">
+          <div>
+            <h3>Net worth, last 12 months</h3>
+            <div style="font-size:22px;font-weight:500;letter-spacing:-0.02em;margin-top:4px;font-variant-numeric:tabular-nums">
+              ${fmtCurrency(totalBalance,true)}
+              ${nwData.length >= 2 ? `<span style="margin-left:10px;font-size:13px;color:${totalBalance - nwData[0].v >= 0 ? 'var(--pos)' : 'var(--danger)'};font-weight:500">
+                ${totalBalance - nwData[0].v >= 0 ? '+' : ''}${fmtCurrency(totalBalance - nwData[0].v, true)} <span style="color:var(--ink-3)">this year</span>
+              </span>` : ''}
+            </div>
+          </div>
+          <div style="display:flex;gap:4px" id="nw-filters">
+            <button class="filter-chip" data-months="1">1M</button>
+            <button class="filter-chip" data-months="6">6M</button>
+            <button class="filter-chip active" data-months="12">1Y</button>
+            <button class="filter-chip" data-months="0">All</button>
+          </div>
+        </div>
+        <div id="nw-chart-container">${svgNetWorthChart(nwData)}</div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3>Where it went</h3><button class="muted-link" onclick="navigateTo('budgets')">See all →</button></div>
+        <div style="display:flex;align-items:center;gap:18px">
+          ${svgDoughnut(topCats.map(x => ({ value: x.total, color: catColor(x.category) })), 140)}
+          <div style="flex:1">${topCats.slice(0,5).map(x => {
+            const pct = totalExp ? (x.total/totalExp*100) : 0;
+            return `<div class="cat-row"><span class="label"><span class="dot" style="background:${catColor(x.category)}"></span>${esc(x.category)}</span><span><span class="amt">${fmtCurrency(x.total,true)}</span><span class="pct">${pct.toFixed(0)}%</span></span></div>`;
+          }).join('')}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:16px">
+      <div class="card">
+        <div class="card-h"><h3>Budgets</h3><button class="muted-link" onclick="navigateTo('budgets')">Manage →</button></div>
+        ${budgets.length ? budgets.slice(0,6).map(b => {
+          const pct = b.limit ? (b.spent/b.limit*100) : 0;
+          const cls = pct >= 100 ? 'danger' : pct >= 85 ? 'warn' : '';
+          return `<div style="margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">
+              <span style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:2px;background:${catColor(b.category)}"></span><span style="font-weight:500">${esc(b.category)}</span></span>
+              <span style="font-variant-numeric:tabular-nums;color:var(--ink-2)"><span style="color:${pct>=100?'var(--danger)':'var(--ink-1)'};font-weight:500">${fmtCurrency(b.spent,true)}</span><span style="color:var(--ink-3)"> / ${fmtCurrency(b.limit,true)}</span></span>
+            </div>
+            <div class="progress ${cls}"><div class="fill" style="width:${Math.min(pct,100)}%"></div></div>
+          </div>`;
+        }).join('') : '<div style="color:var(--ink-3);font-size:13px">No budgets set yet</div>'}
+      </div>
+      <div class="card">
+        <div class="card-h"><h3>Accounts</h3><button class="muted-link" onclick="navigateTo('accounts')">Manage →</button></div>
+        ${(accounts||[]).map(a => `<div class="acct-row">
+          <div class="left">
+            <div class="acct-glyph" style="background:${catColor(a.name)}15;color:${catColor(a.name)};border-color:${catColor(a.name)}30">${esc((a.name||'?')[0])}</div>
+            <div><div class="name">${esc(a.name)}</div><div class="type">${esc(a.account_type||'')}</div></div>
+          </div>
+          <div class="bal" style="color:${a.balance<0?'var(--danger)':'var(--ink-1)'}">${fmtCurrency(a.balance)}</div>
+        </div>`).join('')}
+        <div style="display:flex;justify-content:space-between;padding-top:12px;border-top:1px solid var(--line-1);margin-top:4px">
+          <span style="color:var(--ink-3);font-size:12px">Total</span>
+          <span style="font-weight:600;font-size:15px;font-variant-numeric:tabular-nums">${fmtCurrency(totalBalance)}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:16px">
+      <div class="card">
+        <div class="card-h"><h3>Recurring & subscriptions</h3><span style="font-size:12px;color:var(--ink-3)">${recList.length} detected</span></div>
+        ${recList.map(r => `<div class="recur-row">
+          ${merchantGlyph(r.name)}
+          <div><div class="nm">${esc(r.name)}${r.warn?'<span class="warn-badge">↑ price</span>':''}</div><div class="when">${esc(r.frequency||'Monthly')} · last ${fmtDate(r.last_date)}</div></div>
+          <div style="text-align:right"><div class="avg">${fmtCurrency(r.avg_amount)}</div><div class="freq">avg</div></div>
+        </div>`).join('') || '<div style="color:var(--ink-3);font-size:13px">No recurring transactions detected yet</div>'}
+      </div>
+      <div class="card">
+        <div class="card-h"><h3>Savings goals</h3><button class="muted-link" onclick="navigateTo('budgets')">+ New</button></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          ${(goals||[]).map(g => {
+            const pct = g.target_amount ? (g.current_amount/g.target_amount*100) : 0;
+            return `<div class="goal"><div class="goal-h"><div class="goal-n">${esc(g.name)}</div><div class="goal-amt">${fmtCurrency(g.current_amount,true)} / ${fmtCurrency(g.target_amount,true)}</div></div>
+              <div class="progress"><div class="fill" style="width:${pct}%;background:var(--accent)"></div></div>
+              <div class="goal-pct"><span>${pct.toFixed(0)}% complete</span><span>${fmtCurrency(g.target_amount-g.current_amount,true)} to go</span></div></div>`;
+          }).join('') || '<div style="color:var(--ink-3);font-size:13px;grid-column:span 2">No goals yet</div>'}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">
+        <h3>Income vs expenses, last 12 months</h3>
+        <div style="display:flex;gap:12px;font-size:12px;color:var(--ink-3)">
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:var(--pos)"></span>Income</span>
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:var(--ink-2)"></span>Expenses</span>
+        </div>
+      </div>
+      ${svgSpendBars(trendHistory)}
+    </div>
+  </div>`;
+
+  // Net worth time range filter
+  document.querySelectorAll('#nw-filters .filter-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#nw-filters .filter-chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const months = parseInt(btn.dataset.months);
+      const filtered = months === 0 ? nwData : nwData.slice(-months);
+      const container = document.getElementById('nw-chart-container');
+      if (container) container.innerHTML = svgNetWorthChart(filtered);
     });
   });
-  const res = await apiFetch('/api/rules/bulk-create', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({rules})});
-  closeModal('rule-suggest-modal');
-  if (res && res.ok) {
-    toast(`Created ${res.created} auto-hide rule${res.created!==1?'s':''}`, 'success');
+}
+
+// ══════════════════════════════════════════════════════════════
+// TRANSACTIONS VIEW
+// ══════════════════════════════════════════════════════════════
+let txPage = 1;
+let txSelected = new Set();
+
+async function _renderTransactions(c) {
+  const month = currentMonth();
+  const params = new URLSearchParams();
+  if (month) params.set('month', month);
+  params.set('limit', '200');
+
+  const [data, cats, accountsList] = await Promise.all([
+    api(`/api/transactions?${params}`),
+    api('/api/categories'),
+    api('/api/accounts-list'),
+  ]);
+  const txns = data.transactions || data || [];
+  const allCats = (cats || []).map(c => c.name || c);
+  const acctNames = new Set((accountsList || []).map(a => a.name));
+  txns.forEach(t => { if (t.account) acctNames.add(t.account); });
+  const accts = [...acctNames];
+
+  txSelected = new Set();
+
+  const totalIn = txns.filter(t=>t.type==='Income').reduce((s,t)=>s+(t.amount||0),0);
+  const totalOut = txns.filter(t=>t.type==='Expense').reduce((s,t)=>s+(t.amount||0),0);
+
+  c.innerHTML = `<div class="page">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Transactions</div>
+        <div class="page-sub">${txns.length} transactions${month ? ' in ' + new Date(month+'-15').toLocaleString('en-CA',{month:'long',year:'numeric'}) : ''} · <span style="color:var(--pos)">${fmtCurrency(totalIn)} in</span>, <span>${fmtCurrency(totalOut)} out</span></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="window.location.href='/api/export?month=${month||''}'">${icon('download',14)} Export CSV</button>
+        <button class="btn btn-primary" onclick="openAddModal()">${icon('plus',14)} Add transaction</button>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+      <div class="searchbox">
+        ${icon('search',14)}
+        <input id="tx-search" type="text" placeholder="Search…">
+        <span class="kbd">/</span>
+      </div>
+      <div class="chip-row">
+        <button class="filter-chip active" data-acct="">All accounts</button>
+        ${accts.map(a => `<button class="filter-chip" data-acct="${esc(a)}">${esc(a)}</button>`).join('')}
+      </div>
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <select id="tx-cat-filter" class="btn btn-sm" style="border-style:dashed;padding:5px 10px;font-size:12px;background:transparent;color:var(--ink-2);cursor:pointer">
+          <option value="">Category</option>
+          ${allCats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <div id="tx-bulk-bar" style="display:none;background:var(--ink-1);color:white;padding:10px 16px;border-radius:10px;margin-bottom:12px;align-items:center;gap:12px;font-size:13px">
+      <span><strong id="tx-sel-count">0</strong> selected</span>
+      <button class="btn btn-sm" style="color:white;border-color:rgba(255,255,255,0.3)" onclick="txBulkAction('categorize')">Categorize</button>
+      <button class="btn btn-sm" style="color:white;border-color:rgba(255,255,255,0.3)" onclick="txBulkAction('hide')">Hide</button>
+      <button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="txBulkAction('delete')">Delete</button>
+      <button class="btn btn-sm" style="color:white;border-color:rgba(255,255,255,0.3);margin-left:auto" onclick="txSelected=new Set();refresh();updateBulkBar()">Clear</button>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="tbl" id="tx-table">
+        <thead>
+          <tr>
+            <th class="check"><input type="checkbox" id="tx-check-all"></th>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Category</th>
+            <th>Account</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody id="tx-body"></tbody>
+      </table>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:14px;font-size:12px;color:var(--ink-3)">
+      <span>Showing <span id="tx-showing">${txns.length}</span> of ${txns.length}</span>
+    </div>
+  </div>`;
+
+  const tbody = document.getElementById('tx-body');
+  const searchInput = document.getElementById('tx-search');
+  const catFilter = document.getElementById('tx-cat-filter');
+  const checkAll = document.getElementById('tx-check-all');
+  let activeAcct = '';
+
+  // Account filter chips
+  document.querySelectorAll('.filter-chip[data-acct]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.filter-chip[data-acct]').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      activeAcct = chip.dataset.acct;
+      refresh();
+    });
+  });
+
+  function renderRows(list) {
+    tbody.innerHTML = list.map(t => {
+      const amt = t.amount || 0;
+      const isInc = t.type === 'Income';
+      const displayAmt = isInc ? `+${fmtCurrency(Math.abs(amt))}` : `−${fmtCurrency(Math.abs(amt))}`;
+      return `<tr data-id="${t.id}" class="${txSelected.has(t.id)?'selected':''}${t.is_hidden?' hidden-row':''}" style="cursor:pointer">
+        <td><input type="checkbox" class="tx-check" data-id="${t.id}" ${txSelected.has(t.id)?'checked':''}></td>
+        <td style="color:var(--ink-3);font-size:12.5px;white-space:nowrap">${fmtDate(t.date)}</td>
+        <td><div class="name-cell">${merchantGlyph(t.name)}<div><div style="font-weight:500">${esc(t.name)}</div>${t.notes?`<div style="font-size:11.5px;color:var(--ink-3)">${esc(t.notes)}</div>`:''}</div></div></td>
+        <td>${catPill(t.category)}</td>
+        <td><span class="acct-tag">${esc(t.account || '')}</span></td>
+        <td class="amt ${isInc?'amount-pos':'amount-neg'}" style="text-align:right;font-variant-numeric:tabular-nums">${displayAmt}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function getFiltered() {
+    const q = (searchInput?.value||'').toLowerCase();
+    const cat = catFilter?.value||'';
+    return txns.filter(t => {
+      if (q && !(t.name||'').toLowerCase().includes(q) && !(t.category||'').toLowerCase().includes(q) && !(t.notes||'').toLowerCase().includes(q)) return false;
+      if (cat && t.category !== cat) return false;
+      if (activeAcct && t.account !== activeAcct) return false;
+      return true;
+    });
+  }
+
+  function refresh() {
+    const filtered = getFiltered();
+    renderRows(filtered);
+    const showingEl = document.getElementById('tx-showing');
+    if (showingEl) showingEl.textContent = filtered.length;
+  }
+  refresh();
+
+  searchInput?.addEventListener('input', refresh);
+  catFilter?.addEventListener('change', refresh);
+
+  checkAll?.addEventListener('change', () => {
+    const checked = checkAll.checked;
+    txSelected = checked ? new Set(getFiltered().map(t=>t.id)) : new Set();
+    refresh(); updateBulkBar();
+  });
+
+  tbody.addEventListener('change', (e) => {
+    if (!e.target.classList.contains('tx-check')) return;
+    const id = parseInt(e.target.dataset.id);
+    e.target.checked ? txSelected.add(id) : txSelected.delete(id);
+    e.target.closest('tr').classList.toggle('selected', e.target.checked);
+    updateBulkBar();
+  });
+
+  tbody.addEventListener('click', (e) => {
+    const row = e.target.closest('tr');
+    if (!row || e.target.tagName === 'INPUT') return;
+    const id = parseInt(row.dataset.id);
+    const tx = txns.find(t => t.id === id);
+    if (tx) openTxDrawer(tx, allCats, refresh);
+  });
+
+  function updateBulkBar() {
+    const bar = document.getElementById('tx-bulk-bar');
+    const cnt = document.getElementById('tx-sel-count');
+    if (bar) bar.style.display = txSelected.size ? 'flex' : 'none';
+    if (cnt) cnt.textContent = txSelected.size;
   }
 }
 
-// ── YEAR VIEW ─────────────────────────────────────────────────────────────────
-function changeYear(dir) { currentYear += dir; renderYear(); }
-async function renderYear() {
-  document.getElementById('year-display').textContent = currentYear;
-  const data = await apiFetch(`/api/year/${currentYear}`);
-  if (!data) return;
-  const maxVal = Math.max(...data.months.map(m=>Math.max(m.income,m.expenses)), 1);
+window.txBulkAction = async function(action) {
+  const ids = [...txSelected];
+  if (!ids.length) return;
+  if (action === 'delete') {
+    if (!await appConfirm(`Delete ${ids.length} transactions?`, { title: 'Bulk delete', danger: true })) return;
+    await api('/api/bulk-delete', 'POST', { ids });
+  } else if (action === 'hide') {
+    await api('/api/bulk-hide', 'POST', { ids });
+  } else if (action === 'categorize') {
+    const cat = await appPrompt('Enter category name:', { title: 'Bulk categorize', placeholder: 'e.g. Groceries' });
+    if (!cat) return;
+    await api('/api/bulk-categorize', 'POST', { ids, category: cat });
+  }
+  txSelected = new Set();
+  refreshCurrentView();
+};
 
-  document.getElementById('year-cards').innerHTML = `
-    <div class="card"><div class="card-label">Total Income</div>
-      <div class="card-value green">${fmt(data.total_income)}</div></div>
-    <div class="card"><div class="card-label">Total Expenses</div>
-      <div class="card-value red">${fmt(data.total_expenses)}</div></div>
-    <div class="card"><div class="card-label">Net Saved</div>
-      <div class="card-value ${data.total_income-data.total_expenses>=0?'green':'red'}">${fmt(data.total_income-data.total_expenses)}</div></div>`;
+function openTxDrawer(tx, cats, onSave) {
+  let overlay = document.getElementById('drawer-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'drawer-overlay';
+    overlay.className = 'drawer-overlay';
+    document.body.appendChild(overlay);
+  }
+  let drawer = document.getElementById('tx-drawer');
+  if (!drawer) {
+    drawer = document.createElement('div');
+    drawer.id = 'tx-drawer';
+    drawer.className = 'drawer';
+    document.body.appendChild(drawer);
+  }
 
-  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  document.getElementById('year-bars').innerHTML = data.months.map((m,i)=>`
-    <div class="year-bar-row">
-      <span class="year-month">${monthNames[i]}</span>
-      <div class="year-bar-wrap">
-        <div class="year-bar income" style="width:${(m.income/maxVal*100).toFixed(0)}%"></div>
-        <div class="year-bar expense" style="width:${(m.expenses/maxVal*100).toFixed(0)}%"></div>
+  const amt = tx.amount || 0;
+  const isInc = tx.type === 'Income';
+  const expenseCats = (cats||[]).filter(c => c !== 'Income' && c !== 'Paycheque' && c !== 'Salary');
+  const quickCats = (cats||[]).slice(0, 12);
+
+  drawer.innerHTML = `
+    <div class="drawer-head">
+      <div>
+        <div style="font-size:11.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;font-weight:500">${fmtDateLong(tx.date)} · ${esc(tx.account||'')}</div>
+        <div style="font-size:16px;font-weight:500;margin-top:3px">${esc(tx.name)}</div>
       </div>
-      <div class="year-amounts">
-        <span class="amt-income" style="font-size:11px">${m.income>0?fmt(m.income):''}</span>
-        <span class="amt-expense" style="font-size:11px">${m.expenses>0?fmt(m.expenses):''}</span>
-      </div>
-    </div>`).join('');
-
-  const maxCat = data.top_categories[0]?.total || 1;
-  document.getElementById('year-cats').innerHTML = data.top_categories.length
-    ? data.top_categories.map(c=>`
-      <div class="cat-row">
-        <span class="cat-name">${escapeHtml(c.category)}</span>
-        <div class="cat-bar-wrap"><div class="cat-bar" style="width:${(c.total/maxCat*100).toFixed(0)}%"></div></div>
-        <span class="cat-amt">${fmt(c.total)}</span>
-      </div>`).join('')
-    : '<div class="empty">No data</div>';
-}
-
-// ── SETTINGS ──────────────────────────────────────────────────────────────────
-async function loadSettings() {
-  renderCustomizeList('settings-panel-list');
-  loadCategoryList();
-  loadBudgets();
-  loadLearned();
-  loadRules();
-  loadGoalsSettings();
-  loadGroupsSettings();
-  loadAccountsSettings();
-  loadSchedulesSettings();
-}
-
-function renderCatRow(c) {
-  const icon = c.icon ? `<span style="margin-right:4px">${c.icon}</span>` : '';
-  const badge = c.user_created ? '<span style="font-size:9px;color:var(--accent);font-family:var(--mono);margin-left:6px">custom</span>' : '';
-  return `<div class="settings-row" data-cat-id="${c.id}">
-    <div style="display:flex;align-items:center;gap:6px;flex:1">
-      ${icon}<span class="settings-label">${c.name}</span>${badge}
+      <button class="btn-icon" onclick="closeTxDrawer()">${icon('x',14)}</button>
     </div>
-    <div style="display:flex;gap:4px">
-      <button class="btn-icon" onclick="renameCategory(${c.id},'${c.name.replace(/'/g,"\\'")}','${(c.icon||'').replace(/'/g,"\\'")}')">✏️</button>
-      <button class="btn-icon" onclick="deleteCategory(${c.id},'${c.name.replace(/'/g,"\\'")}','${c.type}')">🗑️</button>
+    <div class="drawer-body">
+      <div class="amt-big" style="color:${isInc ? 'var(--pos)' : 'var(--ink-1)'}">${isInc ? '+' : '−'}${fmtCurrency(Math.abs(amt))}</div>
+      <div class="meta">${isInc ? 'Income' : 'Expense'} · ${esc(tx.category||'Uncategorized')}</div>
+
+      <div class="section-h" style="margin-top:24px"><h2 style="font-size:13px">Category</h2></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px" id="dr-chips">
+        ${quickCats.map(c => `<button class="filter-chip${c===tx.category?' active':''}" data-cat="${esc(c)}" style="${c===tx.category ? 'background:'+catColor(c)+'22;border-color:'+catColor(c)+';color:'+catColor(c)+';font-weight:500' : ''}">${esc(c)}</button>`).join('')}
+      </div>
+
+      <div class="section-h"><h2 style="font-size:13px">Details</h2></div>
+      <div class="field">
+        <label>Description</label>
+        <input id="dr-name" value="${esc(tx.name)}"/>
+      </div>
+      <div class="field">
+        <label>Notes</label>
+        <input id="dr-notes" value="${esc(tx.notes||'')}"/>
+      </div>
+      <div class="field">
+        <label>Account</label>
+        <select id="dr-account"><option value="${esc(tx.account||'')}">${esc(tx.account||'—')}</option></select>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;margin-top:8px">
+        <div>
+          <div style="font-size:13px;font-weight:500">Hide from dashboard</div>
+          <div style="font-size:11.5px;color:var(--ink-3);margin-top:1px">Removes from totals but keeps the record</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="dr-hidden" ${tx.hidden ? 'checked' : ''}/>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="section-h">
+        <h2 style="font-size:13px">Split transaction</h2>
+        <button class="muted-link" id="dr-split-btn">+ Add split</button>
+      </div>
+      <div id="dr-splits"></div>
+
+      <div id="dr-similar"></div>
+    </div>
+    <div class="drawer-foot">
+      <button class="btn" style="color:var(--danger);border-color:transparent" id="dr-del">${icon('trash',13)} Delete</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="closeTxDrawer()">Cancel</button>
+        <button class="btn btn-primary" id="dr-save">Save changes</button>
+      </div>
+    </div>`;
+
+  overlay.classList.add('open');
+  drawer.classList.add('open');
+  overlay.onclick = () => closeTxDrawer();
+
+  // Populate account dropdown
+  api('/api/accounts-list').then(accts => {
+    const el = document.getElementById('dr-account');
+    if (el && accts) {
+      el.innerHTML = (accts||[]).map(a => `<option value="${esc(a.name)}" ${a.name===tx.account?'selected':''}>${esc(a.name)}</option>`).join('');
+    }
+  });
+
+  // Category chip selection
+  let selectedCat = tx.category;
+  document.querySelectorAll('#dr-chips .filter-chip').forEach(chip => {
+    chip.onclick = () => {
+      document.querySelectorAll('#dr-chips .filter-chip').forEach(c => {
+        c.classList.remove('active');
+        c.style.cssText = '';
+      });
+      chip.classList.add('active');
+      selectedCat = chip.dataset.cat;
+      const clr = catColor(selectedCat);
+      chip.style.cssText = `background:${clr}22;border-color:${clr};color:${clr};font-weight:500`;
+    };
+  });
+
+  document.getElementById('dr-save').onclick = async () => {
+    const isHidden = document.getElementById('dr-hidden').checked;
+    await api(`/api/update/${tx.id}`, 'PATCH', {
+      category: selectedCat,
+      name: document.getElementById('dr-name').value,
+      notes: document.getElementById('dr-notes').value,
+      account: document.getElementById('dr-account').value,
+    });
+    if (isHidden !== !!tx.hidden) {
+      await api(`/api/transactions/${tx.id}/${isHidden ? 'hide' : 'unhide'}`, 'PATCH');
+    }
+    closeTxDrawer();
+    await refreshMonths();
+    if (onSave) onSave();
+    else refreshCurrentView();
+  };
+
+  document.getElementById('dr-del').onclick = async () => {
+    if (!await appConfirm('Delete this transaction permanently?', { title: 'Delete transaction', danger: true })) return;
+    await api(`/api/delete/${tx.id}`, 'DELETE');
+    closeTxDrawer();
+    await refreshMonths();
+    refreshCurrentView();
+  };
+
+  document.getElementById('dr-split-btn').onclick = async () => {
+    const splitAmt = await appPrompt('Enter amount for the split:', { title: 'Split transaction', defaultVal: (Math.abs(amt)/2).toFixed(2), placeholder: '0.00' });
+    if (!splitAmt) return;
+    await api(`/api/transactions/${tx.id}/split`, 'POST', { amount: parseFloat(splitAmt) });
+    showToast('Transaction split');
+    closeTxDrawer();
+    refreshCurrentView();
+  };
+
+  // Load existing splits
+  api(`/api/transactions/${tx.id}/splits`).then(splits => {
+    const el = document.getElementById('dr-splits');
+    if (!el || !splits || !splits.length) return;
+    el.innerHTML = `<div class="card" style="padding:0">${splits.map(s =>
+      `<div style="display:flex;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--line-1);font-size:13px;align-items:center">
+        <div><div style="font-weight:450">${esc(s.name||tx.name)}</div></div>
+        <div class="mono" style="font-variant-numeric:tabular-nums">${fmtCurrency(Math.abs(s.amount))}</div>
+      </div>`
+    ).join('')}</div>`;
+  });
+
+  // Load similar transactions
+  api(`/api/transactions?month=${tx.date?.slice(0,7)||''}`).then(resp => {
+    const txns = resp?.transactions || resp || [];
+    const firstName = (tx.name||'').split(' ')[0].toLowerCase();
+    const sim = txns.filter(t => t.id !== tx.id && (t.name||'').split(' ')[0].toLowerCase() === firstName).slice(0, 5);
+    if (!sim.length) return;
+    const el = document.getElementById('dr-similar');
+    if (!el) return;
+    el.innerHTML = `
+      <div class="section-h"><h2 style="font-size:13px">Similar transactions</h2><p>${sim.length} found</p></div>
+      <div class="card" style="padding:0">
+        ${sim.map(t => {
+          const tInc = t.type === 'Income';
+          return `<div style="display:flex;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--line-1);font-size:13px;align-items:center">
+            <div>
+              <div style="font-weight:450">${esc(t.name)}</div>
+              <div style="font-size:11px;color:var(--ink-3);margin-top:1px">${fmtDate(t.date)} · ${esc(t.category||'')}</div>
+            </div>
+            <div class="mono" style="font-variant-numeric:tabular-nums">${tInc?'+':'−'}$${Math.abs(t.amount).toFixed(2)}</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  });
+}
+
+window.closeTxDrawer = function() {
+  document.getElementById('drawer-overlay')?.classList.remove('open');
+  document.getElementById('tx-drawer')?.classList.remove('open');
+};
+
+// ══════════════════════════════════════════════════════════════
+// BUDGETS VIEW
+// ══════════════════════════════════════════════════════════════
+async function _renderBudgets(c) {
+  const month = currentMonth();
+  const [summary, budgets, goals, groups] = await Promise.all([
+    month ? api(`/api/summary?month=${month}`) : null,
+    api('/api/budgets'),
+    api('/api/goals'),
+    api('/api/category-groups'),
+  ]);
+  const bList = summary?.budgets || budgets || [];
+  const cats = (summary?.by_category || []).filter(x => x.total > 0).sort((a,b) => b.total - a.total);
+  const totalSpent = bList.reduce((s,b) => s + (b.spent||0), 0);
+  const totalBudget = bList.reduce((s,b) => s + (b.limit||0), 0);
+  const remaining = totalBudget - totalSpent;
+  const pctAll = totalBudget ? (totalSpent/totalBudget*100) : 0;
+
+  c.innerHTML = `<div class="page">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Budgets & goals</div>
+        <div class="page-sub">${fmtCurrency(totalSpent,true)} of ${fmtCurrency(totalBudget,true)} spent · ${pctAll.toFixed(0)}% of budgets used</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" id="add-budget-btn">${icon('plus',14)} New budget</button>
+      </div>
+    </div>
+
+    <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="kpi">
+        <div class="kpi-label">Budgeted</div>
+        <div class="kpi-value">${fmtCurrencyHTML(totalBudget)}</div>
+        <div class="kpi-delta"><span>across ${bList.length} categories</span></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Spent</div>
+        <div class="kpi-value">${fmtCurrencyHTML(totalSpent)}</div>
+        <div class="kpi-delta"><span class="chip chip-up">${pctAll < 100 ? icon('check',11)+' on track' : 'over budget'}</span></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Remaining</div>
+        <div class="kpi-value" style="color:${remaining>=0?'var(--pos)':'var(--danger)'}">${fmtCurrencyHTML(Math.abs(remaining))}</div>
+        <div class="kpi-delta"><span>${remaining>=0?'left to spend':'over budget'}</span></div>
+      </div>
+    </div>
+
+    <div class="section-h">
+      <h2>Monthly budgets</h2>
+      <p>Track spending against limits — set per category</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px">
+      ${bList.map(b => {
+        const pct = b.limit ? (b.spent/b.limit*100) : 0;
+        const cls = pct >= 100 ? 'danger' : pct >= 85 ? 'warn' : '';
+        const status = pct >= 100 ? 'Over' : pct >= 85 ? 'Close' : 'OK';
+        const statusColor = pct >= 100 ? 'var(--danger)' : pct >= 85 ? 'var(--warn)' : 'var(--pos)';
+        const statusBg = pct >= 100 ? 'var(--danger-soft)' : pct >= 85 ? 'var(--warn-soft)' : 'var(--pos-soft)';
+        const cc = catColor(b.category);
+        return `<div class="card" style="padding:16px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:10px;background:${cc}18;color:${cc};display:grid;place-items:center;font-size:16px;font-weight:600">${(b.category||'?')[0]}</div>
+              <div>
+                <div style="font-size:14px;font-weight:500">${esc(b.category)}</div>
+              </div>
+            </div>
+            <span style="font-size:11px;padding:2px 7px;border-radius:5px;color:${statusColor};background:${statusBg};font-weight:500">${status}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;font-variant-numeric:tabular-nums">
+            <span style="font-weight:500">${fmtCurrency(b.spent||0)}</span>
+            <span style="color:var(--ink-3)">of ${fmtCurrency(b.limit,true)}</span>
+          </div>
+          <div class="progress ${cls}"><div class="fill" style="width:${Math.min(pct,100)}%"></div></div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11.5px;color:var(--ink-3)">
+            <span>${pct.toFixed(0)}% used</span>
+            <div style="display:flex;gap:4px;align-items:center">
+              <button class="icon-btn" style="width:20px;height:20px" onclick="editBudget('${esc(b.category)}',${b.limit||0})">${icon('edit',11)}</button>
+              <button class="icon-btn" style="width:20px;height:20px" onclick="deleteBudget('${esc(b.category)}')">${icon('trash',11)}</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('') || '<div style="color:var(--ink-3);font-size:13px;grid-column:span 2">No budgets set yet. Click "New budget" to add one.</div>'}
+    </div>
+
+    <div class="section-h">
+      <h2>Savings goals</h2>
+      <p>Stash money toward specific targets</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+      ${(goals||[]).map(g => {
+        const pct = g.target_amount ? (g.current_amount/g.target_amount*100) : 0;
+        const gc = '#5b9c6e';
+        return `<div class="card" style="padding:16px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+            <div>
+              <div style="font-size:11.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;font-weight:500">Goal</div>
+              <div style="font-size:16px;font-weight:500;margin-top:2px">${esc(g.icon||'')} ${esc(g.name)}</div>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-sm" onclick="contributeGoal(${g.id})">Contribute</button>
+              <button class="btn btn-sm btn-ghost" onclick="editGoal(${g.id})">${icon('edit',12)}</button>
+              <button class="btn btn-sm btn-ghost" onclick="deleteGoal(${g.id})">${icon('trash',12)}</button>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;align-items:baseline">
+            <span style="font-size:22px;font-weight:500;letter-spacing:-0.02em;font-variant-numeric:tabular-nums">${fmtCurrency(g.current_amount,true)}</span>
+            <span style="font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums">of ${fmtCurrency(g.target_amount,true)}</span>
+          </div>
+          <div class="progress"><div class="fill" style="width:${pct}%;background:${gc}"></div></div>
+          <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--ink-3)">
+            <span style="color:${gc};font-weight:500">${pct.toFixed(0)}% complete</span>
+            <span>${fmtCurrency(Math.max(g.target_amount-g.current_amount,0),true)} to go</span>
+          </div>
+        </div>`;
+      }).join('') || '<div style="color:var(--ink-3);font-size:13px;grid-column:span 2">No goals yet</div>'}
+      <div class="card" style="padding:16px;display:grid;place-items:center;border-style:dashed;cursor:pointer" id="add-goal-card">
+        <div style="text-align:center;color:var(--ink-3)">
+          ${icon('plus',20)}
+          <div style="font-size:13px;margin-top:6px">Add a goal</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  document.getElementById('add-budget-btn')?.addEventListener('click', () => openBudgetModal());
+  document.getElementById('add-goal-card')?.addEventListener('click', () => openGoalModal());
+}
+
+function openBudgetModal() {
+  const catOptions = STATE.expenseCats.map(c => `<option value="${esc(c.name)}">${esc(c.icon||'')} ${esc(c.name)}</option>`).join('');
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="budget-modal-back">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-h"><h3>New budget</h3><button class="icon-btn" onclick="closeBudgetModal()">${icon('x',14)}</button></div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Category</label>
+          <select id="budget-cat">${catOptions}<option value="">Other…</option></select>
+        </div>
+        <div class="field" id="budget-custom-field" style="display:none;margin-top:12px">
+          <label>Category name</label>
+          <input id="budget-custom-cat" placeholder="e.g. Groceries">
+        </div>
+        <div class="field" style="margin-top:12px">
+          <label>Monthly limit</label>
+          <input id="budget-limit" placeholder="e.g. 500" inputmode="decimal">
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeBudgetModal()">Cancel</button>
+        <button class="btn btn-primary" id="budget-save-btn">${icon('check',14)} Create budget</button>
+      </div>
+    </div>
+  </div>`);
+  document.getElementById('budget-modal-back').addEventListener('click', closeBudgetModal);
+  document.getElementById('budget-cat').addEventListener('change', (e) => {
+    document.getElementById('budget-custom-field').style.display = e.target.value === '' ? 'block' : 'none';
+  });
+  document.getElementById('budget-save-btn').addEventListener('click', async () => {
+    const cat = document.getElementById('budget-cat').value || document.getElementById('budget-custom-cat').value;
+    const limit = parseFloat(document.getElementById('budget-limit').value);
+    if (!cat || !limit) { showToast('Please fill in all fields'); return; }
+    await api('/api/budgets', 'POST', { category: cat, amount: limit });
+    closeBudgetModal();
+    showToast(`Budget set: ${cat} · ${fmtCurrency(limit)}/mo`);
+    refreshCurrentView();
+  });
+}
+
+window.closeBudgetModal = function() { document.getElementById('budget-modal-back')?.remove(); };
+
+window.editBudget = function(category, currentLimit) {
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="budget-modal-back">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-h"><h3>Edit budget</h3><button class="icon-btn" onclick="closeBudgetModal()">${icon('x',14)}</button></div>
+      <div class="modal-body">
+        <div class="field"><label>Category</label><input value="${category}" disabled style="opacity:0.6"></div>
+        <div class="field" style="margin-top:12px"><label>Monthly limit</label><input id="budget-edit-limit" value="${currentLimit}" inputmode="decimal"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeBudgetModal()">Cancel</button>
+        <button class="btn btn-primary" id="budget-edit-save">Save</button>
+      </div>
+    </div>
+  </div>`);
+  document.getElementById('budget-modal-back').addEventListener('click', closeBudgetModal);
+  document.getElementById('budget-edit-save').addEventListener('click', async () => {
+    const amount = parseFloat(document.getElementById('budget-edit-limit').value);
+    if (!amount) { showToast('Enter a valid amount'); return; }
+    await api('/api/budgets', 'POST', { category, amount });
+    closeBudgetModal();
+    showToast(`Budget updated: ${category}`);
+    refreshCurrentView();
+  });
+};
+
+window.deleteBudget = async function(category) {
+  if (!await appConfirm(`Delete the budget for "${category}"?`, { title: 'Delete budget', danger: true })) return;
+  await api(`/api/budgets/${encodeURIComponent(category)}`, 'DELETE');
+  showToast('Budget deleted');
+  refreshCurrentView();
+};
+
+function openGoalModal() {
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="goal-modal-back">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-h"><h3>New savings goal</h3><button class="icon-btn" onclick="closeGoalModal()">${icon('x',14)}</button></div>
+      <div class="modal-body">
+        <div class="field"><label>Goal name</label><input id="goal-name" placeholder="e.g. Emergency Fund"></div>
+        <div class="field" style="margin-top:12px"><label>Target amount</label><input id="goal-target" placeholder="e.g. 10000" inputmode="decimal"></div>
+        <div class="field" style="margin-top:12px"><label>Icon (optional emoji)</label><input id="goal-icon" placeholder="e.g. 🎯"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeGoalModal()">Cancel</button>
+        <button class="btn btn-primary" id="goal-save-btn">${icon('check',14)} Create goal</button>
+      </div>
+    </div>
+  </div>`);
+  document.getElementById('goal-modal-back').addEventListener('click', closeGoalModal);
+  document.getElementById('goal-save-btn').addEventListener('click', async () => {
+    const name = document.getElementById('goal-name').value;
+    const target = parseFloat(document.getElementById('goal-target').value);
+    const goalIcon = document.getElementById('goal-icon').value;
+    if (!name || !target) { showToast('Please fill in name and target'); return; }
+    await api('/api/goals', 'POST', { name, target_amount: target, icon: goalIcon });
+    closeGoalModal();
+    refreshCurrentView();
+  });
+}
+
+window.closeGoalModal = function() { document.getElementById('goal-modal-back')?.remove(); };
+
+window.contributeGoal = async function(id) {
+  const amount = await appPrompt('How much would you like to contribute?', { title: 'Add contribution', placeholder: '50.00' });
+  if (!amount) return;
+  await api(`/api/goals/${id}/contribute`, 'POST', { amount: parseFloat(amount) });
+  refreshCurrentView();
+};
+
+window.deleteGoal = async function(id) {
+  if (!await appConfirm('Delete this savings goal?', { title: 'Delete goal', danger: true })) return;
+  await api(`/api/goals/${id}`, 'DELETE');
+  refreshCurrentView();
+};
+
+window.editGoal = async function(id) {
+  const goals = await api('/api/goals');
+  const g = (goals||[]).find(x => x.id === id);
+  if (!g) return;
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="goal-modal-back">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-h"><h3>Edit goal</h3><button class="icon-btn" onclick="closeGoalModal()">${icon('x',14)}</button></div>
+      <div class="modal-body">
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px">
+          <div class="field"><label>Goal name</label><input id="goal-edit-name" value="${esc(g.name)}"></div>
+          <div class="field"><label>Icon</label><input id="goal-edit-icon" value="${esc(g.icon||'')}"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+          <div class="field"><label>Target amount</label><input id="goal-edit-target" value="${g.target_amount}" inputmode="decimal"></div>
+          <div class="field"><label>Current amount</label><input id="goal-edit-current" value="${g.current_amount}" inputmode="decimal"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeGoalModal()">Cancel</button>
+        <button class="btn btn-primary" id="goal-edit-save">Save</button>
+      </div>
+    </div>
+  </div>`);
+  document.getElementById('goal-modal-back').addEventListener('click', closeGoalModal);
+  document.getElementById('goal-edit-save').addEventListener('click', async () => {
+    const data = {
+      name: document.getElementById('goal-edit-name').value.trim(),
+      icon: document.getElementById('goal-edit-icon').value.trim(),
+      target_amount: parseFloat(document.getElementById('goal-edit-target').value),
+      current_amount: parseFloat(document.getElementById('goal-edit-current').value),
+    };
+    if (!data.name || !data.target_amount) { showToast('Name and target are required'); return; }
+    await api(`/api/goals/${id}`, 'PATCH', data);
+    closeGoalModal();
+    refreshCurrentView();
+  });
+};
+
+// ══════════════════════════════════════════════════════════════
+// ACCOUNTS VIEW
+// ══════════════════════════════════════════════════════════════
+async function _renderAccounts(c) {
+  const [accounts, nw] = await Promise.all([
+    api('/api/accounts-list'),
+    api('/api/net-worth'),
+  ]);
+  const list = accounts || [];
+  const totalAssets = list.filter(a => (a.balance||0) >= 0).reduce((s,a) => s + (a.balance||0), 0);
+  const totalDebt = list.filter(a => (a.balance||0) < 0).reduce((s,a) => s + Math.abs(a.balance||0), 0);
+  const netWorth = totalAssets - totalDebt;
+  const nwData = (nw||[]).map(d => ({m:d.month, v:d.net_worth}));
+  const prevNW = nwData.length >= 2 ? nwData[nwData.length-2].v : netWorth;
+  const deltaNW = prevNW ? ((netWorth - prevNW) / Math.abs(prevNW) * 100) : 0;
+  const maxBalance = Math.max(totalAssets, totalDebt, 1);
+
+  c.innerHTML = `<div class="page">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Accounts & net worth</div>
+        <div class="page-sub">All balances computed from your opening balances + imported transactions — nothing leaves your machine</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" id="add-acct-btn">${icon('plus',14)} Add account</button>
+      </div>
+    </div>
+
+    <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="kpi hero-aurora">
+        <div class="kpi-label">Net worth</div>
+        <div class="kpi-value">${fmtCurrencyHTML(netWorth)}</div>
+        <div class="kpi-delta">
+          <span class="chip ${deltaNW >= 0 ? 'chip-up' : 'chip-dn'}">${icon(deltaNW >= 0 ? 'arrow_up' : 'arrow_dn', 11)} ${Math.abs(deltaNW).toFixed(1)}%</span>
+          <span>vs last month</span>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Assets</div>
+        <div class="kpi-value" style="color:var(--pos)">${fmtCurrencyHTML(totalAssets)}</div>
+        <div class="kpi-delta"><span>across ${list.filter(a => (a.balance||0) >= 0).length} accounts</span></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Liabilities</div>
+        <div class="kpi-value" style="color:var(--danger)">−${fmtCurrencyHTML(totalDebt)}</div>
+        <div class="kpi-delta"><span>${list.filter(a => (a.balance||0) < 0).length || 'no'} credit balance${list.filter(a => (a.balance||0) < 0).length !== 1 ? 's' : ''}</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-h">
+        <div>
+          <h3>Net worth over time</h3>
+          <div style="font-size:22px;font-weight:500;letter-spacing:-0.02em;margin-top:4px;font-variant-numeric:tabular-nums">
+            ${fmtCurrency(netWorth,true)}
+            ${nwData.length >= 2 ? `<span style="margin-left:10px;font-size:13px;color:${netWorth - nwData[0].v >= 0 ? 'var(--pos)' : 'var(--danger)'};font-weight:500">
+              ${netWorth - nwData[0].v >= 0 ? '+' : ''}${fmtCurrency(netWorth - nwData[0].v, true)} <span style="color:var(--ink-3)">over ${nwData.length} months</span>
+            </span>` : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:4px">
+          <button class="filter-chip">3M</button>
+          <button class="filter-chip">6M</button>
+        <div style="display:flex;gap:4px" id="acct-nw-filters">
+          <button class="filter-chip" data-months="3">3M</button>
+          <button class="filter-chip" data-months="6">6M</button>
+          <button class="filter-chip active" data-months="12">1Y</button>
+          <button class="filter-chip" data-months="0">All</button>
+        </div>
+      </div>
+      <div id="acct-nw-chart">${svgNetWorthChart(nwData)}</div>
+    </div>
+
+    <div class="section-h"><h2>Your accounts</h2><p>Click any account to see details and edit</p></div>
+    <div class="card" style="padding:0;overflow:hidden">
+      ${list.length ? list.map((a, i) => {
+        const pct = (Math.abs(a.balance||0) / maxBalance) * 100;
+        const ac = catColor(a.name);
+        const isDebt = (a.balance||0) < 0;
+        return `<div style="display:grid;grid-template-columns:auto 1fr auto auto auto;gap:16px;padding:16px 20px;align-items:center;${i < list.length-1 ? 'border-bottom:1px solid var(--line-1)' : ''};cursor:pointer" onclick="editAccount(${a.id})">
+          <div class="acct-glyph" style="width:40px;height:40px;background:${ac}15;color:${ac};border-color:${ac}30;font-size:15px;font-weight:600">${esc((a.name||'?')[0])}</div>
+          <div>
+            <div style="font-weight:500;font-size:14.5px">${esc(a.name)}</div>
+            <div style="font-size:12px;color:var(--ink-3);margin-top:2px">${esc(a.account_type||'chequing')} · Opening ${fmtCurrency(a.opening_balance||0,true)}</div>
+          </div>
+          <div style="width:160px">
+            <div class="progress"><div class="fill" style="width:${pct}%;background:${isDebt ? 'var(--danger)' : ac}"></div></div>
+          </div>
+          <div style="text-align:right;min-width:110px">
+            <div style="font-weight:600;font-size:15px;font-variant-numeric:tabular-nums;color:${isDebt ? 'var(--danger)' : 'var(--ink-1)'}">${fmtCurrency(a.balance||0)}</div>
+            <div style="font-size:11px;color:var(--ink-3)">${isDebt ? 'owed' : 'balance'}</div>
+          </div>
+          <div style="display:flex;gap:4px">
+            <button class="icon-btn" onclick="event.stopPropagation();editAccount(${a.id})">${icon('edit',13)}</button>
+          </div>
+        </div>`;
+      }).join('') : '<div style="padding:20px;text-align:center;color:var(--ink-3)">No accounts yet</div>'}
+    </div>
+  </div>`;
+
+  document.getElementById('add-acct-btn')?.addEventListener('click', () => openAccountModal());
+
+  // Net worth time range filter
+  document.querySelectorAll('#acct-nw-filters .filter-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#acct-nw-filters .filter-chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const months = parseInt(btn.dataset.months);
+      const filtered = months === 0 ? nwData : nwData.slice(-months);
+      const container = document.getElementById('acct-nw-chart');
+      if (container) container.innerHTML = svgNetWorthChart(filtered);
+    });
+  });
+}
+
+function openAccountModal(existing) {
+  const isEdit = !!existing;
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="acct-modal-back">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-h"><h3>${isEdit ? 'Edit' : 'New'} account</h3><button class="icon-btn" onclick="closeAccountModal()">${icon('x',14)}</button></div>
+      <div class="modal-body">
+        <div class="field"><label>Account name</label><input id="acct-name" value="${esc(existing?.name||'')}" placeholder="e.g. RBC Chequing"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+          <div class="field"><label>Type</label><select id="acct-type">
+            <option value="chequing" ${(existing?.account_type||'chequing')==='chequing'?'selected':''}>Chequing</option>
+            <option value="savings" ${existing?.account_type==='savings'?'selected':''}>Savings</option>
+            <option value="credit" ${existing?.account_type==='credit'?'selected':''}>Credit</option>
+            <option value="investment" ${existing?.account_type==='investment'?'selected':''}>Investment</option>
+            <option value="other" ${existing?.account_type==='other'?'selected':''}>Other</option>
+          </select></div>
+          <div class="field"><label>Opening balance</label><input id="acct-balance" value="${existing?.opening_balance||0}" inputmode="decimal"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeAccountModal()">Cancel</button>
+        <button class="btn btn-primary" id="acct-save-btn">${isEdit ? 'Save' : 'Add account'}</button>
+      </div>
+    </div>
+  </div>`);
+  document.getElementById('acct-modal-back').addEventListener('click', closeAccountModal);
+  document.getElementById('acct-save-btn').addEventListener('click', async () => {
+    const data = { name: document.getElementById('acct-name').value, account_type: document.getElementById('acct-type').value, opening_balance: parseFloat(document.getElementById('acct-balance').value) || 0 };
+    if (!data.name) { showToast('Account name is required'); return; }
+    if (isEdit) await api(`/api/accounts-list/${existing.id}`, 'PATCH', data);
+    else await api('/api/accounts-list', 'POST', data);
+    closeAccountModal();
+    refreshCurrentView();
+  });
+}
+
+window.closeAccountModal = function() { document.getElementById('acct-modal-back')?.remove(); };
+
+function acctRow(a) {
+  return `<div class="acct-row" style="cursor:pointer" onclick="editAccount(${a.id})">
+    <div class="left">
+      <div class="acct-glyph" style="background:${catColor(a.name)}15;color:${catColor(a.name)};border-color:${catColor(a.name)}30">${esc((a.name||'?')[0])}</div>
+      <div><div class="name">${esc(a.name)}</div><div class="type">${esc(a.account_type||'')}</div></div>
+    </div>
+    <div class="bal" style="color:${a.balance<0?'var(--danger)':'var(--ink-1)'}">
+      ${fmtCurrency(a.balance)}
     </div>
   </div>`;
 }
 
-function loadCategoryList() {
-  document.getElementById('expense-cat-list').innerHTML =
-    ALL_CATEGORIES.filter(c=>c.type==='Expense').map(renderCatRow).join('')
-    || '<div style="color:var(--muted);font-size:12px">No expense categories</div>';
-  document.getElementById('income-cat-list').innerHTML =
-    ALL_CATEGORIES.filter(c=>c.type==='Income').map(renderCatRow).join('')
-    || '<div style="color:var(--muted);font-size:12px">No income categories</div>';
-}
+window.editAccount = async function(id) {
+  const accounts = await api('/api/accounts-list');
+  const a = (accounts||[]).find(x => x.id === id);
+  if (a) openAccountModal(a);
+};
 
-async function addCategory() {
-  const name = document.getElementById('new-cat-name').value.trim();
-  const icon = document.getElementById('new-cat-icon').value.trim();
-  const type = document.getElementById('new-cat-type').value;
-  if (!name) return toast('Enter a category name','error');
-  const res = await apiFetch('/api/categories', {method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name, type, icon})});
-  if (!res) return;
-  if (res.ok) {
-    document.getElementById('new-cat-name').value = '';
-    document.getElementById('new-cat-icon').value = '';
-    await loadCategories();
-    loadCategoryList();
-    populateCatFilter();
-    populateBudgetCat();
-    toast('Category added ✓','success');
-  } else toast(res.error||'Error','error');
-}
+// ══════════════════════════════════════════════════════════════
+// YEAR VIEW
+// ══════════════════════════════════════════════════════════════
+async function _renderYear(c) {
+  const year = (currentMonth()||new Date().toISOString().slice(0,7)).slice(0,4);
+  const [data, trends] = await Promise.all([
+    api(`/api/year/${year}`),
+    api('/api/trends?months=12'),
+  ]);
+  const allMonths = data?.months || [];
+  const months = allMonths.filter(m => m.income > 0 || m.expenses > 0);
+  const totalInc = allMonths.reduce((s,m) => s + (m.income||0), 0);
+  const totalExp = allMonths.reduce((s,m) => s + (m.expenses||0), 0);
+  const totalNet = totalInc - totalExp;
+  const activeCount = months.length || 1;
+  const avgInc = totalInc / activeCount;
+  const avgExp = totalExp / activeCount;
 
-async function renameCategory(id, oldName, oldIcon) {
-  const newName = prompt('Rename category:', oldName);
-  if (!newName || newName.trim() === oldName) return;
-  const newIcon = prompt('Icon (emoji, optional):', oldIcon) || '';
-  const res = await apiFetch(`/api/categories/${id}`, {method:'PATCH',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name: newName.trim(), icon: newIcon.trim()})});
-  if (!res) return;
-  if (res.ok) {
-    await loadCategories();
-    loadCategoryList();
-    populateCatFilter();
-    populateBudgetCat();
-    toast('Renamed ✓','success');
-  } else toast(res.error||'Error','error');
-}
-
-async function deleteCategory(id, name, type) {
-  const res = await apiFetch(`/api/categories/${id}`, {method:'DELETE'});
-  if (!res) return;
-  if (res.error === 'in_use') {
-    const sameCats = ALL_CATEGORIES.filter(c=>c.type===type && c.name!==name).map(c=>c.name);
-    const target = prompt(`${res.count} transactions use "${name}".\nReassign them to which category?\n\nOptions: ${sameCats.join(', ')}`);
-    if (!target) return;
-    if (!sameCats.includes(target)) return toast('Invalid category','error');
-    const res2 = await apiFetch(`/api/categories/${id}?reassign=${encodeURIComponent(target)}`, {method:'DELETE'});
-    if (!res2) return;
-    if (res2.ok) {
-      await loadCategories();
-      loadCategoryList();
-      populateCatFilter();
-      populateBudgetCat();
-      toast(`Deleted & reassigned ${res2.reassigned} transactions ✓`,'success');
-      if (months.length) renderMonth();
-    } else toast(res2.error||'Error','error');
-  } else if (res.ok) {
-    await loadCategories();
-    loadCategoryList();
-    populateCatFilter();
-    populateBudgetCat();
-    toast('Deleted ✓','success');
-  } else toast(res.error||'Error','error');
-}
-
-async function loadBudgets() {
-  const budgets = await apiFetch('/api/budgets') || [];
-  document.getElementById('budget-list').innerHTML = budgets.length
-    ? budgets.map(b=>`<div class="settings-row" id="budget-row-${escapeAttr(b.category)}">
-        <div style="flex:1"><div class="settings-label">${escapeHtml(b.category)}</div>
-          <div class="settings-sub">${fmt(b.monthly_limit)}/month</div></div>
-        <div style="display:flex;gap:4px">
-          <button class="btn-icon" onclick="startEditBudget('${escapeAttr(b.category)}',${b.monthly_limit})">✏️</button>
-          <button class="btn-icon" onclick="deleteBudget('${escapeAttr(b.category)}')">🗑️</button>
-        </div>
-      </div>`).join('')
-    : '<div style="color:var(--muted);font-size:12px;margin-bottom:8px">No budgets set</div>';
-}
-
-function startEditBudget(cat, currentAmt) {
-  const row = document.getElementById('budget-row-' + cat);
-  if (!row) return;
-  row.innerHTML = `<div style="flex:1"><div class="settings-label">${escapeHtml(cat)}</div></div>
-    <div style="display:flex;gap:6px;align-items:center">
-      <input type="number" id="edit-budget-amt" value="${currentAmt}" style="width:90px" min="1" step="0.01"
-        onkeydown="if(event.key==='Enter')saveEditBudget('${escapeAttr(cat)}');if(event.key==='Escape')loadBudgets()">
-      <button class="btn btn-sm" onclick="saveEditBudget('${escapeAttr(cat)}')">Save</button>
-      <button class="btn-icon" onclick="loadBudgets()">✕</button>
-    </div>`;
-  row.querySelector('#edit-budget-amt').focus();
-}
-
-async function saveEditBudget(cat) {
-  const amt = document.getElementById('edit-budget-amt').value;
-  if (!amt || parseFloat(amt) <= 0) return toast('Enter a valid amount','error');
-  await apiFetch('/api/budgets', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({category: cat, amount: parseFloat(amt)})});
-  loadBudgets(); toast('Budget updated ✓','success');
-}
-
-function populateBudgetCat() {
-  const sel = document.getElementById('budget-cat');
-  const current = sel.value;
-  sel.innerHTML = '<option value="">Select category…</option>';
-  EXPENSE_CATS.forEach(c=>{ if(c!=='UNCATEGORIZED'){ const o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o); }});
-  if (current) sel.value = current;
-}
-
-async function saveBudget() {
-  const cat = document.getElementById('budget-cat').value;
-  const amt = document.getElementById('budget-amt').value;
-  if (!cat || !amt) return toast('Select category and amount','error');
-  await apiFetch('/api/budgets', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({category:cat, amount:parseFloat(amt)})});
-  document.getElementById('budget-amt').value='';
-  loadBudgets(); toast('Budget set ✓','success');
-}
-
-async function deleteBudget(cat) {
-  await apiFetch(`/api/budgets/${encodeURIComponent(cat)}`, {method:'DELETE'});
-  loadBudgets(); toast('Removed','success');
-}
-
-async function loadLearned() {
-  const rows = await apiFetch('/api/learned') || [];
-  document.getElementById('learned-list').innerHTML = rows.length
-    ? rows.map(r=>`<div class="settings-row">
-        <div><div class="settings-label" style="font-family:var(--mono);font-size:12px">${escapeHtml(r.keyword)}</div>
-          <div class="settings-sub">→ ${escapeHtml(r.category)}</div></div>
-        <button class="btn btn-ghost btn-sm" onclick="deleteLearned('${escapeAttr(r.keyword)}')">Remove</button>
-      </div>`).join('')
-    : '<div style="color:var(--muted);font-size:12px">None yet — edit a transaction category to start learning</div>';
-}
-
-async function deleteLearned(keyword) {
-  await apiFetch(`/api/learned/${encodeURIComponent(keyword)}`, {method:'DELETE'});
-  loadLearned(); toast('Removed','success');
-}
-
-function showBudgetPanel() {
-  nav('settings');
-  switchSettingsTab('general');
-  const el = document.getElementById('budget-panel');
-  setTimeout(() => el.scrollIntoView({behavior:'smooth'}), 50);
-}
-
-// ── MODALS ────────────────────────────────────────────────────────────────────
-function updateCatOptions(selId, typeId) {
-  const type = document.getElementById(typeId).value;
-  const sel = document.getElementById(selId);
-  const cats = type === 'Income' ? INCOME_CATS : EXPENSE_CATS;
-  sel.innerHTML = cats.map(c=>`<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('');
-}
-
-function openAddModal() {
-  if (isDemo) { toast('Adding transactions is disabled in demo mode', 'error'); return; }
-  updateCatOptions('f-category','f-type');
-  document.getElementById('add-modal').classList.add('open');
-}
-
-function openEditModal(t) {
-  document.getElementById('e-id').value = t.id;
-  document.getElementById('e-date').value = t.date;
-  document.getElementById('e-type').value = t.type;
-  document.getElementById('e-name').value = t.name;
-  document.getElementById('e-amount').value = t.amount;
-  document.getElementById('e-notes').value = t.notes || '';
-  updateCatOptions('e-category','e-type');
-  document.getElementById('e-category').value = t.category;
-  // Ensure account is in the dropdown, then select it
-  const acc = document.getElementById('e-account');
-  let found = false;
-  for (let o of acc.options) { if (o.value === t.account) { o.selected = true; found = true; break; } }
-  if (!found) { const o = document.createElement('option'); o.value = t.account; o.textContent = t.account; acc.appendChild(o); acc.value = t.account; }
-  document.getElementById('edit-modal').classList.add('open');
-  document.getElementById('split-section').style.display = 'none';
-  document.getElementById('split-btn').style.display = '';
-  applyDemoToEditModal();
-}
-
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-document.querySelectorAll('.modal-backdrop').forEach(el=>
-  el.addEventListener('click', e=>{ if(e.target===e.currentTarget) el.classList.remove('open'); }));
-
-async function submitAdd() {
-  const body = {
-    date: document.getElementById('f-date').value,
-    type: document.getElementById('f-type').value,
-    name: document.getElementById('f-name').value.trim(),
-    category: document.getElementById('f-category').value,
-    amount: document.getElementById('f-amount').value,
-    account: document.getElementById('f-account').value,
-    notes: document.getElementById('f-notes').value.trim(),
-  };
-  if (!body.date||!body.name||!body.amount) return toast('Fill required fields','error');
-  const data = await apiFetch('/api/add', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-  if (!data) return;
-  if (data.ok) {
-    toast('Added ✓','success'); closeModal('add-modal');
-    months = await apiFetch('/api/months') || [];
-    const idx = months.indexOf(body.date.slice(0,7)); if(idx!==-1) currentMonthIdx=idx;
-    renderMonth();
-    ['f-name','f-amount','f-notes'].forEach(id=>document.getElementById(id).value='');
-  } else toast(data.error||'Error','error');
-}
-
-async function submitEdit() {
-  const id = document.getElementById('e-id').value;
-  const body = {
-    date: document.getElementById('e-date').value,
-    type: document.getElementById('e-type').value,
-    name: document.getElementById('e-name').value.trim(),
-    category: document.getElementById('e-category').value,
-    amount: parseFloat(document.getElementById('e-amount').value),
-    account: document.getElementById('e-account').value,
-    notes: document.getElementById('e-notes').value.trim(),
-  };
-  const data = await apiFetch(`/api/update/${id}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-  if (!data) return;
-  if (data.ok) {
-    const extra = data.retro_fixed>0 ? ` · fixed ${data.retro_fixed} other${data.retro_fixed>1?'s':''}` : '';
-    toast(`Saved ✓${extra}`,'success'); closeModal('edit-modal');
-    months = await apiFetch('/api/months') || [];
-    const editedMonth = body.date.slice(0,7);
-    const mi = months.indexOf(editedMonth);
-    currentMonthIdx = mi >= 0 ? mi : Math.max(0, Math.min(months.length-1, currentMonthIdx));
-    renderMonth(); loadTransactions();
-  } else toast(data.error||'Error','error');
-}
-
-async function deleteFromEdit() {
-  if (!confirm('Delete this transaction?')) return;
-  await apiFetch(`/api/delete/${document.getElementById('e-id').value}`, {method:'DELETE'});
-  toast('Deleted','success'); showUndoButton(); closeModal('edit-modal');
-  months = await apiFetch('/api/months') || [];
-  currentMonthIdx = Math.max(0, Math.min(months.length-1, currentMonthIdx));
-  renderMonth(); loadTransactions();
-}
-
-// ── IMPORT ────────────────────────────────────────────────────────────────────
-let wizardState = {};
-
-function handleDrop(e) {
-  e.preventDefault(); document.getElementById('drop-zone').classList.remove('drag');
-  handleFiles(e.dataTransfer.files);
-}
-
-function isStaleConfig(lastVerified) {
-  if (!lastVerified) return false;
-  const parts = lastVerified.split('-');
-  const cfgDate = new Date(parseInt(parts[0]), parseInt(parts[1])-1, 1);
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-  return cfgDate < sixMonthsAgo;
-}
-
-async function handleFiles(files) {
-  if (!files.length) return;
-  const unknownFiles = [];
-  const knownFd = new FormData();
-  let hasKnown = false;
-  const ofxFd = new FormData();
-  let hasOfx = false;
-
-  // First pass: detect each file
-  for (const f of files) {
-    const ext = f.name.toLowerCase().split('.').pop();
-    if (ext === 'ofx' || ext === 'qfx') {
-      ofxFd.append('files', f);
-      hasOfx = true;
-      continue;
-    }
-    const detectFd = new FormData();
-    detectFd.append('file', f);
-    const det = await apiFetch('/api/detect-csv', {method:'POST', body:detectFd});
-    if (!det) continue;
-    if (det.detected) {
-      knownFd.append('files', f);
-      hasKnown = true;
-    } else {
-      unknownFiles.push({file: f, headers: det.headers, preview: det.preview, raw_text: det.raw_text});
-    }
+  function monthLabel(ym) {
+    const [y,m] = ym.split('-').map(Number);
+    return new Date(y, m-1, 15).toLocaleString('en-CA',{month:'long',year:'numeric'});
+  }
+  function monthShort(ym) {
+    const [y,m] = ym.split('-').map(Number);
+    return new Date(y, m-1, 15).toLocaleString('en-CA',{month:'short'});
   }
 
-  const allResults = [];
+  const savingsRate = totalInc ? ((totalNet/totalInc)*100).toFixed(0) : 0;
+  const max = Math.max(...allMonths.map(m => Math.max(m.income||0, m.expenses||0)), 1);
 
-  // Import OFX files
-  if (hasOfx) {
-    const data = await apiFetch('/api/import-ofx', {method:'POST', body:ofxFd});
-    if (data) allResults.push(...data);
-  }
+  // Find best/worst months
+  const bestMonth = months.length ? months.reduce((a,b) => ((b.income||0)-(b.expenses||0)) > ((a.income||0)-(a.expenses||0)) ? b : a) : null;
+  const worstMonth = months.length ? months.reduce((a,b) => (b.expenses||0) > (a.expenses||0) ? b : a) : null;
 
-  // Import known CSV files normally
-  if (hasKnown) {
-    const data = await apiFetch('/api/import', {method:'POST', body:knownFd});
-    if (data) allResults.push(...data);
-  }
-
-  if (allResults.length) {
-    const resultsHtml = allResults.map(r => {
-      const staleWarn = isStaleConfig(r.last_verified)
-        ? `<div style="color:var(--amber);font-size:10px;font-family:var(--mono)">⚠ config last verified ${escapeHtml(r.last_verified)}</div>` : '';
-      return `<div class="result-row">
-        <div style="flex:1"><div>${escapeHtml(r.file)}</div><div class="result-bank">${escapeHtml(r.bank)}</div>${staleWarn}</div>
-        <div style="color:var(--accent);font-family:var(--mono)">+${r.added}</div>
-        <div style="color:var(--muted);font-size:11px">${r.dupes} dupes skipped</div>
-      </div>`;
-    }).join('');
-    document.getElementById('import-results').innerHTML = resultsHtml;
-    months = await apiFetch('/api/months') || [];
-    if (months.length) {
-      currentMonthIdx=0; renderMonth();
-      document.getElementById('empty-state').style.display = 'none';
-      document.getElementById('dashboard-content').style.display = '';
-    }
-    toast(`Imported ${allResults.reduce((s,r)=>s+r.added,0)} transactions`,'success');
-  }
-
-  // Open wizard for the first unknown file
-  if (unknownFiles.length) {
-    openCsvWizard(unknownFiles[0]);
-    // Queue remaining unknowns
-    wizardState.queue = unknownFiles.slice(1);
-  }
-}
-
-function openCsvWizard(info) {
-  wizardState.headers = info.headers;
-  wizardState.preview = info.preview;
-  wizardState.raw_text = info.raw_text;
-  wizardState.file = info.file;
-
-  // Build preview table
-  const table = document.getElementById('wizard-preview-table');
-  const ths = info.headers.map(h => `<th>${escapeHtml(h)}</th>`).join('');
-  const rows = info.preview.map(r =>
-    `<tr>${info.headers.map(h => `<td>${escapeHtml(r[h]||'')}</td>`).join('')}</tr>`
-  ).join('');
-  table.innerHTML = `<thead><tr>${ths}</tr></thead><tbody>${rows}</tbody>`;
-
-  // Populate dropdowns
-  const selects = ['wiz-date-col','wiz-desc-col','wiz-amt-col','wiz-debit-col','wiz-credit-col'];
-  selects.forEach(id => {
-    const sel = document.getElementById(id);
-    sel.innerHTML = '<option value="">— select —</option>' +
-      info.headers.map(h => `<option value="${escapeAttr(h)}">${escapeHtml(h)}</option>`).join('');
-  });
-
-  // Auto-guess columns
-  let guessedDebit = false, guessedCredit = false;
-  info.headers.forEach(h => {
-    const hl = h.toLowerCase();
-    if (hl.includes('date')) document.getElementById('wiz-date-col').value = h;
-    if (hl.includes('description') || hl.includes('payee') || hl.includes('name'))
-      document.getElementById('wiz-desc-col').value = h;
-    if (hl === 'amount' || hl.includes('amount'))
-      document.getElementById('wiz-amt-col').value = h;
-    if (hl.includes('debit') || hl.includes('withdrawal'))
-      { document.getElementById('wiz-debit-col').value = h; guessedDebit = true; }
-    if (hl.includes('credit') || hl.includes('deposit'))
-      { document.getElementById('wiz-credit-col').value = h; guessedCredit = true; }
-  });
-
-  // Auto-switch to split mode if both debit and credit columns were detected
-  if (guessedDebit && guessedCredit) {
-    document.getElementById('wiz-amt-mode').value = 'split';
-    toggleAmountMode();
-  }
-
-  wizardStep(1);
-  document.getElementById('csv-wizard-modal').classList.add('open');
-}
-
-function wizardStep(n) {
-  [1,2,3].forEach(i => document.getElementById(`wizard-step-${i}`).style.display = i===n ? '' : 'none');
-}
-
-function toggleAmountMode() {
-  const mode = document.getElementById('wiz-amt-mode').value;
-  document.getElementById('wiz-single-amt').style.display = mode==='single' ? '' : 'none';
-  document.getElementById('wiz-split-amt').style.display = mode==='split' ? '' : 'none';
-}
-
-async function wizardPreview() {
-  const mapping = getWizardMapping();
-  if (!mapping) return;
-  const res = await apiFetch('/api/preview-parse', {method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({raw_text: wizardState.raw_text, mapping})
-  });
-  if (!res) return;
-  const el = document.getElementById('wizard-preview-parsed');
-  if (res.transactions && res.transactions.length) {
-    el.innerHTML = `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">
-      ${res.total} transaction${res.total!==1?'s':''} found (showing first ${res.transactions.length})</div>` +
-      res.transactions.map(t => `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px">
-        <span style="color:var(--muted);font-family:var(--mono);width:80px">${escapeHtml(t.date)}</span>
-        <span style="flex:1">${escapeHtml(t.name)}</span>
-        <span class="badge ${escapeAttr(t.type.toLowerCase())}">${escapeHtml(t.type)}</span>
-        <span class="${t.type==='Income'?'amt-income':'amt-expense'}" style="font-family:var(--mono)">${fmt(t.amount)}</span>
-      </div>`).join('');
-  } else {
-    el.innerHTML = '<div style="color:var(--red);font-size:12px">No transactions parsed — check column mapping</div>';
-  }
-}
-
-function getWizardMapping() {
-  const dateCol = document.getElementById('wiz-date-col').value;
-  const descCol = document.getElementById('wiz-desc-col').value;
-  const bankName = document.getElementById('wiz-bank-name').value.trim() || 'Unknown Bank';
-  const dateFmt = document.getElementById('wiz-date-fmt').value;
-  const amtMode = document.getElementById('wiz-amt-mode').value;
-  if (!dateCol || !descCol) { toast('Select date and description columns','error'); return null; }
-  const mapping = {date_column: dateCol, description_column: descCol,
-    bank_name: bankName, date_format: dateFmt, amount_mode: amtMode};
-  if (amtMode === 'single') {
-    mapping.amount_column = document.getElementById('wiz-amt-col').value;
-    mapping.amount_sign = 'standard';
-    if (!mapping.amount_column) { toast('Select amount column','error'); return null; }
-  } else {
-    mapping.debit_column = document.getElementById('wiz-debit-col').value;
-    mapping.credit_column = document.getElementById('wiz-credit-col').value;
-    if (!mapping.debit_column || !mapping.credit_column) { toast('Select debit and credit columns','error'); return null; }
-  }
-  return mapping;
-}
-
-async function wizardSaveAndImport() {
-  const mapping = getWizardMapping();
-  if (!mapping) return;
-  // Pick unique headers from the CSV for detection
-  mapping.detection_headers = wizardState.headers.slice(0, 3);
-  // Save config
-  const saveRes = await apiFetch('/api/save-bank-config', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body:JSON.stringify(mapping)});
-  if (!saveRes || !saveRes.ok) { toast(saveRes?.error||'Error saving config','error'); return; }
-  // Re-import the file using the new config
-  const fd = new FormData();
-  fd.append('files', wizardState.file);
-  const data = await apiFetch('/api/import', {method:'POST', body:fd});
-  if (!data) return;
-  const prev = document.getElementById('import-results').innerHTML;
-  document.getElementById('import-results').innerHTML = prev + data.map(r=>`
-    <div class="result-row">
-      <div style="flex:1"><div>${escapeHtml(r.file)}</div><div class="result-bank">${escapeHtml(r.bank)} <span style="color:var(--accent);font-size:10px">(new config)</span></div></div>
-      <div style="color:var(--accent);font-family:var(--mono)">+${r.added}</div>
-      <div style="color:var(--muted);font-size:11px">${r.dupes} dupes skipped</div>
-    </div>`).join('');
-  closeModal('csv-wizard-modal');
-  months = await apiFetch('/api/months') || [];
-  if (months.length) {
-    currentMonthIdx=0; renderMonth();
-    document.getElementById('empty-state').style.display = 'none';
-    document.getElementById('dashboard-content').style.display = '';
-  }
-  toast(`Config saved! Imported ${data.reduce((s,r)=>s+r.added,0)} transactions`,'success');
-  // Process next unknown file in queue
-  if (wizardState.queue && wizardState.queue.length) {
-    setTimeout(() => openCsvWizard(wizardState.queue.shift()), 300);
-  }
-}
-
-// ── IMPORT RULES UI ──────────────────────────────────────────────────────────
-let showingHidden = false;
-
-async function loadRules() {
-  const rules = await apiFetch('/api/rules') || [];
-  const el = document.getElementById('rules-list');
-  if (!rules.length) {
-    el.innerHTML = '<div style="color:var(--muted);font-size:12px;font-family:var(--mono)">No rules — add one or load a template</div>';
-    return;
-  }
-  el.innerHTML = rules.map((r, idx) => {
-    const opLabels = {contains:'contains', not_contains:'NOT contains', contains_any:'contains any of',
-      equals:'equals', not_equals:'NOT equals', starts_with:'starts with', ends_with:'ends with',
-      greater_than:'>', less_than:'<'};
-    const condText = r.conditions.map(c =>
-      `${escapeHtml(c.field)} ${opLabels[c.operator]||escapeHtml(c.operator)} "${escapeHtml(c.value)}"`
-    ).join(' AND ');
-    const enabledCheck = r.enabled ? 'checked' : '';
-    let actionInfo = '';
-    if (r.action === 'label' && r.action_value) {
-      try { const v = JSON.parse(r.action_value); actionInfo = ` → ${escapeHtml(v.type||'')} / ${escapeHtml(v.category||'')}`; } catch(e) {}
-    }
-    return `<div class="rule-row" data-rule-id="${r.id}">
-      <div class="rule-priority" style="display:flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;min-width:28px">
-        <button class="btn-icon btn-reorder" onclick="moveRule(${r.id},-1)" title="Move up" ${idx===0?'disabled':''}
-          style="font-size:10px;padding:0;line-height:1;opacity:${idx===0?'.3':'1'}">▲</button>
-        <span style="font-size:11px;font-family:var(--mono);color:var(--muted)">${idx+1}</span>
-        <button class="btn-icon btn-reorder" onclick="moveRule(${r.id},1)" title="Move down" ${idx===rules.length-1?'disabled':''}
-          style="font-size:10px;padding:0;line-height:1;opacity:${idx===rules.length-1?'.3':'1'}">▼</button>
+  c.innerHTML = `<div class="page">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Year in review · ${year}</div>
+        <div class="page-sub">${months.length} months with data · Net savings ${fmtCurrency(totalNet, true)}</div>
       </div>
-      <label class="toggle" style="flex-shrink:0">
-        <input type="checkbox" ${enabledCheck} onchange="toggleRule(${r.id}, this.checked)">
-        <span class="toggle-slider"></span>
-      </label>
-      <div class="rule-info">
-        <div class="rule-name">${escapeHtml(r.name)}
-          <span class="rule-action-badge ${escapeAttr(r.action)}">${escapeHtml(r.action)}</span>${actionInfo}
-        </div>
-        <div class="rule-conditions-summary">${condText}</div>
+    </div>
+
+    <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
+      <div class="kpi">
+        <div class="kpi-label">Total income</div>
+        <div class="kpi-value" style="color:var(--pos)">${fmtCurrencyHTML(totalInc)}</div>
+        <div class="kpi-delta"><span>across ${months.length} months</span></div>
       </div>
-      <button class="btn-icon" onclick='editRule(${escapeAttr(JSON.stringify(r))})'>✏️</button>
-      <button class="btn-icon" onclick="deleteRule(${r.id})">🗑️</button>
-    </div>`;
-  }).join('');
+      <div class="kpi">
+        <div class="kpi-label">Total expenses</div>
+        <div class="kpi-value">${fmtCurrencyHTML(totalExp)}</div>
+        <div class="kpi-delta"><span>${fmtCurrency(avgExp,true)}/mo avg</span></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Net saved</div>
+        <div class="kpi-value" style="color:${totalNet>=0?'var(--pos)':'var(--danger)'}">${fmtCurrencyHTML(totalNet)}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Savings rate</div>
+        <div class="kpi-value">${savingsRate}<span class="cents">%</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-h">
+        <h3>Income vs expenses, every month</h3>
+        <div style="display:flex;gap:12px;font-size:12px;color:var(--ink-3)">
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:var(--pos)"></span>Income</span>
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:var(--ink-2)"></span>Expenses</span>
+        </div>
+      </div>
+      <div class="year-strip">
+        ${allMonths.map((m,i) => {
+          const incH = max ? ((m.income||0)/max*100) : 0;
+          const expH = max ? ((m.expenses||0)/max*100) : 0;
+          const isCurrent = m.month === currentMonth();
+          return `<div class="year-bar${isCurrent?' current':''}" title="${monthLabel(m.month)}: ${fmtCurrency(m.income||0)} in / ${fmtCurrency(m.expenses||0)} out">
+            <div style="display:flex;align-items:flex-end;gap:3px;height:calc(100% - 18px);justify-content:center">
+              <div class="ypos" style="width:11px;height:${incH}%;min-height:${m.income?2:0}px"></div>
+              <div class="yneg" style="width:11px;height:${expH}%;min-height:${m.expenses?2:0}px"></div>
+            </div>
+            <div class="ymo">${monthShort(m.month)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="grid-2">
+      ${data?.top_categories?.length ? `<div class="card">
+        <div class="card-h"><h3>Top categories this year</h3></div>
+        ${(data.top_categories).map(x => {
+          const pct = totalExp ? (x.total/totalExp*100) : 0;
+          return `<div style="margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">
+              <span style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:2px;background:${catColor(x.category)}"></span><span style="font-weight:500">${esc(x.category)}</span></span>
+              <span style="font-variant-numeric:tabular-nums">${fmtCurrency(x.total,true)} <span style="color:var(--ink-3);margin-left:6px">${pct.toFixed(0)}%</span></span>
+            </div>
+            <div class="progress"><div class="fill" style="width:${pct}%;background:${catColor(x.category)}"></div></div>
+          </div>`;
+        }).join('')}
+      </div>` : '<div></div>'}
+
+      <div class="card">
+        <div class="card-h"><h3>Year at a glance</h3></div>
+        ${[
+          ['Best saving month', bestMonth ? monthLabel(bestMonth.month) : '—', bestMonth ? `+${fmtCurrency((bestMonth.income||0)-(bestMonth.expenses||0))} saved` : ''],
+          ['Biggest spending', worstMonth ? monthLabel(worstMonth.month) : '—', worstMonth ? `${fmtCurrency(worstMonth.expenses)} spent` : ''],
+          ['Average income', fmtCurrency(avgInc, true)+'/mo', `across ${months.length} months`],
+          ['Average expenses', fmtCurrency(avgExp, true)+'/mo', `${savingsRate}% savings rate`],
+        ].map(row => `<div class="list-row">
+          <div>
+            <div style="font-size:11.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;font-weight:500">${esc(row[0])}</div>
+            <div style="font-size:13.5px;font-weight:500;margin-top:2px">${row[1]}</div>
+          </div>
+          <div style="font-size:12px;color:var(--ink-3)">${row[2]}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>`;
 }
 
-async function toggleRule(id, enabled) {
-  await apiFetch(`/api/rules/${id}`, {method:'PATCH',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({enabled: enabled ? 1 : 0})});
-  toast(enabled ? 'Rule enabled' : 'Rule disabled', 'success');
-}
+// ══════════════════════════════════════════════════════════════
+// SCHEDULES VIEW
+// ══════════════════════════════════════════════════════════════
+async function _renderSchedules(c) {
+  const [schedules, recurring] = await Promise.all([
+    api('/api/schedules'),
+    api('/api/recurring'),
+  ]);
+  const sList_ = schedules || [];
+  // Map enabled→paused for UI convenience
+  const sList = sList_.map(s => ({...s, paused: !s.enabled}));
+  const rItems = recurring?.recurring || (Array.isArray(recurring) ? recurring : []);
+  const totalMonthly = sList.filter(s => !s.paused && (s.frequency||'').toLowerCase()==='monthly').reduce((s,x) => s + Math.abs(x.amount||0), 0)
+    + rItems.reduce((s,r) => s + (r.total_monthly||r.avg_amount||0), 0);
+  const now = new Date();
+  const in7 = new Date(now); in7.setDate(in7.getDate() + 7);
+  const due = sList.filter(s => !s.paused && s.next_due && new Date(s.next_due+'T00:00:00') <= in7);
+  const active = sList.filter(s => !s.paused).length;
+  const paused = sList.length - active;
 
-async function deleteRule(id) {
-  if (!confirm('Delete this rule?')) return;
-  await apiFetch(`/api/rules/${id}`, {method:'DELETE'});
-  loadRules();
-  toast('Rule deleted', 'success');
-}
+  c.innerHTML = `<div class="page">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Scheduled transactions</div>
+        <div class="page-sub">Pre-define recurring expenses & income — Boreal auto-posts them on the due date</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        ${due.length ? `<button class="btn" id="post-all-due-btn">${icon('clock',14)} Post all due (${due.length})</button>` : ''}
+        <button class="btn btn-primary" id="add-sched-btn">${icon('plus',14)} New schedule</button>
+      </div>
+    </div>
 
-async function moveRule(id, direction) {
-  // Get current rule order from DOM
-  const rows = [...document.querySelectorAll('#rules-list .rule-row')];
-  const ids = rows.map(r => parseInt(r.dataset.ruleId));
-  const idx = ids.indexOf(id);
-  if (idx < 0) return;
-  const newIdx = idx + direction;
-  if (newIdx < 0 || newIdx >= ids.length) return;
-  // Swap
-  [ids[idx], ids[newIdx]] = [ids[newIdx], ids[idx]];
-  await apiFetch('/api/rules/reorder', {method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({order: ids})});
-  loadRules();
-}
+    <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="kpi">
+        <div class="kpi-label">Monthly committed</div>
+        <div class="kpi-value">${fmtCurrencyHTML(totalMonthly)}</div>
+        <div class="kpi-delta"><span>recurring expenses</span></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Due in next 7 days</div>
+        <div class="kpi-value">${due.length}</div>
+        <div class="kpi-delta"><span>${fmtCurrency(due.reduce((s,d) => s + Math.abs(d.amount||0), 0), true)} pending</span></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Active schedules</div>
+        <div class="kpi-value">${active}<span class="cents">/${sList.length}</span></div>
+        <div class="kpi-delta"><span>${paused} paused</span></div>
+      </div>
+    </div>
 
-function openRuleModal(editData) {
-  document.getElementById('rule-edit-id').value = editData ? editData.id : '';
-  document.getElementById('rule-modal-title').textContent = editData ? 'Edit Import Rule' : 'Add Import Rule';
-  document.getElementById('rule-name').value = editData ? editData.name : '';
-  document.getElementById('rule-test-results').style.display = 'none';
+    <div class="section-h"><h2>Coming up</h2><p>Your scheduled payments</p></div>
 
-  // Action
-  const action = editData ? editData.action : 'hide';
-  document.querySelectorAll('input[name="rule-action"]').forEach(r => r.checked = r.value === action);
+    ${sList.length ? `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px">
+      ${sList.map(s => {
+        const isDue = !s.paused && s.next_due && new Date(s.next_due+'T00:00:00') <= in7;
+        const catC = catColor(s.category || 'Uncategorized');
+        const isIncome = (s.type||'').toLowerCase() === 'income';
+        return `<div class="schedule-card${isDue?' due':''}" style="${s.paused?'opacity:0.55':''}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div style="display:flex;gap:12px;align-items:center">
+              <div style="width:40px;height:40px;border-radius:10px;background:${catC}18;color:${catC};display:grid;place-items:center;font-size:16px;font-weight:600">${(s.name||'?')[0].toUpperCase()}</div>
+              <div>
+                <div style="font-size:14px;font-weight:500">${esc(s.name)}${s.paused ? '<span style="margin-left:6px;font-size:11px;color:var(--ink-3);font-weight:400">· paused</span>' : ''}</div>
+                <div style="font-size:11.5px;color:var(--ink-3);margin-top:2px">${esc(s.frequency||'Monthly')} · ${esc(s.category||'Uncategorized')}</div>
+              </div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:15px;font-weight:500;font-variant-numeric:tabular-nums;color:${isIncome?'var(--pos)':'var(--ink-1)'}">${isIncome?'+':'−'}${fmtCurrency(Math.abs(s.amount||0),true)}</div>
+              <div style="font-size:11.5px;color:var(--ink-3);margin-top:2px">Next: ${fmtDateLong(s.next_due||s.due_date)}</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:12px;justify-content:flex-end">
+            <button class="btn btn-sm btn-ghost" onclick="togglePauseSchedule(${s.id},${!s.paused})">${icon(s.paused?'play':'pause',12)}</button>
+            <button class="btn btn-sm btn-ghost" onclick="editSchedule(${s.id})">${icon('edit',12)}</button>
+            <button class="btn btn-sm btn-ghost" onclick="deleteSchedule(${s.id})">${icon('trash',12)}</button>
+            ${isDue && !s.paused ? `<button class="btn btn-sm btn-primary" onclick="postDueSchedule(${s.id})">Post now</button>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>` : ''}
 
-  // Label fields
-  if (editData && editData.action === 'label' && editData.action_value) {
-    try {
-      const v = JSON.parse(editData.action_value);
-      document.getElementById('rule-label-type').value = v.type || 'Expense';
-      updateRuleCatOptions();
-      setTimeout(() => { document.getElementById('rule-label-category').value = v.category || ''; }, 50);
-    } catch(e) {}
-  } else {
-    document.getElementById('rule-label-type').value = 'Expense';
-    updateRuleCatOptions();
-  }
-  toggleLabelFields();
+    ${rItems.length ? `<div class="section-h"><h2>Detected recurring</h2><p>Auto-detected from your transactions</p></div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+      ${rItems.map(r => `<div class="schedule-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div style="display:flex;gap:12px;align-items:center">
+            ${merchantGlyph(r.name)}
+            <div>
+              <div style="font-size:14px;font-weight:500">${esc(r.name)}</div>
+              <div style="font-size:11.5px;color:var(--ink-3);margin-top:2px">${esc(r.frequency||'Monthly')} · seen ${r.months_seen||0} months</div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:15px;font-weight:500;font-variant-numeric:tabular-nums">${fmtCurrency(r.avg_amount||0)}</div>
+            <div style="font-size:11.5px;color:var(--ink-3);margin-top:2px">/mo avg</div>
+          </div>
+        </div>
+      </div>`).join('')}
+    </div>` : ''}
 
-  // Conditions
-  const condList = document.getElementById('rule-conditions-list');
-  condList.innerHTML = '';
-  if (editData && editData.conditions.length) {
-    editData.conditions.forEach(c => addConditionRow(c.field, c.operator, c.value));
-  } else {
-    addConditionRow();
-  }
+    ${!sList.length && !rItems.length ? '<div style="color:var(--ink-3);font-size:13px;padding:20px 0">No scheduled or recurring transactions yet. Add one to get started!</div>' : ''}
+  </div>`;
 
-  document.getElementById('rule-modal').classList.add('open');
-}
-
-function editRule(ruleData) {
-  openRuleModal(ruleData);
-}
-
-function addConditionRow(field, operator, value) {
-  const row = document.createElement('div');
-  row.className = 'condition-row';
-  row.innerHTML = `
-    <select class="cond-field" onchange="updateOperatorOptions(this)" style="width:120px">
-      <option value="description" ${field==='description'?'selected':''}>Description</option>
-      <option value="amount" ${field==='amount'?'selected':''}>Amount</option>
-      <option value="account" ${field==='account'?'selected':''}>Account</option>
-      <option value="type" ${field==='type'?'selected':''}>Type</option>
-    </select>
-    <select class="cond-op" style="width:130px">
-      <option value="contains" ${operator==='contains'?'selected':''}>contains</option>
-      <option value="not_contains" ${operator==='not_contains'?'selected':''}>not contains</option>
-      <option value="contains_any" ${operator==='contains_any'?'selected':''}>contains any</option>
-      <option value="equals" ${operator==='equals'?'selected':''}>equals</option>
-      <option value="not_equals" ${operator==='not_equals'?'selected':''}>not equals</option>
-      <option value="starts_with" ${operator==='starts_with'?'selected':''}>starts with</option>
-      <option value="ends_with" ${operator==='ends_with'?'selected':''}>ends with</option>
-      <option value="greater_than" ${operator==='greater_than'?'selected':''}>greater than</option>
-      <option value="less_than" ${operator==='less_than'?'selected':''}>less than</option>
-    </select>
-    <input type="text" class="cond-value" value="${(value||'').replace(/"/g,'&quot;')}" placeholder="value (case-insensitive)" style="flex:1;min-width:100px">
-    <button class="btn-icon" onclick="this.parentElement.remove()" style="color:var(--red)">×</button>`;
-  document.getElementById('rule-conditions-list').appendChild(row);
-  if (field) updateOperatorOptions(row.querySelector('.cond-field'));
-  // Update placeholder based on operator
-  const opSelect = row.querySelector('.cond-op');
-  opSelect.addEventListener('change', () => updateCondPlaceholder(row));
-  updateCondPlaceholder(row);
-}
-
-function updateCondPlaceholder(row) {
-  const op = row.querySelector('.cond-op').value;
-  const input = row.querySelector('.cond-value');
-  if (op === 'contains_any') input.placeholder = 'comma-separated, e.g. vaibhav, jonas';
-  else input.placeholder = 'value (case-insensitive)';
-}
-
-function updateOperatorOptions(fieldSelect) {
-  const opSelect = fieldSelect.parentElement.querySelector('.cond-op');
-  const val = fieldSelect.value;
-  const current = opSelect.value;
-  if (val === 'amount') {
-    opSelect.innerHTML = `
-      <option value="equals">equals</option>
-      <option value="greater_than">greater than</option>
-      <option value="less_than">less than</option>`;
-  } else {
-    opSelect.innerHTML = `
-      <option value="contains">contains</option>
-      <option value="not_contains">not contains</option>
-      <option value="contains_any">contains any</option>
-      <option value="equals">equals</option>
-      <option value="not_equals">not equals</option>
-      <option value="starts_with">starts with</option>
-      <option value="ends_with">ends with</option>`;
-  }
-  if ([...opSelect.options].some(o => o.value === current)) opSelect.value = current;
-  updateCondPlaceholder(fieldSelect.closest('.condition-row'));
-}
-
-function toggleLabelFields() {
-  const action = document.querySelector('input[name="rule-action"]:checked')?.value;
-  const fields = document.getElementById('rule-label-fields');
-  fields.style.display = action === 'label' ? 'flex' : 'none';
-}
-
-function updateRuleCatOptions() {
-  const type = document.getElementById('rule-label-type').value;
-  const sel = document.getElementById('rule-label-category');
-  const cats = type === 'Income' ? INCOME_CATS : EXPENSE_CATS;
-  sel.innerHTML = cats.filter(c => c !== 'UNCATEGORIZED').map(c => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('');
-}
-
-function getRuleFormData() {
-  const name = document.getElementById('rule-name').value.trim();
-  if (!name) { toast('Enter a rule name', 'error'); return null; }
-  const conditions = [];
-  document.querySelectorAll('#rule-conditions-list .condition-row').forEach(row => {
-    const field = row.querySelector('.cond-field').value;
-    const operator = row.querySelector('.cond-op').value;
-    const value = row.querySelector('.cond-value').value.trim();
-    if (value) conditions.push({field, operator, value});
+  document.getElementById('add-sched-btn')?.addEventListener('click', () => openScheduleModal());
+  document.getElementById('post-all-due-btn')?.addEventListener('click', async () => {
+    for (const s of due) {
+      await api(`/api/schedules/post-due`, 'POST', { id: s.id });
+    }
+    showToast(`Posted ${due.length} due schedules`);
+    refreshCurrentView();
   });
-  if (!conditions.length) { toast('Add at least one condition', 'error'); return null; }
-  const action = document.querySelector('input[name="rule-action"]:checked')?.value || 'hide';
-  let action_value = '';
-  if (action === 'label') {
-    action_value = JSON.stringify({
-      type: document.getElementById('rule-label-type').value,
-      category: document.getElementById('rule-label-category').value,
+}
+
+function openScheduleModal(existing) {
+  const isEdit = !!existing;
+  // Fetch accounts for dropdown
+  api('/api/accounts-list').then(accts => {
+    const el = document.getElementById('sched-account');
+    if (el) el.innerHTML = (accts||[]).map(a => `<option value="${esc(a.name)}" ${a.name===(existing?.account||'')? 'selected':''}>${esc(a.name)}</option>`).join('');
+  });
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="sched-modal-back">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-h"><h3>${isEdit ? 'Edit' : 'New'} schedule</h3><button class="icon-btn" onclick="closeScheduleModal()">${icon('x',14)}</button></div>
+      <div class="modal-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>Name</label><input id="sched-name" value="${esc(existing?.name||'')}" placeholder="e.g. Netflix"></div>
+          <div class="field"><label>Amount</label><input id="sched-amount" value="${existing?.amount||''}" placeholder="17.99" inputmode="decimal"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+          <div class="field"><label>Type</label><select id="sched-type">
+            <option value="Expense" ${(existing?.type||'Expense')==='Expense'?'selected':''}>Expense</option>
+            <option value="Income" ${existing?.type==='Income'?'selected':''}>Income</option>
+          </select></div>
+          <div class="field"><label>Frequency</label><select id="sched-freq">
+            <option value="monthly" ${(existing?.frequency||'monthly')==='monthly'?'selected':''}>Monthly</option>
+            <option value="biweekly" ${existing?.frequency==='biweekly'?'selected':''}>Biweekly</option>
+            <option value="weekly" ${existing?.frequency==='weekly'?'selected':''}>Weekly</option>
+            <option value="yearly" ${existing?.frequency==='yearly'?'selected':''}>Yearly</option>
+          </select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+          <div class="field"><label>Category</label><input id="sched-cat" value="${esc(existing?.category||'')}" placeholder="e.g. Subscriptions"></div>
+          <div class="field"><label>Next due date</label><input type="date" id="sched-due" value="${existing?.next_due||''}"></div>
+        </div>
+        <div class="field" style="margin-top:12px"><label>Account</label><select id="sched-account"><option>Loading…</option></select></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeScheduleModal()">Cancel</button>
+        <button class="btn btn-primary" id="sched-save-btn">${isEdit ? 'Save changes' : 'Create schedule'}</button>
+      </div>
+    </div>
+  </div>`);
+  document.getElementById('sched-modal-back').addEventListener('click', closeScheduleModal);
+  document.getElementById('sched-save-btn').addEventListener('click', async () => {
+    const data = {
+      name: document.getElementById('sched-name').value,
+      amount: parseFloat(document.getElementById('sched-amount').value),
+      type: document.getElementById('sched-type').value,
+      frequency: document.getElementById('sched-freq').value,
+      next_due: document.getElementById('sched-due').value,
+      category: document.getElementById('sched-cat').value,
+      account: document.getElementById('sched-account').value,
+    };
+    if (!data.name || !data.amount || !data.category || !data.account || !data.next_due) {
+      showToast('Please fill in all required fields'); return;
+    }
+    if (isEdit) await api(`/api/schedules/${existing.id}`, 'PATCH', data);
+    else await api('/api/schedules', 'POST', data);
+    closeScheduleModal();
+    refreshCurrentView();
+  });
+}
+
+window.closeScheduleModal = function() {
+  document.getElementById('sched-modal-back')?.remove();
+};
+
+window.togglePauseSchedule = async function(id, pause) {
+  await api(`/api/schedules/${id}`, 'PATCH', { enabled: !pause });
+  refreshCurrentView();
+};
+
+window.editSchedule = async function(id) {
+  const schedules = await api('/api/schedules');
+  const s = (schedules||[]).find(x => x.id === id);
+  if (s) openScheduleModal(s);
+};
+
+window.postDueSchedule = async function(id) {
+  const r = await api(`/api/schedules/${id}/post`, 'POST');
+  if (r?.posted) showToast('Transaction posted');
+  else showToast('Scheduled — advanced to next date');
+  await refreshMonths();
+  refreshCurrentView();
+};
+
+window.deleteSchedule = async function(id) {
+  if (!await appConfirm('Delete this schedule?', { title: 'Delete schedule', danger: true })) return;
+  await api(`/api/schedules/${id}`, 'DELETE');
+  refreshCurrentView();
+};
+
+// ══════════════════════════════════════════════════════════════
+// IMPORT VIEW (CSV wizard + drag-drop + OFX)
+// ══════════════════════════════════════════════════════════════
+async function _renderImport(c) {
+  const banks = [
+    { n: "TD",           ch: "#0d8a2e" },
+    { n: "Tangerine",    ch: "#ff6e1f" },
+    { n: "RBC",          ch: "#0046ad" },
+    { n: "CIBC",         ch: "#c8102e" },
+    { n: "Scotia",       ch: "#ec111a" },
+    { n: "BMO",          ch: "#0079c1" },
+    { n: "National",     ch: "#e3001b" },
+    { n: "Wealthsimple", ch: "#000000" },
+    { n: "Amex",         ch: "#006fcf" },
+    { n: "Any (CSV)",    ch: "#9b6fb7" },
+  ];
+
+  c.innerHTML = `<div class="page">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Import</div>
+        <div class="page-sub">Drop bank CSVs or OFX/QFX downloads — duplicates are detected by SHA-256 hash, never double-counted</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="window.location.href='/api/backup'">${icon('upload',14)} Backup</button>
+        <button class="btn" id="import-restore-btn">${icon('download',14)} Restore</button>
+      </div>
+    </div>
+
+    <div class="dropzone" id="csv-drop">
+      <div style="width:56px;height:56px;border-radius:16px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;margin:0 auto">
+        ${icon('upload',24)}
+      </div>
+      <h3>Drop your bank exports here</h3>
+      <p>CSV · OFX · QFX — multiple files at once · auto-detects format</p>
+      <div class="browse" style="display:flex;gap:8px;justify-content:center;margin-top:16px">
+        <button class="btn btn-primary" id="import-choose-btn">${icon('plus',14)} Choose files</button>
+      </div>
+      <input type="file" id="csv-file" accept=".csv,.ofx,.qfx" multiple style="display:none">
+    </div>
+
+    <div id="csv-wizard" style="display:none"></div>
+
+    <div class="section-h">
+      <h2>Supported banks</h2>
+      <p>If yours isn't here, the CSV wizard will map columns for you</p>
+    </div>
+
+    <div class="bank-grid">
+      ${banks.map(b => `<div class="bank-chip">
+        <div class="bank-glyph" style="background:${b.ch}">${b.n[0]}</div>
+        <span>${esc(b.n)}</span>
+      </div>`).join('')}
+    </div>
+
+    <div class="section-h" style="margin-top:24px">
+      <h2>Data management</h2>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+      <div class="card" style="padding:16px">
+        <div style="font-size:14px;font-weight:500;margin-bottom:4px">Export all transactions</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">CSV format — re-importable into Boreal</div>
+        <button class="btn btn-sm" onclick="window.location.href='/api/export'">${icon('download',14)} Export CSV</button>
+      </div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:14px;font-weight:500;margin-bottom:4px">Restore from backup</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">Replace your current database</div>
+        <input type="file" id="restore-file" accept=".db,.sqlite,.bak" style="display:none">
+        <button class="btn btn-sm" id="restore-btn">${icon('upload',14)} Upload</button>
+      </div>
+    </div>
+  </div>`;
+
+  const dropZone = document.getElementById('csv-drop');
+  const fileInput = document.getElementById('csv-file');
+
+  document.getElementById('import-choose-btn')?.addEventListener('click', (e) => { e.stopPropagation(); fileInput?.click(); });
+  dropZone?.addEventListener('click', (e) => { if (e.target === dropZone || dropZone.contains(e.target)) fileInput?.click(); });
+  dropZone?.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('hover'); });
+  dropZone?.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
+  dropZone?.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('hover'); handleFiles(e.dataTransfer.files); });
+  fileInput?.addEventListener('change', () => { if (fileInput.files.length) handleFiles(fileInput.files); });
+
+  document.getElementById('import-restore-btn')?.addEventListener('click', () => document.getElementById('restore-file')?.click());
+  document.getElementById('restore-btn')?.addEventListener('click', () => document.getElementById('restore-file')?.click());
+  document.getElementById('restore-file')?.addEventListener('change', async (e) => {
+    if (!e.target.files.length) return;
+    if (!await appConfirm('This will replace all current data with the backup. Continue?', { title: 'Restore backup', danger: true })) return;
+    const fd = new FormData();
+    fd.append('file', e.target.files[0]);
+    await _ensureCsrf();
+    const res = await fetch('/api/restore', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': _csrfToken } });
+    const data = await res.json();
+    showToast(data.message || 'Restored');
+    refreshCurrentView();
+  });
+
+  async function handleFiles(files) {
+    for (const file of files) {
+      if (file.name.endsWith('.ofx') || file.name.endsWith('.qfx')) {
+        await importOFX(file);
+      } else {
+        await startCSVWizard(file);
+      }
+    }
+  }
+
+  async function importOFX(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    await _ensureCsrf();
+    const res = await fetch('/api/import-ofx', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': _csrfToken } });
+    const data = await res.json();
+    showToast(data.message || `Imported ${data.imported||0} transactions`);
+    refreshCurrentView();
+  }
+
+  async function startCSVWizard(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    await _ensureCsrf();
+
+    const detectRes = await fetch('/api/detect-csv', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': _csrfToken } });
+    const detect = await detectRes.json();
+
+    const wizard = document.getElementById('csv-wizard');
+    wizard.style.display = 'block';
+
+    const bankName = detect.bank || detect.detected_bank || '';
+    const previewFd = new FormData();
+    previewFd.append('file', file);
+    if (bankName) previewFd.append('bank', bankName);
+    const prevRes = await fetch('/api/preview-parse', { method: 'POST', body: previewFd, headers: { 'X-CSRF-Token': _csrfToken } });
+    const preview = await prevRes.json();
+    const rows = preview.transactions || preview.rows || [];
+
+    wizard.innerHTML = `<div class="card" style="margin-top:20px">
+      <div class="card-h">
+        <h3>CSV import — ${esc(file.name)}</h3>
+        <span class="cat-pill">${bankName ? esc(bankName) : 'Unknown bank'}</span>
+      </div>
+      ${bankName ? '' : `<div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:4px">Select bank format</label>
+        <select id="wiz-bank" style="padding:6px 10px;border:1px solid var(--line-1);border-radius:8px;background:var(--bg-surface);font-size:13px">
+          <option value="">Auto-detect</option>
+          ${(detect.available_banks||[]).map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('')}
+        </select>
+      </div>`}
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:4px">Account</label>
+        <input type="text" id="wiz-account" placeholder="e.g. TD Chequing" value="${esc(detect.suggested_account||'')}" style="padding:6px 10px;border:1px solid var(--line-1);border-radius:8px;background:var(--bg-surface);font-size:13px;width:100%;box-sizing:border-box">
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
+        <table class="tbl">
+          <thead><tr><th>Date</th><th>Description</th><th class="right">Amount</th><th>Category</th></tr></thead>
+          <tbody>${rows.slice(0,20).map(r => `<tr>
+            <td style="color:var(--ink-3)">${fmtDate(r.date)}</td>
+            <td>${esc(r.name||r.description||'')}</td>
+            <td class="right mono" style="color:${(r.amount||0)>0?'var(--pos)':'var(--ink-1)'}">${fmtCurrency(r.amount||0)}</td>
+            <td>${catPill(r.category||'Uncategorized')}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+      <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">${rows.length} transactions found${rows.length>20?' (showing first 20)':''}</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" id="wiz-import">${icon('check',14)} Import ${rows.length} transactions</button>
+        <button class="btn" id="wiz-cancel">Cancel</button>
+      </div>
+    </div>`;
+
+    document.getElementById('wiz-cancel')?.addEventListener('click', () => { wizard.style.display='none'; wizard.innerHTML=''; });
+
+    document.getElementById('wiz-import')?.addEventListener('click', async () => {
+      const importFd = new FormData();
+      importFd.append('file', file);
+      const bank = document.getElementById('wiz-bank')?.value || bankName;
+      if (bank) importFd.append('bank', bank);
+      const acct = document.getElementById('wiz-account')?.value;
+      if (acct) importFd.append('account', acct);
+
+      await _ensureCsrf();
+      const res = await fetch('/api/import', { method: 'POST', body: importFd, headers: { 'X-CSRF-Token': _csrfToken } });
+      const result = await res.json();
+      showToast(result.message || `Imported ${result.imported||0} transactions`);
+      wizard.style.display = 'none';
+      wizard.innerHTML = '';
+      navigateTo('transactions');
     });
   }
-  return {name, action, action_value, conditions};
 }
 
-async function saveRule() {
-  const data = getRuleFormData();
-  if (!data) return;
-  const editId = document.getElementById('rule-edit-id').value;
-  if (editId) {
-    const res = await apiFetch(`/api/rules/${editId}`, {method:'PATCH',
-      headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
-    if (!res) return;
-    if (res.ok) { toast('Rule updated ✓', 'success'); closeModal('rule-modal'); loadRules(); }
-    else toast(res.error||'Error', 'error');
-  } else {
-    const res = await apiFetch('/api/rules', {method:'POST',
-      headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
-    if (!res) return;
-    if (res.ok) { toast('Rule created ✓', 'success'); closeModal('rule-modal'); loadRules(); }
-    else toast(res.error||'Error', 'error');
+// ══════════════════════════════════════════════════════════════
+// RULES VIEW
+// ══════════════════════════════════════════════════════════════
+async function _renderRules(c) {
+  const [rules, templates] = await Promise.all([
+    api('/api/rules'),
+    api('/api/rule-templates'),
+  ]);
+  const rList = rules || [];
+  const tList = templates || [];
+
+  function ruleDesc(r) {
+    const conds = (r.conditions||[]).map(c => `<span class="mono" style="font-size:12.5px;color:var(--ink-2)">${esc(c.field)} ${esc(c.operator)} <strong style="color:var(--ink-1)">"${esc(c.value)}"</strong></span>`).join(' <span style="color:var(--ink-3);font-size:11px">AND</span> ');
+    let actionLabel = esc(r.action);
+    if (r.action === 'label') actionLabel = `Label as <span style="color:var(--accent)">${esc(r.action_value||'')}</span>`;
+    else if (r.action === 'hide') actionLabel = 'Hide transaction';
+    else if (r.action === 'pass') actionLabel = 'Skip (pass)';
+    return { conds, actionLabel };
   }
-}
 
-async function testRule() {
-  const data = getRuleFormData();
-  if (!data) return;
-  const res = await apiFetch('/api/rules/test', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
-  if (!res) return;
-  const el = document.getElementById('rule-test-results');
-  el.style.display = 'block';
-  if (res.count === 0) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:8px 0">No existing transactions match this rule.</div>';
-    return;
-  }
-  el.innerHTML = `<div style="font-size:12px;color:var(--accent);margin-bottom:8px;font-family:var(--mono)">
-    This rule would affect ${res.count} transaction${res.count!==1?'s':''}</div>` +
-    res.transactions.map(t => `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px">
-      <span style="color:var(--muted);font-family:var(--mono);width:75px;flex-shrink:0">${escapeHtml(t.date)}</span>
-      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(t.name)}</span>
-      <span class="badge ${escapeAttr(t.type.toLowerCase())}" style="font-size:10px">${escapeHtml(t.type)}</span>
-      <span style="font-family:var(--mono);width:70px;text-align:right">${fmt(t.amount)}</span>
-    </div>`).join('');
-}
-
-async function applyAllRules() {
-  if (!confirm('Apply all enabled rules to every existing transaction? This will hide/label matching transactions.')) return;
-  const res = await apiFetch('/api/rules/apply-all', {method:'POST'});
-  if (!res) return;
-  toast(`Rules applied — ${res.affected} transaction${res.affected!==1?'s':''} affected`, 'success');
-  if (res.affected > 0 && months.length) renderMonth();
-  updateHiddenCount();
-}
-
-async function openTemplateModal() {
-  document.getElementById('template-modal').classList.add('open');
-  const templates = await apiFetch('/api/rule-templates') || [];
-  const el = document.getElementById('template-list');
-  if (!templates.length) {
-    el.innerHTML = '<div class="empty">No templates found</div>';
-    return;
-  }
-  el.innerHTML = templates.map(t => `<div class="settings-row">
-    <div style="flex:1">
-      <div class="settings-label">${escapeHtml(t.name)}</div>
-      <div class="settings-sub">${escapeHtml(t.description)} · ${t.rule_count} rule${t.rule_count!==1?'s':''}</div>
+  c.innerHTML = `<div class="page">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Import rules</div>
+        <div class="page-sub">Rules run automatically on every CSV/OFX import — first match wins by priority</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="apply-all-btn">${icon('bars',14)} Apply all</button>
+        <button class="btn btn-primary" id="add-rule-btn">${icon('plus',14)} New rule</button>
+      </div>
     </div>
-    <button class="btn btn-sm" onclick="loadTemplate('${escapeAttr(t.file)}', '${escapeAttr(t.name)}', ${t.rule_count})">Load</button>
-  </div>`).join('');
-}
 
-async function loadTemplate(file, name, count) {
-  if (!confirm(`Load "${name}"? This will add ${count} rule${count!==1?'s':''} to your list. Existing rules are not affected.`)) return;
-  const res = await apiFetch('/api/rule-templates/load', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body:JSON.stringify({file})});
-  if (!res) return;
-  if (res.ok) {
-    toast(`Loaded ${res.loaded} rule${res.loaded!==1?'s':''} from ${name} ✓`, 'success');
-    closeModal('template-modal');
-    loadRules();
-  } else toast(res.error||'Error', 'error');
-}
+    <div class="tabs" id="rule-tabs">
+      <button class="tab active" data-tab="active-rules">Active rules (${rList.length})</button>
+      <button class="tab" data-tab="templates-tab">Templates (${tList.length})</button>
+      <button class="tab" data-tab="test-tab">Test rules</button>
+    </div>
 
-// ── HIDDEN TRANSACTIONS ──────────────────────────────────────────────────────
-
-async function updateHiddenCount() {
-  const res = await apiFetch('/api/transactions/hidden-count');
-  if (!res) return;
-  const badge = document.getElementById('hidden-count-badge');
-  const btn = document.getElementById('hidden-toggle');
-  badge.textContent = res.count;
-  btn.style.display = res.count > 0 ? '' : 'none';
-  if (res.count === 0 && showingHidden) toggleHiddenView();
-}
-
-function toggleHiddenView() {
-  showingHidden = !showingHidden;
-  clearSelection();
-  const btn = document.getElementById('hidden-toggle');
-  const title = document.querySelector('#sec-transactions .txn-title');
-  const hideBtn = document.getElementById('bulk-hide-btn');
-  const unhideBtn = document.getElementById('bulk-unhide-btn');
-  if (showingHidden) {
-    btn.classList.remove('btn-ghost');
-    btn.style.background = 'rgba(248,113,113,.15)';
-    btn.style.borderColor = 'rgba(248,113,113,.3)';
-    btn.style.color = 'var(--red)';
-    title.textContent = 'Hidden Transactions';
-    hideBtn.style.display = 'none';
-    unhideBtn.style.display = '';
-  } else {
-    btn.classList.add('btn-ghost');
-    btn.style.background = '';
-    btn.style.borderColor = '';
-    btn.style.color = '';
-    title.textContent = 'All Transactions';
-    hideBtn.style.display = '';
-    unhideBtn.style.display = 'none';
-  }
-  loadTransactions();
-}
-
-async function unhideTx(id) {
-  await apiFetch(`/api/transactions/${id}/unhide`, {method:'PATCH'});
-  toast('Transaction unhidden ✓', 'success');
-  loadTransactions();
-  updateHiddenCount();
-  if (months.length) renderMonth();
-}
-
-async function hideTx(id) {
-  await apiFetch(`/api/transactions/${id}/hide`, {method:'PATCH'});
-  toast('Transaction hidden ✓', 'success');
-  loadTransactions();
-  updateHiddenCount();
-  if (months.length) renderMonth();
-}
-
-// ── NAV ───────────────────────────────────────────────────────────────────────
-function nav(id) {
-  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById(`sec-${id}`).classList.add('active');
-  document.querySelectorAll('.nav-btn').forEach(b=>{
-    if (b.getAttribute('onclick')?.includes(`'${id}'`)) b.classList.add('active');
-  });
-  if (window.innerWidth <= 768) closeMobileMenu();
-  if (id==='dashboard' && document.getElementById('empty-state').style.display !== 'none') refreshDashboard();
-  if (id==='transactions') { loadTransactions(); setTimeout(applyDemoToTransactions, 100); }
-  if (id==='year') renderYear();
-  if (id==='settings') { loadSettings(); setTimeout(applyDemoToSettings, 200); }
-  if (id==='import') applyDemoToImport();
-}
-
-// ── SETTINGS TABS ─────────────────────────────────────────────────────────────
-function switchSettingsTab(tabName) {
-  document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
-  document.querySelectorAll('.settings-tab-pane').forEach(p => p.classList.toggle('active', p.dataset.tabPane === tabName));
-}
-
-async function refreshDashboard() {
-  months = await apiFetch('/api/months') || [];
-  if (months.length) {
-    document.getElementById('empty-state').style.display = 'none';
-    document.getElementById('dashboard-content').style.display = '';
-    applyDashboardLayout();
-    initCollapsiblePanels();
-    currentMonthIdx = 0;
-    renderMonth();
-  }
-}
-
-// ── EXPORT ────────────────────────────────────────────────────────────────────
-function exportCSV(allTime) {
-  const m = allTime ? '' : (months[currentMonthIdx]||'');
-  window.location.href = `/api/export?month=${m}`;
-  toast(`Downloading ${allTime?'all transactions':fmtMonth(m)} ✓`,'success');
-}
-
-// ── UNIFIED EXPORT MODAL ──────────────────────────────────────────────────────
-function openExportModal() {
-  document.getElementById('export-format').value = 'csv';
-  document.getElementById('export-scope').value = 'month';
-  document.getElementById('export-pdf-options').style.display = 'none';
-  document.getElementById('export-include-txns').checked = false;
-  document.getElementById('export-modal').classList.add('open');
-}
-
-function onExportFormatChange() {
-  const fmt = document.getElementById('export-format').value;
-  document.getElementById('export-pdf-options').style.display = fmt === 'pdf' ? '' : 'none';
-}
-
-function doExport() {
-  const fmt = document.getElementById('export-format').value;
-  const scope = document.getElementById('export-scope').value;
-  closeModal('export-modal');
-  if (fmt === 'csv') {
-    exportCSV(scope === 'all');
-  } else {
-    document.getElementById('pdf-include-txns').checked = document.getElementById('export-include-txns').checked;
-    exportPdf();
-  }
-}
-
-// ── QUICK ACTIONS POPOVER ─────────────────────────────────────────────────────
-function toggleQuickActions(e) {
-  if (e) e.stopPropagation();
-  const pop = document.getElementById('quick-actions-popover');
-  const isOpen = pop.classList.contains('open');
-  closeQuickActions();
-  closeMonthMenu();
-  if (!isOpen) {
-    const btn = document.getElementById('quick-actions-btn');
-    const rect = btn.getBoundingClientRect();
-    pop.style.left = (rect.right + 8) + 'px';
-    pop.style.top = rect.top + 'px';
-    pop.classList.add('open');
-  }
-}
-
-function closeQuickActions() {
-  const pop = document.getElementById('quick-actions-popover');
-  if (pop) pop.classList.remove('open');
-}
-
-// ── MONTH CONTEXT MENU ───────────────────────────────────────────────────────
-function toggleMonthMenu(e) {
-  if (e) e.stopPropagation();
-  const menu = document.getElementById('month-menu');
-  const isOpen = menu.classList.contains('open');
-  closeMonthMenu();
-  closeQuickActions();
-  if (!isOpen) menu.classList.add('open');
-}
-
-function closeMonthMenu() {
-  const menu = document.getElementById('month-menu');
-  if (menu) menu.classList.remove('open');
-}
-
-// Close popovers on outside click
-document.addEventListener('click', () => { closeQuickActions(); closeMonthMenu(); });
-
-// ── TOAST ─────────────────────────────────────────────────────────────────────
-function toast(msg, type='success') {
-  const el = document.getElementById('toast');
-  el.textContent=msg; el.className=`toast ${type} show`;
-  setTimeout(()=>el.classList.remove('show'), 2800);
-}
-
-// ── MOBILE MENU ───────────────────────────────────────────────────────────────
-function toggleMobileMenu() {
-  const sidebar = document.querySelector('.sidebar');
-  const overlay = document.getElementById('sidebar-overlay');
-  const isOpen = sidebar.classList.contains('open');
-  if (isOpen) {
-    closeMobileMenu();
-  } else {
-    sidebar.classList.add('open');
-    overlay.classList.add('open');
-    document.body.style.overflow = 'hidden';
-  }
-}
-
-function closeMobileMenu() {
-  const sidebar = document.querySelector('.sidebar');
-  const overlay = document.getElementById('sidebar-overlay');
-  sidebar.classList.remove('open');
-  overlay.classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-// Close mobile menu when a nav button is clicked
-document.querySelectorAll('.nav-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    if (window.innerWidth <= 768) closeMobileMenu();
-  });
-});
-
-// Close mobile menu on resize to desktop
-window.addEventListener('resize', () => {
-  if (window.innerWidth > 768) closeMobileMenu();
-});
-
-// ── BUDGET ALERTS ─────────────────────────────────────────────────────────────
-function renderBudgetAlerts(cats) {
-  const el = document.getElementById('budget-alerts');
-  const alerts = cats.filter(c => c.budget && c.total >= c.budget * 0.8);
-  if (!alerts.length) { el.style.display = 'none'; return; }
-  el.style.display = '';
-  el.innerHTML = alerts.map(c => {
-    const pct = Math.round(c.total / c.budget * 100);
-    const barPct = Math.min(pct, 100);
-    const cls = pct >= 100 ? 'danger' : 'warning';
-    return `<div class="budget-alert-item ${cls}">
-      <span class="budget-alert-dot"></span>
-      <span class="budget-alert-name">${escapeHtml(c.category)}</span>
-      <span style="color:var(--muted);font-size:11px">${fmt(c.total)} / ${fmt(c.budget)}</span>
-      <div class="budget-alert-bar"><div class="budget-alert-bar-fill" style="width:${barPct}%"></div></div>
-      <span class="budget-alert-pct">${pct}%</span>
-    </div>`;
-  }).join('');
-}
-
-// ── SPENDING TRENDS ───────────────────────────────────────────────────────────
-let trendsChart = null;
-async function renderTrends() {
-  const data = await apiFetch('/api/trends?months=6');
-  if (!data || !data.length) return;
-  const ctx = document.getElementById('trends-chart').getContext('2d');
-  if (trendsChart) trendsChart.destroy();
-  trendsChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: data.map(d => fmtMonth(d.month)),
-      datasets: [
-        { label: 'Income', data: data.map(d => d.income), backgroundColor: '#6ee7b7' },
-        { label: 'Expenses', data: data.map(d => d.expenses), backgroundColor: '#f87171' },
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v.toLocaleString() } } },
-      plugins: { legend: { position: 'bottom' } },
-    }
-  });
-}
-
-// ── SAVINGS GOALS (Dashboard) ─────────────────────────────────────────────────
-async function renderGoalsDashboard() {
-  const goals = await apiFetch('/api/goals');
-  const el = document.getElementById('goals-dashboard-list');
-  if (!goals || !goals.length) { el.innerHTML = '<div class="empty">No goals set</div>'; return; }
-  el.innerHTML = goals.map(g => {
-    const pct = Math.min(100, Math.round(g.current_amount / g.target_amount * 100));
-    const cls = pct >= 100 ? 'complete' : '';
-    return `<div class="goal-card">
-      <div class="goal-header">
-        <span class="goal-name">${escapeHtml(g.icon)} ${escapeHtml(g.name)}</span>
-        <span class="goal-amounts">${fmt(g.current_amount)} / ${fmt(g.target_amount)} (${pct}%)</span>
+    <div id="active-rules">
+      <div style="background:var(--accent-soft);color:var(--accent-ink);padding:10px 14px;border-radius:10px;font-size:13px;display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        ${icon('rules',16)}
+        Rules are evaluated top-to-bottom. Higher priority rules match first.
       </div>
-      <div class="goal-bar-bg"><div class="goal-bar-fill ${cls}" style="width:${pct}%"></div></div>
-      <div class="goal-actions">
-        <button class="btn btn-ghost btn-sm" onclick="openContributeModal(${g.id})">+ Add</button>
+
+      ${rList.length ? rList.map((r, i) => {
+        const { conds, actionLabel } = ruleDesc(r);
+        return `<div class="rule-card">
+        <div class="rule-num">${r.priority != null ? r.priority : (i+1)}</div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+            <span style="font-size:13px;font-weight:500;color:var(--ink-1)">${esc(r.name)}</span>
+            ${r.enabled === 0 ? '<span style="font-size:11px;color:var(--ink-3);font-weight:400">· disabled</span>' : ''}
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+            <span style="font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;font-weight:500">When</span>
+            ${conds || '<span style="color:var(--ink-3);font-size:12px">No conditions</span>'}
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;font-weight:500">Then</span>
+            <span style="display:flex;align-items:center;gap:6px;font-size:12.5px">${icon('funnel',13)} ${actionLabel}</span>
+          </div>
+        </div>
+        <label class="switch"><input type="checkbox" ${r.enabled !== 0 ? 'checked' : ''} onchange="toggleRule(${r.id},this.checked)"><span class="slider"></span></label>
+        <button class="icon-btn" onclick="editRuleModal(${r.id})">${icon('edit',13)}</button>
+        <button class="icon-btn" onclick="deleteRule(${r.id})">${icon('trash',13)}</button>
+      </div>`;}).join('') : '<div style="color:var(--ink-3);font-size:13px;padding:16px 0">No rules yet. Add one or load a template to get started.</div>'}
+    </div>
+
+    <div id="templates-tab" style="display:none">
+      <div class="section-h"><h2>Rule templates</h2><p>One-click presets for common setups</p></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        ${tList.map(t => `<div class="card" style="padding:14px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-size:14px;font-weight:500">${esc(t.name)}</div>
+              <div style="font-size:12px;color:var(--ink-3);margin-top:2px">${esc(t.description||'')}</div>
+            </div>
+            ${t.rule_count > 0 ? `<span class="cat-pill">${t.rule_count} rules</span>` : ''}
+          </div>
+          <button class="btn btn-sm" style="margin-top:10px" onclick="loadRuleTemplate('${esc(t.file)}')">Load template</button>
+        </div>`).join('') || '<div style="color:var(--ink-3);font-size:13px">No templates found in rules/templates/ folder.</div>'}
       </div>
-    </div>`;
-  }).join('');
-}
+    </div>
 
-function openContributeModal(gid) {
-  document.getElementById('contribute-goal-id').value = gid;
-  document.getElementById('contribute-amount').value = '';
-  document.getElementById('contribute-modal').classList.add('open');
-}
-
-async function submitContribute() {
-  const gid = document.getElementById('contribute-goal-id').value;
-  const amount = document.getElementById('contribute-amount').value;
-  if (!amount || parseFloat(amount) <= 0) return toast('Enter an amount','error');
-  const res = await apiFetch(`/api/goals/${gid}/contribute`, {method:'POST',
-    headers:{'Content-Type':'application/json'}, body: JSON.stringify({amount: parseFloat(amount)})});
-  if (res && res.ok) {
-    closeModal('contribute-modal');
-    renderGoalsDashboard();
-    loadGoalsSettings();
-    toast('Contribution added ✓','success');
-  }
-}
-
-// ── SAVINGS GOALS (Settings) ──────────────────────────────────────────────────
-async function loadGoalsSettings() {
-  const goals = await apiFetch('/api/goals');
-  const el = document.getElementById('goals-settings-list');
-  if (!goals || !goals.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">No goals yet</div>'; return; }
-  el.innerHTML = goals.map(g => {
-    const pct = Math.min(100, Math.round(g.current_amount / g.target_amount * 100));
-    return `<div class="settings-row" id="goal-row-${g.id}">
-      <div style="display:flex;align-items:center;gap:6px;flex:1">
-        <span>${escapeHtml(g.icon)}</span>
-        <span class="settings-label">${escapeHtml(g.name)}</span>
-        <span style="font-size:11px;color:var(--muted)">${fmt(g.current_amount)}/${fmt(g.target_amount)} (${pct}%)</span>
-      </div>
-      <div style="display:flex;gap:4px">
-        <button class="btn-icon" onclick="startEditGoal(${g.id},'${escapeAttr(g.name)}',${g.target_amount},${g.current_amount},'${escapeAttr(g.icon)}')">✏️</button>
-        <button class="btn-icon" onclick="deleteGoal(${g.id})">🗑️</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function startEditGoal(id, name, target, current, icon) {
-  const row = document.getElementById('goal-row-' + id);
-  if (!row) return;
-  row.innerHTML = `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex:1">
-      <input type="text" id="edit-goal-icon" value="${escapeAttr(icon)}" style="width:42px;text-align:center" maxlength="2">
-      <input type="text" id="edit-goal-name" value="${escapeAttr(name)}" style="flex:1;min-width:90px" placeholder="Name">
-      <input type="number" id="edit-goal-target" value="${target}" style="width:90px" min="1" step="0.01" placeholder="Target">
-      <input type="number" id="edit-goal-current" value="${current}" style="width:90px" min="0" step="0.01" placeholder="Saved">
-      <button class="btn btn-sm" onclick="saveEditGoal(${id})">Save</button>
-      <button class="btn-icon" onclick="loadGoalsSettings()">✕</button>
-    </div>`;
-  row.querySelector('#edit-goal-name').focus();
-}
-
-async function saveEditGoal(id) {
-  const name = document.getElementById('edit-goal-name').value.trim();
-  const target = document.getElementById('edit-goal-target').value;
-  const current = document.getElementById('edit-goal-current').value;
-  const icon = document.getElementById('edit-goal-icon').value.trim() || '🎯';
-  if (!name) return toast('Enter a goal name','error');
-  if (!target || parseFloat(target) <= 0) return toast('Enter a valid target','error');
-  const res = await apiFetch(`/api/goals/${id}`, {method:'PATCH',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name, target_amount: parseFloat(target), current_amount: parseFloat(current || 0), icon})});
-  if (res && res.ok) { loadGoalsSettings(); renderGoalsDashboard(); toast('Goal updated ✓','success'); }
-}
-
-async function addGoal() {
-  const name = document.getElementById('new-goal-name').value.trim();
-  const target = document.getElementById('new-goal-target').value;
-  const icon = document.getElementById('new-goal-icon').value.trim() || '🎯';
-  if (!name) return toast('Enter a goal name','error');
-  if (!target || parseFloat(target) <= 0) return toast('Enter a valid target','error');
-  const res = await apiFetch('/api/goals', {method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name, target_amount: parseFloat(target), icon})});
-  if (res && res.ok) {
-    document.getElementById('new-goal-name').value = '';
-    document.getElementById('new-goal-target').value = '';
-    document.getElementById('new-goal-icon').value = '';
-    loadGoalsSettings();
-    renderGoalsDashboard();
-    toast('Goal added ✓','success');
-  }
-}
-
-async function deleteGoal(id) {
-  if (!confirm('Delete this goal?')) return;
-  const res = await apiFetch(`/api/goals/${id}`, {method:'DELETE'});
-  if (res && res.ok) {
-    loadGoalsSettings();
-    renderGoalsDashboard();
-    toast('Goal deleted ✓','success');
-  }
-}
-
-function showGoalsPanel() {
-  nav('settings');
-  switchSettingsTab('accounts');
-  const el = document.getElementById('goals-panel');
-  if (el) setTimeout(() => el.scrollIntoView({behavior:'smooth'}), 50);
-}
-
-// ── CATEGORY GROUPS (Settings) ────────────────────────────────────────────────
-async function loadGroupsSettings() {
-  const groups = await apiFetch('/api/category-groups');
-  const el = document.getElementById('groups-settings-list');
-  if (!groups || !groups.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">No groups</div>'; return; }
-  const allGroups = groups.filter(g => g.id !== null);
-  const groupOptions = allGroups.map(g => ({id: g.id, name: g.name}));
-  el.innerHTML = groups.filter(g => g.id !== null).map(g => `
-    <div class="group-block">
-      <div class="group-block-header">
-        <span>${escapeHtml(g.name)} <span style="font-weight:400;font-size:11px;color:var(--muted)">(${g.categories.length})</span></span>
-        <div style="display:flex;gap:4px">
-          <button class="btn-icon" onclick="renameGroup(${g.id},'${escapeAttr(g.name)}')">✏️</button>
-          <button class="btn-icon" onclick="deleteGroup(${g.id})">🗑️</button>
+    <div id="test-tab" style="display:none">
+      <div class="section-h"><h2>Test rules</h2><p>See which rule would match a transaction</p></div>
+      <div class="card" style="padding:16px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field"><label>Description</label><input id="test-desc" placeholder="e.g. TRANSFER TO SAVINGS"></div>
+          <div class="field"><label>Amount</label><input id="test-amount" placeholder="150.00" inputmode="decimal"></div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+          <button class="btn btn-primary" id="test-rules-btn">Test</button>
+          <span id="test-result" style="font-size:13px;color:var(--ink-3)"></span>
         </div>
       </div>
-      ${g.categories.length ? g.categories.map(c => `<div class="group-cat-item">
-        <span class="group-cat-name">• ${escapeHtml(c.name)}</span>
-        <select class="group-reassign-select" onchange="reassignCategory(${c.id},this.value)">
-          ${groupOptions.map(go => `<option value="${go.id}"${go.id===g.id?' selected':''}>${escapeHtml(go.name)}</option>`).join('')}
-          <option value=""${g.id===null?' selected':''}>Ungrouped</option>
-        </select>
-      </div>`).join('') : '<div style="font-size:11px;color:var(--muted);padding:4px 0">No categories in this group</div>'}
     </div>
-  `).join('');
-  // Show ungrouped categories if any
-  const ungrouped = groups.find(g => g.id === null);
-  if (ungrouped && ungrouped.categories.length) {
-    el.innerHTML += `<div class="group-block" style="border-style:dashed">
-      <div class="group-block-header"><span>Ungrouped <span style="font-weight:400;font-size:11px;color:var(--muted)">(${ungrouped.categories.length})</span></span></div>
-      ${ungrouped.categories.map(c => `<div class="group-cat-item">
-        <span class="group-cat-name">• ${escapeHtml(c.name)}</span>
-        <select class="group-reassign-select" onchange="reassignCategory(${c.id},this.value)">
-          ${groupOptions.map(go => `<option value="${go.id}">${escapeHtml(go.name)}</option>`).join('')}
-          <option value="" selected>Ungrouped</option>
-        </select>
-      </div>`).join('')}
-    </div>`;
-  }
-}
+  </div>`;
 
-async function addGroup() {
-  const name = document.getElementById('new-group-name').value.trim();
-  if (!name) return toast('Enter a group name','error');
-  const res = await apiFetch('/api/category-groups', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body: JSON.stringify({name})});
-  if (res && res.ok) {
-    document.getElementById('new-group-name').value = '';
-    loadGroupsSettings();
-    toast('Group added ✓','success');
-  }
-}
-
-async function reassignCategory(catId, groupId) {
-  const body = {group_id: groupId === '' ? null : parseInt(groupId)};
-  const res = await apiFetch(`/api/categories/${catId}`, {method:'PATCH',
-    headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-  if (res && res.ok) { loadGroupsSettings(); toast('Category moved ✓','success'); }
-}
-
-async function renameGroup(id, oldName) {
-  const name = prompt('Rename group:', oldName);
-  if (!name || name.trim() === oldName) return;
-  const res = await apiFetch(`/api/category-groups/${id}`, {method:'PATCH',
-    headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: name.trim()})});
-  if (res && res.ok) { loadGroupsSettings(); toast('Group renamed ✓','success'); }
-}
-
-async function deleteGroup(id) {
-  if (!confirm('Delete this group? Categories will become ungrouped.')) return;
-  const res = await apiFetch(`/api/category-groups/${id}`, {method:'DELETE'});
-  if (res && res.ok) { loadGroupsSettings(); toast('Group deleted ✓','success'); }
-}
-
-// ── SPLIT TRANSACTIONS ───────────────────────────────────────────────────────
-function openSplitUI() {
-  const amount = parseFloat(document.getElementById('e-amount').value) || 0;
-  document.getElementById('split-section').style.display = '';
-  document.getElementById('split-btn').style.display = 'none';
-  const rows = document.getElementById('split-rows');
-  rows.innerHTML = '';
-  addSplitRow(Math.round(amount / 2 * 100) / 100);
-  addSplitRow(Math.round((amount - Math.round(amount / 2 * 100) / 100) * 100) / 100);
-  updateSplitRemaining();
-}
-
-function closeSplitUI() {
-  document.getElementById('split-section').style.display = 'none';
-  document.getElementById('split-btn').style.display = '';
-}
-
-function addSplitRow(prefillAmt) {
-  const row = document.createElement('div');
-  row.className = 'split-row';
-  const type = document.getElementById('e-type').value;
-  const cats = type === 'Income' ? INCOME_CATS : EXPENSE_CATS;
-  row.innerHTML = `
-    <select class="split-cat">${cats.map(c => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('')}</select>
-    <input type="number" class="split-amt" step="0.01" min="0" value="${prefillAmt||''}" placeholder="0.00" oninput="updateSplitRemaining()">
-    <button class="btn-icon" onclick="this.closest('.split-row').remove();updateSplitRemaining()">✕</button>
-  `;
-  document.getElementById('split-rows').appendChild(row);
-}
-
-function updateSplitRemaining() {
-  const total = parseFloat(document.getElementById('e-amount').value) || 0;
-  const splits = [...document.querySelectorAll('.split-amt')].map(i => parseFloat(i.value) || 0);
-  const sum = splits.reduce((a, b) => a + b, 0);
-  const remaining = Math.round((total - sum) * 100) / 100;
-  const el = document.getElementById('split-remaining');
-  el.textContent = remaining === 0 ? '✓ Balanced' : `Remaining: ${fmt(remaining)}`;
-  el.style.color = remaining === 0 ? 'var(--accent)' : 'var(--red)';
-}
-
-async function submitSplit() {
-  const tid = document.getElementById('e-id').value;
-  const rows = document.querySelectorAll('.split-row');
-  const splits = [...rows].map(r => ({
-    category: r.querySelector('.split-cat').value,
-    amount: parseFloat(r.querySelector('.split-amt').value) || 0,
-  }));
-  if (splits.length < 2) return toast('Need at least 2 split rows','error');
-  const res = await apiFetch(`/api/transactions/${tid}/split`, {method:'POST',
-    headers:{'Content-Type':'application/json'}, body: JSON.stringify({splits})});
-  if (res && res.ok) {
-    closeModal('edit-modal');
-    toast(`Split into ${res.children} parts ✓`,'success');
-    if (months.length) renderMonth();
-    loadTransactions();
-  }
-}
-
-// ── PDF EXPORT ────────────────────────────────────────────────────────────────
-function openPdfModal() {
-  document.getElementById('pdf-modal').classList.add('open');
-}
-
-function exportPdf() {
-  if (!months.length) return toast('No data to export','error');
-  const m = months[currentMonthIdx];
-  const incTxns = document.getElementById('pdf-include-txns').checked ? '1' : '0';
-  window.open(`/api/export/pdf?month=${m}&include_transactions=${incTxns}`, '_blank');
-  closeModal('pdf-modal');
-  toast('PDF downloading…','success');
-}
-
-// ── QUICK ACTIONS & MONTH MENU ────────────────────────────────────────────────
-// Removed — sidebar buttons replaced these popover menus.
-
-// Click-outside listener (safe with null checks)
-document.addEventListener('click', function(e) {
-  const wrap = document.querySelector('.quick-actions-wrap');
-  if (wrap && !wrap.contains(e.target)) wrap.classList.remove('open');
-  const menuWrap = document.querySelector('.month-menu-wrap');
-  if (menuWrap && !menuWrap.contains(e.target)) menuWrap.classList.remove('open');
-});
-
-// ── NET WORTH ─────────────────────────────────────────────────────────────────
-let netWorthChart = null;
-
-async function renderNetWorth() {
-  const data = await apiFetch('/api/net-worth');
-  const wrapper = document.querySelector('[data-panel-id="net-worth"] .chart-wrap') ||
-                  document.getElementById('net-worth-chart')?.parentNode;
-  if (!data || !data.length) {
-    if (wrapper) wrapper.innerHTML = '<div class="empty">Add accounts in Settings to see net worth</div>';
-    return;
-  }
-  // Ensure canvas exists (may have been replaced by empty message)
-  if (wrapper && !document.getElementById('net-worth-chart')) {
-    wrapper.innerHTML = '<canvas id="net-worth-chart"></canvas>';
-  }
-  const ctx = document.getElementById('net-worth-chart');
-  if (!ctx) return;
-  if (netWorthChart) netWorthChart.destroy();
-  netWorthChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: data.map(d => fmtMonth(d.month)),
-      datasets: [{
-        label: 'Net Worth',
-        data: data.map(d => d.net_worth),
-        borderColor: '#6ee7b7',
-        backgroundColor: 'rgba(110,231,183,0.1)',
-        fill: true,
-        tension: 0.3,
-        pointRadius: 4,
-      }],
-    },
-    options: {
-      responsive: true,
-      plugins: {legend:{display:false}},
-      scales: {y:{ticks:{callback:v=>'$'+v.toLocaleString()}}},
-    },
+  // Tab switching
+  document.querySelectorAll('#rule-tabs .tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#rule-tabs .tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      const tabId = btn.dataset.tab;
+      ['active-rules','templates-tab','test-tab'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = id === tabId ? '' : 'none';
+      });
+    });
   });
-}
 
-// ── ACCOUNT BALANCES ──────────────────────────────────────────────────────────
-async function renderAccountBalances() {
-  const data = await apiFetch('/api/accounts-list');
-  const el = document.getElementById('account-balances-list');
-  if (!el) return;
-  if (!data || !data.length) {
-    el.innerHTML = '<div class="empty">Add accounts in Settings to track balances</div>';
-    return;
-  }
-  const total = data.reduce((s,a) => s + a.balance, 0);
-  el.innerHTML = data.map(a => {
-    const color = a.balance >= 0 ? 'var(--accent)' : 'var(--red)';
-    const typeLabel = a.account_type.charAt(0).toUpperCase() + a.account_type.slice(1);
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
-      <div><strong>${escapeHtml(a.name)}</strong> <span style="font-size:10px;color:var(--muted)">${escapeHtml(typeLabel)}</span></div>
-      <div style="font-family:var(--mono);color:${color}">${fmt(a.balance)}</div>
-    </div>`;
-  }).join('') + `<div style="display:flex;justify-content:space-between;padding:8px 0;font-weight:600">
-    <span>Total</span><span style="font-family:var(--mono);color:${total>=0?'var(--accent)':'var(--red)'}">${fmt(total)}</span></div>`;
-}
-
-// ── ACCOUNTS SETTINGS ─────────────────────────────────────────────────────────
-async function loadAccountsSettings() {
-  const data = await apiFetch('/api/accounts-list');
-  const el = document.getElementById('accounts-settings-list');
-  if (!el) return;
-  if (!data || !data.length) {
-    el.innerHTML = '<div style="color:var(--muted);font-size:12px">No accounts</div>';
-    return;
-  }
-  el.innerHTML = data.map(a => `
-    <div class="settings-row">
-      <div style="display:flex;align-items:center;gap:6px;flex:1">
-        <span class="settings-label">${escapeHtml(a.name)}</span>
-        <span style="font-size:10px;color:var(--muted)">${escapeHtml(a.account_type)}</span>
-        <span style="font-size:11px;color:var(--muted);font-family:var(--mono)">Balance: ${fmt(a.balance)}</span>
-      </div>
-      <div style="display:flex;gap:4px">
-        <button class="btn-icon" onclick="editAccount(${a.id},'${escapeAttr(a.name)}','${escapeAttr(a.account_type)}',${a.opening_balance})">✏️</button>
-        <button class="btn-icon" onclick="deleteAccount(${a.id})">🗑️</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-async function addAccount() {
-  const name = document.getElementById('new-acct-name').value.trim();
-  const account_type = document.getElementById('new-acct-type').value;
-  const opening_balance = document.getElementById('new-acct-balance').value || '0';
-  if (!name) return toast('Enter an account name','error');
-  const res = await apiFetch('/api/accounts-list', {method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name, account_type, opening_balance: parseFloat(opening_balance)})});
-  if (res && res.ok) {
-    document.getElementById('new-acct-name').value = '';
-    document.getElementById('new-acct-balance').value = '';
-    loadAccountsSettings();
-    renderAccountBalances();
-    renderNetWorth();
-    toast('Account added ✓','success');
-  }
-}
-
-async function editAccount(id, oldName, oldType, oldBalance) {
-  const name = prompt('Rename account:', oldName);
-  if (!name || name.trim() === oldName) return;
-  const res = await apiFetch(`/api/accounts-list/${id}`, {method:'PATCH',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name: name.trim()})});
-  if (res && res.ok) {
-    loadAccountsSettings();
-    renderAccountBalances();
-    renderNetWorth();
-    populateModalAccountDropdowns(await apiFetch('/api/accounts') || []);
-    toast('Account renamed ✓','success');
-  }
-}
-
-async function deleteAccount(id) {
-  if (!confirm('Delete this account? (Transactions are not affected)')) return;
-  const res = await apiFetch(`/api/accounts-list/${id}`, {method:'DELETE'});
-  if (res && res.ok) {
-    loadAccountsSettings();
-    renderAccountBalances();
-    renderNetWorth();
-    toast('Account deleted ✓','success');
-  }
-}
-
-function showAccountsPanel() {
-  nav('settings');
-  switchSettingsTab('accounts');
-  const el = document.getElementById('accounts-panel');
-  if (el) setTimeout(() => el.scrollIntoView({behavior:'smooth'}), 50);
-}
-
-// ── SCHEDULED TRANSACTIONS SETTINGS ───────────────────────────────────────────
-async function loadSchedulesSettings() {
-  const data = await apiFetch('/api/schedules');
-  const el = document.getElementById('schedules-settings-list');
-  if (!el) return;
-  updateCatOptions('new-sched-cat','new-sched-type');
-  // Populate account selector
-  const schedAcctSel = document.getElementById('new-sched-account');
-  if (schedAcctSel) {
-    const accts = await apiFetch('/api/accounts') || [];
-    schedAcctSel.innerHTML = accts.map(a => `<option value="${escapeAttr(a)}">${escapeHtml(a)}</option>`).join('');
-  }
-  if (!data || !data.length) {
-    el.innerHTML = '<div style="color:var(--muted);font-size:12px">No scheduled transactions</div>';
-    return;
-  }
-  el.innerHTML = data.map(s => {
-    const badge = s.enabled ? '' : '<span style="color:var(--red);font-size:10px;margin-left:6px">disabled</span>';
-    return `<div class="settings-row" id="sched-row-${s.id}">
-      <div style="display:flex;align-items:center;gap:6px;flex:1">
-        <span class="settings-label">${escapeHtml(s.name)}</span>
-        <span style="font-size:10px;color:var(--muted)">${escapeHtml(s.frequency)} · ${fmt(s.amount)} · ${escapeHtml(s.account)} · due ${escapeHtml(s.next_due)}</span>
-        ${badge}
-      </div>
-      <div style="display:flex;gap:4px">
-        <button class="btn-icon" onclick="startEditSchedule(${s.id},'${escapeAttr(s.name)}','${escapeAttr(s.category)}',${s.amount},'${escapeAttr(s.frequency)}','${escapeAttr(s.next_due)}')">✏️</button>
-        <button class="btn-icon" onclick="toggleSchedule(${s.id},${s.enabled?0:1})">${s.enabled?'⏸':'▶'}</button>
-        <button class="btn-icon" onclick="deleteSchedule(${s.id})">🗑️</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function startEditSchedule(id, name, category, amount, frequency, nextDue) {
-  const row = document.getElementById('sched-row-' + id);
-  if (!row) return;
-  const cats = EXPENSE_CATS.concat(INCOME_CATS);
-  const catOpts = cats.map(c => `<option value="${escapeAttr(c)}"${c===category?' selected':''}>${escapeHtml(c)}</option>`).join('');
-  const freqOpts = ['monthly','weekly','biweekly','yearly'].map(f =>
-    `<option value="${f}"${f===frequency?' selected':''}>${f}</option>`).join('');
-  row.innerHTML = `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex:1">
-      <input type="text" id="edit-sched-name" value="${escapeAttr(name)}" style="flex:1;min-width:90px" placeholder="Name">
-      <select id="edit-sched-cat" style="width:120px">${catOpts}</select>
-      <input type="number" id="edit-sched-amount" value="${amount}" style="width:80px" min="0.01" step="0.01">
-      <select id="edit-sched-freq" style="width:100px">${freqOpts}</select>
-      <input type="date" id="edit-sched-due" value="${escapeAttr(nextDue)}" style="width:130px">
-      <button class="btn btn-sm" onclick="saveEditSchedule(${id})">Save</button>
-      <button class="btn-icon" onclick="loadSchedulesSettings()">✕</button>
-    </div>`;
-  row.querySelector('#edit-sched-name').focus();
-}
-
-async function saveEditSchedule(id) {
-  const name = document.getElementById('edit-sched-name').value.trim();
-  const category = document.getElementById('edit-sched-cat').value;
-  const amount = document.getElementById('edit-sched-amount').value;
-  const frequency = document.getElementById('edit-sched-freq').value;
-  const next_due = document.getElementById('edit-sched-due').value;
-  if (!name) return toast('Enter a name','error');
-  if (!amount || parseFloat(amount) <= 0) return toast('Enter a valid amount','error');
-  if (!next_due) return toast('Set a due date','error');
-  const res = await apiFetch(`/api/schedules/${id}`, {method:'PATCH',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name, category, amount: parseFloat(amount), frequency, next_due})});
-  if (res && res.ok) { loadSchedulesSettings(); toast('Schedule updated ✓','success'); }
-}
-
-async function addSchedule() {
-  const name = document.getElementById('new-sched-name').value.trim();
-  const type = document.getElementById('new-sched-type').value;
-  const category = document.getElementById('new-sched-cat').value;
-  const amount = document.getElementById('new-sched-amount').value;
-  const frequency = document.getElementById('new-sched-freq').value;
-  const next_due = document.getElementById('new-sched-due').value;
-  if (!name) return toast('Enter a name','error');
-  if (!amount || parseFloat(amount) <= 0) return toast('Enter a valid amount','error');
-  if (!next_due) return toast('Set a due date','error');
-  const account = document.getElementById('new-sched-account').value || 'Default';
-  const res = await apiFetch('/api/schedules', {method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name, type, category, amount: parseFloat(amount), account, frequency, next_due})});
-  if (res && res.ok) {
-    document.getElementById('new-sched-name').value = '';
-    document.getElementById('new-sched-amount').value = '';
-    document.getElementById('new-sched-due').value = '';
-    loadSchedulesSettings();
-    toast('Schedule added ✓','success');
-  }
-}
-
-async function toggleSchedule(id, enabled) {
-  await apiFetch(`/api/schedules/${id}`, {method:'PATCH',
-    headers:{'Content-Type':'application/json'}, body: JSON.stringify({enabled})});
-  loadSchedulesSettings();
-}
-
-async function deleteSchedule(id) {
-  if (!confirm('Delete this schedule?')) return;
-  const res = await apiFetch(`/api/schedules/${id}`, {method:'DELETE'});
-  if (res && res.ok) { loadSchedulesSettings(); toast('Schedule deleted ✓','success'); }
-}
-
-async function postDueSchedules() {
-  const res = await apiFetch('/api/schedules/post-due', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body: '{}'});
-  if (res && res.ok) {
-    loadSchedulesSettings();
-    if (res.posted > 0) {
-      months = await apiFetch('/api/months') || [];
-      if (months.length) renderMonth();
-      toast(`Posted ${res.posted} scheduled transaction(s) ✓`,'success');
-    } else {
-      toast('No transactions due yet','success');
+  document.getElementById('add-rule-btn')?.addEventListener('click', () => openRuleModal());
+  document.getElementById('apply-all-btn')?.addEventListener('click', async () => {
+    const result = await api('/api/rules/apply-all', 'POST');
+    showToast(result?.message || `Applied rules to ${result?.updated||0} transactions`);
+  });
+  document.getElementById('test-rules-btn')?.addEventListener('click', async () => {
+    const desc = document.getElementById('test-desc').value;
+    const amt = document.getElementById('test-amount').value;
+    const result = await api('/api/rules/test', 'POST', { description: desc, amount: parseFloat(amt)||0 });
+    const el = document.getElementById('test-result');
+    if (el) {
+      if (result?.matched) el.innerHTML = `${icon('check',14)} Matched: <strong>${esc(result.rule_name)}</strong> → ${esc(result.action)} ${esc(result.action_value||'')}`;
+      else el.textContent = 'No rule matched';
     }
-  }
-}
-
-// ── TRANSFERS ─────────────────────────────────────────────────────────────────
-function openTransferModal() {
-  document.getElementById('t-date').value = new Date().toISOString().slice(0,10);
-  document.getElementById('t-amount').value = '';
-  document.getElementById('t-notes').value = '';
-  // Populate account dropdowns from known accounts
-  apiFetch('/api/accounts').then(accounts => {
-    const opts = (accounts||[]).map(a => `<option value="${escapeAttr(a)}">${escapeHtml(a)}</option>`).join('');
-    document.getElementById('t-from').innerHTML = opts;
-    document.getElementById('t-to').innerHTML = opts;
   });
-  document.getElementById('transfer-modal').classList.add('open');
 }
 
-async function submitTransfer() {
-  const from_account = document.getElementById('t-from').value;
-  const to_account = document.getElementById('t-to').value;
-  const amount = document.getElementById('t-amount').value;
-  const date = document.getElementById('t-date').value;
-  const notes = document.getElementById('t-notes').value;
-  if (!from_account || !to_account) return toast('Select both accounts','error');
-  if (from_account === to_account) return toast('Cannot transfer to same account','error');
-  if (!amount || parseFloat(amount) <= 0) return toast('Enter a valid amount','error');
-  const res = await apiFetch('/api/transfers', {method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({from_account, to_account, amount: parseFloat(amount), date, notes})});
-  if (res && res.ok) {
-    closeModal('transfer-modal');
-    toast('Transfer recorded ✓','success');
-    renderAccountBalances();
-    renderNetWorth();
+function openRuleModal(existing) {
+  const isEdit = !!existing;
+  const conditions = existing?.conditions || [{ field: 'description', operator: 'contains', value: '' }];
+
+  function conditionRow(c, i) {
+    return `<div class="rule-cond" style="display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:8px;align-items:end;margin-bottom:8px" data-cond="${i}">
+      <div class="field"><label>Field</label><select class="cond-field">
+        <option value="description" ${c.field==='description'?'selected':''}>Description</option>
+        <option value="amount" ${c.field==='amount'?'selected':''}>Amount</option>
+        <option value="account" ${c.field==='account'?'selected':''}>Account</option>
+        <option value="type" ${c.field==='type'?'selected':''}>Type</option>
+      </select></div>
+      <div class="field"><label>Operator</label><select class="cond-op">
+        <option value="contains" ${c.operator==='contains'?'selected':''}>contains</option>
+        <option value="not_contains" ${c.operator==='not_contains'?'selected':''}>not contains</option>
+        <option value="equals" ${c.operator==='equals'?'selected':''}>equals</option>
+        <option value="not_equals" ${c.operator==='not_equals'?'selected':''}>not equals</option>
+        <option value="starts_with" ${c.operator==='starts_with'?'selected':''}>starts with</option>
+        <option value="ends_with" ${c.operator==='ends_with'?'selected':''}>ends with</option>
+        <option value="greater_than" ${c.operator==='greater_than'?'selected':''}>greater than</option>
+        <option value="less_than" ${c.operator==='less_than'?'selected':''}>less than</option>
+        <option value="contains_any" ${c.operator==='contains_any'?'selected':''}>contains any</option>
+      </select></div>
+      <div class="field"><label>Value</label><input class="cond-val" value="${esc(c.value||'')}" placeholder="e.g. transfer"></div>
+      <button class="icon-btn" onclick="this.closest('.rule-cond').remove()" style="margin-bottom:4px">${icon('x',14)}</button>
+    </div>`;
   }
+
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="rule-modal-back">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:600px">
+      <div class="modal-h"><h3>${isEdit ? 'Edit' : 'New'} rule</h3><button class="icon-btn" onclick="closeRuleModal()">${icon('x',14)}</button></div>
+      <div class="modal-body">
+        <div class="field"><label>Rule name</label><input id="rule-name" value="${esc(existing?.name||'')}" placeholder="e.g. Hide transfers"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+          <div class="field"><label>Action</label><select id="rule-action">
+            <option value="label" ${(existing?.action||'label')==='label'?'selected':''}>Label (set category)</option>
+            <option value="hide" ${existing?.action==='hide'?'selected':''}>Hide transaction</option>
+            <option value="pass" ${existing?.action==='pass'?'selected':''}>Pass (skip)</option>
+          </select></div>
+          <div class="field" id="action-value-field" style="${(existing?.action||'label')==='label'?'':'display:none'}"><label>Category</label><input id="rule-action-value" value="${esc(existing?.action_value||'')}" placeholder="e.g. Groceries"></div>
+        </div>
+        <div style="margin-top:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <label style="font-weight:500;font-size:13px">Conditions</label>
+            <button class="btn btn-sm" id="add-cond-btn">${icon('plus',12)} Add condition</button>
+          </div>
+          <div id="rule-conditions">${conditions.map((c,i) => conditionRow(c,i)).join('')}</div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeRuleModal()">Cancel</button>
+        <button class="btn btn-primary" id="rule-save-btn">${isEdit ? 'Save' : 'Create rule'}</button>
+      </div>
+    </div>
+  </div>`);
+  document.getElementById('rule-modal-back').addEventListener('click', closeRuleModal);
+  document.getElementById('rule-action').addEventListener('change', function() {
+    document.getElementById('action-value-field').style.display = this.value === 'label' ? '' : 'none';
+  });
+  document.getElementById('add-cond-btn').addEventListener('click', () => {
+    const container = document.getElementById('rule-conditions');
+    const idx = container.children.length;
+    container.insertAdjacentHTML('beforeend', conditionRow({ field: 'description', operator: 'contains', value: '' }, idx));
+  });
+  document.getElementById('rule-save-btn').addEventListener('click', async () => {
+    const name = document.getElementById('rule-name').value.trim();
+    const action = document.getElementById('rule-action').value;
+    const action_value = document.getElementById('rule-action-value')?.value?.trim() || '';
+    const condEls = document.querySelectorAll('#rule-conditions .rule-cond');
+    const conds = Array.from(condEls).map(el => ({
+      field: el.querySelector('.cond-field').value,
+      operator: el.querySelector('.cond-op').value,
+      value: el.querySelector('.cond-val').value.trim(),
+    })).filter(c => c.value);
+    if (!name) { showToast('Rule name is required'); return; }
+    if (!conds.length) { showToast('At least one condition is required'); return; }
+    const data = { name, action, action_value, conditions: conds };
+    if (isEdit) await api(`/api/rules/${existing.id}`, 'PATCH', data);
+    else await api('/api/rules', 'POST', data);
+    closeRuleModal();
+    refreshCurrentView();
+  });
 }
 
-// ── UNDO ──────────────────────────────────────────────────────────────────────
-let undoTimer = null;
+window.closeRuleModal = function() { document.getElementById('rule-modal-back')?.remove(); };
 
-function showUndoButton() {
-  const btn = document.getElementById('undo-btn');
-  if (!btn) return;
-  btn.style.display = '';
-  clearTimeout(undoTimer);
-  undoTimer = setTimeout(() => { btn.style.display = 'none'; }, 10000);
+window.editRuleModal = async function(id) {
+  const rules = await api('/api/rules');
+  const r = (rules||[]).find(x => x.id === id);
+  if (r) openRuleModal(r);
+};
+
+window.toggleRule = async function(id, enabled) {
+  await api(`/api/rules/${id}`, 'PATCH', { enabled });
+  refreshCurrentView();
+};
+
+window.deleteRule = async function(id) {
+  if (!await appConfirm('Delete this rule?', { title: 'Delete rule', danger: true })) return;
+  await api(`/api/rules/${id}`, 'DELETE');
+  refreshCurrentView();
+};
+
+window.loadRuleTemplate = async function(file) {
+  await api('/api/rule-templates/load', 'POST', { file });
+  showToast('Template loaded');
+  refreshCurrentView();
+};
+
+window.createRuleFromSuggestion = async function(pattern, category) {
+  await api('/api/rules', 'POST', { name: `Auto: ${pattern}`, action: 'label', action_value: category, conditions: [{ field: 'description', operator: 'contains', value: pattern }] });
+  showToast('Rule created');
+  refreshCurrentView();
+};
+
+// ══════════════════════════════════════════════════════════════
+// SETTINGS VIEW
+// ══════════════════════════════════════════════════════════════
+async function _renderSettings(c) {
+  const [settings, cats, learned, txRes] = await Promise.all([
+    api('/api/settings'),
+    api('/api/categories'),
+    api('/api/learned'),
+    api('/api/transactions?limit=1'),
+  ]);
+  const s = settings || {};
+  const catList = cats || [];
+  const learnedList = learned || [];
+  const txCount = txRes?.total || 0;
+
+  c.innerHTML = `<div class="page">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Settings</div>
+        <div class="page-sub">Your data lives in <span class="mono" style="font-size:12.5px">finance.db</span> on this machine. Boreal makes no external requests.</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <!-- LEFT COLUMN -->
+      <div>
+        <div class="section-h" style="margin-top:0"><h2>General</h2></div>
+        <div class="settings-group">
+          <div class="settings-row">
+            <div class="label-block">
+              <div class="lbl">Appearance</div>
+              <div class="desc">Light, dark, or follow system</div>
+            </div>
+            <select class="btn btn-sm" style="padding:6px 10px" id="set-theme">
+              <option value="light" ${s.theme==='light'?'selected':''}>Light</option>
+              <option value="dark" ${s.theme==='dark'?'selected':''}>Dark</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <div class="label-block">
+              <div class="lbl">Default currency</div>
+              <div class="desc">CAD · Canadian Dollar</div>
+            </div>
+            <select class="btn btn-sm" style="padding:6px 10px" id="set-currency">
+              <option value="CAD" ${s.currency==='CAD'?'selected':''}>CAD</option>
+              <option value="USD" ${s.currency==='USD'?'selected':''}>USD</option>
+              <option value="EUR" ${s.currency==='EUR'?'selected':''}>EUR</option>
+              <option value="GBP" ${s.currency==='GBP'?'selected':''}>GBP</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <div class="label-block">
+              <div class="lbl">Start of month</div>
+              <div class="desc">When monthly totals reset</div>
+            </div>
+            <select class="btn btn-sm" style="padding:6px 10px" id="set-month-start">
+              ${[1,5,10,15,20,25].map(d => `<option value="${d}" ${(s.month_start_day||1)===d?'selected':''}>${d}${d===1?'st':d===5?'th':d===10?'th':d===15?'th':d===20?'th':'th'}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="section-h"><h2>Data</h2></div>
+        <div class="settings-group">
+          <div class="settings-row">
+            <div class="label-block">
+              <div class="lbl">Backup database</div>
+              <div class="desc">Download finance.db with a timestamp</div>
+            </div>
+            <button class="btn btn-sm" onclick="window.location.href='/api/backup'">${icon('download',12)} Download</button>
+          </div>
+          <div class="settings-row">
+            <div class="label-block">
+              <div class="lbl">Export all transactions</div>
+              <div class="desc">CSV format — re-importable</div>
+            </div>
+            <button class="btn btn-sm" onclick="window.location.href='/api/export'">Export CSV</button>
+          </div>
+          <div class="settings-row">
+            <div class="label-block">
+              <div class="lbl" style="color:var(--danger)">Reset everything</div>
+              <div class="desc">Delete finance.db and start fresh</div>
+            </div>
+            <button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger-soft)" id="reset-btn">Reset</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div>
+        <div class="section-h" style="margin-top:0"><h2>Learned merchants</h2><p>${learnedList.length} merchants</p></div>
+        <div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">
+          ${learnedList.length ? `<table class="tbl">
+            <thead><tr><th>Keyword</th><th>Category</th><th></th></tr></thead>
+            <tbody>${learnedList.slice(0,30).map(m => `<tr>
+              <td class="mono" style="font-size:12.5px">${esc(m.keyword||m.description||m.name||'')}</td>
+              <td>${catPill(m.category)}</td>
+              <td class="right"><button class="btn btn-sm btn-ghost" onclick="deleteLearned('${esc(m.keyword||m.description||m.name||'')}')">${icon('trash',12)}</button></td>
+            </tr>`).join('')}</tbody>
+          </table>` : '<div style="padding:16px;color:var(--ink-3);font-size:13px">No learned merchants yet</div>'}
+        </div>
+
+        <div class="section-h"><h2>Custom categories</h2><p>${catList.length} categories</p></div>
+        <div class="card" style="padding:14px;margin-bottom:20px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${catList.map(cat => {
+              const name = cat.name || cat;
+              const ci = cat.icon || '';
+              const cc = catColor(name);
+              const cid = cat.id;
+              return `<div style="display:flex;align-items:center;gap:6px;padding:5px 9px 5px 7px;border-radius:8px;border:1px solid var(--line-1);background:${cc}10;font-size:12.5px;cursor:pointer" onclick="editCategory(${cid},'${esc(name)}','${esc(ci)}')">
+                <span>${ci}</span>${esc(name)}
+                <button class="icon-btn" style="width:16px;height:16px" onclick="event.stopPropagation();deleteCategory(${cid},'${esc(name)}')">${icon('x',10)}</button>
+              </div>`;
+            }).join('')}
+            <button class="btn btn-sm" style="border-style:dashed" id="add-cat-btn">${icon('plus',12)} Add category</button>
+          </div>
+        </div>
+
+        <div class="section-h"><h2>About Boreal</h2></div>
+        <div class="card" style="padding:16px;font-size:13px;color:var(--ink-2)">
+          <div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">
+            <div style="width:44px;height:44px;border-radius:12px;background:var(--aurora);color:white;display:grid;place-items:center">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M12 3 L7 10 L9.5 10 L6.5 14 L9 14 L5 19 L19 19 L15 14 L17.5 14 L14.5 10 L17 10 Z" fill="currentColor" opacity="0.95"/></svg>
+            </div>
+            <div>
+              <div style="font-weight:600;font-size:15px;color:var(--ink-1)">Boreal · v2.4.0</div>
+              <div style="font-size:12px;color:var(--ink-3)">Local-first personal finance for Canadians</div>
+            </div>
+          </div>
+          <div style="border-top:1px solid var(--line-1);padding-top:12px;line-height:1.6">
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--ink-3)">Transactions stored</span><span class="mono">${typeof txCount === 'number' ? txCount.toLocaleString() : txCount}</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--ink-3)">Database size</span><span class="mono">local</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--ink-3)">External requests</span><span class="mono" style="color:var(--pos)">0</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  document.getElementById('set-theme')?.addEventListener('change', async (e) => {
+    applyTheme(e.target.value);
+    await api('/api/settings', 'POST', { theme: e.target.value });
+  });
+
+  document.getElementById('set-currency')?.addEventListener('change', async (e) => {
+    await api('/api/settings', 'POST', { currency: e.target.value });
+    showToast('Currency updated');
+  });
+
+  document.getElementById('set-month-start')?.addEventListener('change', async (e) => {
+    await api('/api/settings', 'POST', { month_start_day: parseInt(e.target.value) });
+    showToast('Month start updated');
+  });
+
+  document.getElementById('add-cat-btn')?.addEventListener('click', () => {
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="cat-modal-back">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-h"><h3>Add category</h3><button class="icon-btn" onclick="closeCatModal()">${icon('x',14)}</button></div>
+        <div class="modal-body">
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px">
+            <div class="field"><label>Name</label><input id="cat-new-name" placeholder="e.g. Groceries"></div>
+            <div class="field"><label>Icon</label><input id="cat-new-icon" placeholder="🛒"></div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn" onclick="closeCatModal()">Cancel</button>
+          <button class="btn btn-primary" id="cat-save-btn">Add</button>
+        </div>
+      </div>
+    </div>`);
+    document.getElementById('cat-modal-back').addEventListener('click', closeCatModal);
+    document.getElementById('cat-save-btn').addEventListener('click', async () => {
+      const name = document.getElementById('cat-new-name').value.trim();
+      const ci = document.getElementById('cat-new-icon').value.trim();
+      if (!name) { showToast('Name is required'); return; }
+      await api('/api/categories', 'POST', { name, icon: ci });
+      closeCatModal();
+      refreshCurrentView();
+    });
+  });
+
+  document.getElementById('reset-btn')?.addEventListener('click', async () => {
+    if (!await appConfirm('This will permanently delete ALL your data — transactions, accounts, budgets, and goals. This cannot be undone.', { title: 'Reset everything', danger: true })) return;
+    await api('/api/demo/reset', 'POST');
+    showToast('Data reset');
+    location.reload();
+  });
 }
 
-async function doUndo() {
-  const res = await apiFetch('/api/undo', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body: '{}'});
-  if (res && res.ok) {
-    document.getElementById('undo-btn').style.display = 'none';
-    toast('Undo successful ✓','success');
-    months = await apiFetch('/api/months') || [];
-    if (months.length) renderMonth();
-    loadTransactions();
-  }
-}
+window.closeCatModal = function() { document.getElementById('cat-modal-back')?.remove(); };
 
-// ── POST DUE SCHEDULES ON STARTUP ────────────────────────────────────────────
-async function autoPostSchedules() {
-  const res = await apiFetch('/api/schedules/post-due', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body: '{}'});
-  if (res && res.ok && res.posted > 0) {
-    toast(`Auto-posted ${res.posted} scheduled transaction(s)`,'success');
-  }
-}
+window.deleteCategory = async function(id, name) {
+  if (!await appConfirm(`Delete category "${name}"? Transactions using it will become Uncategorized.`, { title: 'Delete category', danger: true })) return;
+  await api(`/api/categories/${id}`, 'DELETE');
+  refreshCurrentView();
+};
 
-// ── BACKUP & RESTORE ──────────────────────────────────────────────────────────
-function downloadBackup() {
-  window.location.href = '/api/backup';
-  toast('Downloading backup…','success');
-}
+window.editCategory = async function(id, name, catIcon) {
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="cat-modal-back">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-h"><h3>Edit category</h3><button class="icon-btn" onclick="closeCatModal()">${icon('x',14)}</button></div>
+      <div class="modal-body">
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px">
+          <div class="field"><label>Name</label><input id="cat-edit-name" value="${name}"></div>
+          <div class="field"><label>Icon</label><input id="cat-edit-icon" value="${catIcon}"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeCatModal()">Cancel</button>
+        <button class="btn btn-primary" id="cat-edit-save">Save</button>
+      </div>
+    </div>
+  </div>`);
+  document.getElementById('cat-modal-back').addEventListener('click', closeCatModal);
+  document.getElementById('cat-edit-save').addEventListener('click', async () => {
+    const newName = document.getElementById('cat-edit-name').value.trim();
+    const newIcon = document.getElementById('cat-edit-icon').value.trim();
+    if (!newName) { showToast('Name is required'); return; }
+    await api(`/api/categories/${id}`, 'PATCH', { name: newName, icon: newIcon });
+    closeCatModal();
+    refreshCurrentView();
+  });
+};
 
-async function restoreBackup(file) {
-  if (!file) return;
-  if (!confirm('Restore from backup? This will REPLACE all current data with the backup file. This cannot be undone.')) {
-    document.getElementById('restore-input').value = '';
-    return;
-  }
-  const fd = new FormData();
-  fd.append('file', file);
-  const token = await _ensureCsrf();
-  const res = await fetch('/api/restore', {method:'POST', body: fd, headers:{'X-CSRF-Token': token}});
-  document.getElementById('restore-input').value = '';
-  if (res.ok) {
-    toast('Database restored ✓ — reloading…','success');
-    setTimeout(() => location.reload(), 1000);
-  } else {
-    const data = await res.json().catch(()=>({}));
-    toast(data.error || 'Restore failed','error');
-  }
-}
-
-init();
+window.deleteLearned = async function(keyword) {
+  await api(`/api/learned/${encodeURIComponent(keyword)}`, 'DELETE');
+  refreshCurrentView();
+};
