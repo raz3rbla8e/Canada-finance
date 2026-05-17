@@ -265,3 +265,173 @@ def api_trends():
         d = month_map[m]
         result.append({"month": m, "income": d["income"], "expenses": d["expenses"], "net": d["income"] - d["expenses"]})
     return jsonify(result)
+
+
+@summary_bp.route("/api/alerts")
+def api_alerts():
+    """Real-time alerts: budget overages, due schedules, uncategorized, price changes."""
+    db = get_db()
+    today = date.today()
+    month = today.strftime("%Y-%m")
+    alerts = []
+
+    # 1. Budget overages this month
+    budgets = db.execute(
+        """SELECT b.category, b.monthly_limit,
+                  COALESCE(SUM(t.amount), 0) as spent
+           FROM budgets b
+           LEFT JOIN transactions t ON t.category = b.category
+                AND t.type = 'Expense' AND t.hidden = 0
+                AND t.date LIKE ?
+           GROUP BY b.category, b.monthly_limit
+           HAVING spent > b.monthly_limit""",
+        (f"{month}%",),
+    ).fetchall()
+    for b in budgets:
+        over = b["spent"] - b["monthly_limit"]
+        alerts.append({
+            "type": "budget",
+            "icon": "alert",
+            "tone": "warn",
+            "title": f"{b['category']} over budget",
+            "detail": f"${over:,.0f} over the ${b['monthly_limit']:,.0f} limit",
+        })
+
+    # 2. Scheduled transactions due within 7 days
+    due_cutoff = (today + timedelta(days=7)).isoformat()
+    due = db.execute(
+        "SELECT name, next_due, amount FROM scheduled_transactions WHERE enabled=1 AND next_due <= ?",
+        (due_cutoff,),
+    ).fetchall()
+    for s in due:
+        is_overdue = s["next_due"] <= today.isoformat()
+        alerts.append({
+            "type": "schedule",
+            "icon": "calendar" if not is_overdue else "alert",
+            "tone": "warn" if is_overdue else "accent",
+            "title": f"{s['name']} {'overdue' if is_overdue else 'due soon'}",
+            "detail": f"${s['amount']:,.2f} · due {s['next_due']}",
+        })
+
+    # 3. Uncategorized transactions
+    uncat = db.execute(
+        "SELECT COUNT(*) as c FROM transactions WHERE hidden=0 AND (category='UNCATEGORIZED' OR category='')",
+    ).fetchone()["c"]
+    if uncat > 0:
+        alerts.append({
+            "type": "uncategorized",
+            "icon": "tag",
+            "tone": "accent",
+            "title": f"{uncat} uncategorized transaction{'s' if uncat != 1 else ''}",
+            "detail": "Review and assign categories",
+        })
+
+    # 4. Subscription price changes (recurring with variance)
+    price_changes = db.execute(
+        """SELECT MAX(name) as name,
+                  ROUND(MIN(amount), 2) as min_amount,
+                  ROUND(MAX(amount), 2) as max_amount,
+                  COUNT(DISTINCT substr(date,1,7)) as months_seen
+           FROM transactions
+           WHERE hidden=0 AND type='Expense'
+           GROUP BY LOWER(TRIM(name))
+           HAVING months_seen >= 3
+                  AND ROUND(max_amount - min_amount, 2) > 0.01""",
+    ).fetchall()
+    for p in price_changes:
+        alerts.append({
+            "type": "price_change",
+            "icon": "trending",
+            "tone": "accent",
+            "title": f"{p['name']} price changed",
+            "detail": f"${p['min_amount']:,.2f} → ${p['max_amount']:,.2f}",
+        })
+
+    return jsonify({"alerts": alerts, "count": len(alerts)})
+
+
+@summary_bp.route("/api/forecast")
+def api_forecast():
+    """Project cash flow for next 3 months using recurring transactions and historical averages."""
+    db = get_db()
+    today = date.today()
+    months_ahead = request.args.get("months", 3, type=int)
+    months_ahead = max(1, min(months_ahead, 6))
+
+    # Get recurring expense/income patterns
+    recurring = db.execute(
+        """SELECT MAX(type) as type,
+                  ROUND(AVG(amount), 2) as avg_amount,
+                  COUNT(DISTINCT substr(date,1,7)) as months_seen
+           FROM transactions WHERE hidden=0
+           GROUP BY LOWER(TRIM(name))
+           HAVING months_seen >= 3""",
+    ).fetchall()
+    recurring_expense = sum(r["avg_amount"] for r in recurring if r["type"] == "Expense")
+    recurring_income = sum(r["avg_amount"] for r in recurring if r["type"] == "Income")
+
+    # Get historical averages for non-recurring (last 6 months)
+    hist = db.execute(
+        """SELECT substr(date,1,7) as m, type, SUM(amount) as total
+           FROM transactions WHERE hidden=0
+           GROUP BY m, type ORDER BY m DESC""",
+    ).fetchall()
+    month_totals = {}
+    for r in hist:
+        if r["m"] not in month_totals:
+            month_totals[r["m"]] = {"income": 0, "expenses": 0}
+        if r["type"] == "Income":
+            month_totals[r["m"]]["income"] = r["total"]
+        else:
+            month_totals[r["m"]]["expenses"] = r["total"]
+
+    recent_months = sorted(month_totals.keys(), reverse=True)[:6]
+    if recent_months:
+        avg_income = sum(month_totals[m]["income"] for m in recent_months) / len(recent_months)
+        avg_expenses = sum(month_totals[m]["expenses"] for m in recent_months) / len(recent_months)
+    else:
+        avg_income = recurring_income
+        avg_expenses = recurring_expense
+
+    # Blend: use max of recurring baseline and historical average
+    proj_income = max(recurring_income, avg_income)
+    proj_expenses = max(recurring_expense, avg_expenses)
+
+    # Build historical data points
+    historical = []
+    for m in sorted(month_totals.keys())[-6:]:
+        d = month_totals[m]
+        historical.append({"month": m, "income": d["income"], "expenses": d["expenses"], "net": d["income"] - d["expenses"]})
+
+    # Build forecast data points
+    forecast = []
+    for i in range(1, months_ahead + 1):
+        fm = date(today.year, today.month, 1)
+        # Add months
+        month_num = fm.month + i
+        year_num = fm.year + (month_num - 1) // 12
+        month_num = ((month_num - 1) % 12) + 1
+        fm = date(year_num, month_num, 1)
+        forecast.append({
+            "month": fm.strftime("%Y-%m"),
+            "income": round(proj_income, 2),
+            "expenses": round(proj_expenses, 2),
+            "net": round(proj_income - proj_expenses, 2),
+            "projected": True,
+        })
+
+    # Current net worth for projection
+    nw = db.execute(
+        """SELECT COALESCE(
+             (SELECT SUM(CASE WHEN type='Income' THEN amount ELSE -amount END) FROM transactions WHERE hidden=0),
+           0) as nw""",
+    ).fetchone()["nw"]
+
+    return jsonify({
+        "historical": historical,
+        "forecast": forecast,
+        "projected_monthly_net": round(proj_income - proj_expenses, 2),
+        "recurring_expense": round(recurring_expense, 2),
+        "recurring_income": round(recurring_income, 2),
+        "current_net_worth": round(nw, 2),
+    })

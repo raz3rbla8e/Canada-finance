@@ -168,6 +168,20 @@ const CAT_COLORS = {
   'Transfer': '#9aa5b3', 'Uncategorized': '#b8b0a3',
 };
 function catColor(name) { return CAT_COLORS[name] || '#b8b0a3'; }
+
+// Account-glyph color: prefer account_type, else hash by name. Fixes the
+// bug where catColor(a.name) fell through to beige for every account.
+function acctColor(acct) {
+  const type = ((acct && acct.account_type) || '').toLowerCase();
+  if (type.includes('cred'))            return '#c7798d';
+  if (type.includes('sav'))             return '#5b9c6e';
+  if (type.includes('inv'))             return '#9b6fb7';
+  if (type.includes('cheq') || type.includes('check')) return '#6b8eb5';
+  const palette = ['#5b9c6e','#6b8eb5','#c08a4e','#9b6fb7','#c7798d','#4a7a8f','#76a89c','#7ba072'];
+  const name = (acct && acct.name) || '';
+  let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xfffff;
+  return palette[h % palette.length];
+}
 function catPill(name) {
   const c = catColor(name);
   return `<span class="cat-pill"><span class="dot" style="background:${c}"></span>${esc(name)}</span>`;
@@ -217,7 +231,49 @@ async function doUndo() {
   if (r) { showToast('Undone'); refreshCurrentView(); }
 }
 
+// ── ALERTS / NOTIFICATIONS ────────────────────────────────────
+let _alertsOpen = false;
+async function toggleAlerts() {
+  const dd = document.getElementById('notif-dropdown');
+  if (!dd) return;
+  _alertsOpen = !_alertsOpen;
+  if (!_alertsOpen) { dd.classList.add('hidden'); return; }
+  dd.innerHTML = '<div class="notif-header">Notifications</div><div class="notif-empty">Loading…</div>';
+  dd.classList.remove('hidden');
+  const data = await api('/api/alerts');
+  if (!data || !data.alerts.length) {
+    dd.innerHTML = '<div class="notif-header">Notifications</div><div class="notif-empty">No alerts right now</div>';
+    return;
+  }
+  const toneMap = { warn:['var(--warn-soft)','var(--warn)'], accent:['var(--accent-soft)','var(--accent)'], pos:['var(--pos-soft)','var(--pos)'] };
+  dd.innerHTML = `<div class="notif-header">Notifications · ${data.count}</div>` + data.alerts.map(a => {
+    const [bg,fg] = toneMap[a.tone] || toneMap.accent;
+    return `<div class="notif-item"><div class="icon-circle" style="background:${bg};color:${fg}">${icon(a.icon||'alert',13)}</div><div><div class="notif-ttl">${esc(a.title)}</div><div class="notif-dt">${esc(a.detail)}</div></div></div>`;
+  }).join('');
+}
+async function refreshAlertsBadge() {
+  const data = await api('/api/alerts');
+  const badge = document.getElementById('notif-badge');
+  if (!badge) return;
+  if (data && data.count > 0) { badge.textContent = data.count; badge.classList.remove('hidden'); }
+  else { badge.classList.add('hidden'); }
+}
+// Close dropdown on outside click
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('notif-wrap');
+  if (wrap && !wrap.contains(e.target) && _alertsOpen) { _alertsOpen = false; document.getElementById('notif-dropdown')?.classList.add('hidden'); }
+});
+
 // ── NAVIGATION ────────────────────────────────────────────────
+const MONTH_AWARE_VIEWS = new Set(['dashboard','transactions','budgets']);
+function setMonthPickerVisibility(view) {
+  const mp = document.querySelector('.topbar .month-picker');
+  const sep = document.querySelector('.topbar .crumb-sep');
+  if (!mp) return;
+  const show = MONTH_AWARE_VIEWS.has(view);
+  mp.classList.toggle('is-hidden', !show);
+  if (sep) sep.classList.toggle('is-hidden', !show);
+}
 function navigateTo(view) {
   STATE.view = view;
   // Update sidebar active state
@@ -227,6 +283,8 @@ function navigateTo(view) {
   // Update topbar crumb
   const labels = { dashboard:'Dashboard', transactions:'Transactions', budgets:'Budgets', accounts:'Accounts', year:'Year review', import:'Import', schedules:'Scheduled', rules:'Rules', settings:'Settings' };
   document.getElementById('topbar-crumb').textContent = labels[view] || view;
+  // Hide month picker on views that don't consume the month
+  setMonthPickerVisibility(view);
   // Render view
   renderView(view);
   // Update nav count badges
@@ -524,15 +582,108 @@ async function submitAdd() {
 // ══════════════════════════════════════════════════════════════
 // PLACEHOLDER VIEW RENDERERS (will be filled in next chunks)
 // ══════════════════════════════════════════════════════════════
-async function renderDashboard(c) { c.innerHTML = '<div class="page"><div class="page-title" style="color:var(--ink-3)">Loading dashboard…</div></div>'; try { await refreshMonths(); await _renderDashboard(c); } catch(e) { console.error('Dashboard error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
-async function renderTransactions(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderTransactions(c); } catch(e) { console.error('Transactions error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
-async function renderBudgets(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderBudgets(c); } catch(e) { console.error('Budgets error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
-async function renderAccounts(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderAccounts(c); } catch(e) { console.error('Accounts error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
-async function renderYear(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderYear(c); } catch(e) { console.error('Year error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
-async function renderImport(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderImport(c); } catch(e) { console.error('Import error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
-async function renderSchedules(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderSchedules(c); } catch(e) { console.error('Schedules error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
-async function renderRules(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderRules(c); } catch(e) { console.error('Rules error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
-async function renderSettings(c) { c.innerHTML = '<div class="page"><div class="page-title">Loading…</div></div>'; try { await _renderSettings(c); } catch(e) { console.error('Settings error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+// Skeleton placeholder for the dashboard while data loads.
+function dashboardSkeleton() {
+  const kpi = `<div class="kpi"><div class="skel skel-line sm w-50"></div><div class="skel skel-line lg w-70" style="margin-top:10px"></div><div class="skel skel-line sm w-30" style="margin-top:14px"></div></div>`;
+  const card = `<div class="card"><div class="skel skel-line w-30"></div><div class="skel skel-block" style="margin-top:14px"></div></div>`;
+  return `<div class="page">
+    <div class="page-head"><div><div class="skel skel-line lg w-30"></div><div class="skel skel-line sm w-50" style="margin-top:10px"></div></div></div>
+    <div class="kpi-grid">${kpi}${kpi}${kpi}${kpi}</div>
+    <div class="grid-2" style="margin-bottom:16px">${card}${card}</div>
+    <div class="grid-2" style="margin-bottom:16px">${card}${card}</div>
+  </div>`;
+}
+
+function transactionsSkeleton() {
+  const row = `<tr><td style="width:32px"><div class="skel skel-circle" style="width:16px;height:16px"></div></td><td><div class="skel skel-line sm w-30"></div></td><td><div class="skel skel-line sm w-70"></div></td><td><div class="skel skel-line sm w-50"></div></td><td><div class="skel skel-line sm w-30"></div></td><td style="text-align:right"><div class="skel skel-line sm w-50" style="margin-left:auto"></div></td><td></td></tr>`;
+  return `<div class="page">
+    <div class="page-head"><div><div class="skel skel-line lg w-30"></div><div class="skel skel-line sm w-70" style="margin-top:10px"></div></div></div>
+    <div style="display:flex;gap:8px;margin-bottom:14px"><div class="skel skel-line w-30" style="height:32px;border-radius:8px;width:200px"></div><div class="skel skel-line" style="height:32px;border-radius:8px;flex:1"></div></div>
+    <div class="card" style="padding:0;overflow:hidden"><table class="txn-table" style="width:100%"><tbody>${row.repeat(10)}</tbody></table></div>
+  </div>`;
+}
+
+function budgetsSkeleton() {
+  const kpi = `<div class="kpi"><div class="skel skel-line sm w-50"></div><div class="skel skel-line lg w-70" style="margin-top:10px"></div></div>`;
+  const brow = `<div style="display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)"><div class="skel skel-circle" style="width:32px;height:32px"></div><div style="flex:1"><div class="skel skel-line w-50"></div><div class="skel skel-line sm w-30" style="margin-top:8px"></div></div><div class="skel skel-line sm w-30" style="width:60px"></div></div>`;
+  return `<div class="page">
+    <div class="page-head"><div><div class="skel skel-line lg w-30"></div><div class="skel skel-line sm w-50" style="margin-top:10px"></div></div></div>
+    <div class="kpi-grid">${kpi}${kpi}${kpi}</div>
+    <div class="card" style="margin-top:16px">${brow.repeat(5)}</div>
+  </div>`;
+}
+
+function accountsSkeleton() {
+  const kpi = `<div class="kpi"><div class="skel skel-line sm w-50"></div><div class="skel skel-line lg w-70" style="margin-top:10px"></div></div>`;
+  const acct = `<div style="display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)"><div class="skel skel-circle" style="width:36px;height:36px"></div><div style="flex:1"><div class="skel skel-line w-50"></div><div class="skel skel-line sm w-30" style="margin-top:8px"></div></div><div class="skel skel-line sm w-30" style="width:80px"></div></div>`;
+  return `<div class="page">
+    <div class="page-head"><div><div class="skel skel-line lg w-30"></div><div class="skel skel-line sm w-50" style="margin-top:10px"></div></div></div>
+    <div class="kpi-grid">${kpi}${kpi}${kpi}</div>
+    <div class="card" style="margin-top:16px">${acct.repeat(4)}</div>
+  </div>`;
+}
+
+function yearSkeleton() {
+  const kpi = `<div class="kpi"><div class="skel skel-line sm w-50"></div><div class="skel skel-line lg w-70" style="margin-top:10px"></div></div>`;
+  const card = `<div class="card"><div class="skel skel-line w-30"></div><div class="skel skel-block" style="margin-top:14px"></div></div>`;
+  return `<div class="page">
+    <div class="page-head"><div><div class="skel skel-line lg w-30"></div><div class="skel skel-line sm w-50" style="margin-top:10px"></div></div></div>
+    <div class="kpi-grid">${kpi}${kpi}${kpi}${kpi}</div>
+    <div class="grid-2" style="margin-bottom:16px">${card}${card}</div>
+  </div>`;
+}
+
+function importSkeleton() {
+  return `<div class="page">
+    <div class="page-head"><div><div class="skel skel-line lg w-30"></div><div class="skel skel-line sm w-70" style="margin-top:10px"></div></div></div>
+    <div class="card" style="padding:48px;text-align:center">
+      <div class="skel skel-circle" style="width:48px;height:48px;margin:0 auto"></div>
+      <div class="skel skel-line lg w-30" style="margin:16px auto 0"></div>
+      <div class="skel skel-line sm w-50" style="margin:10px auto 0"></div>
+    </div>
+  </div>`;
+}
+
+function schedulesSkeleton() {
+  const kpi = `<div class="kpi"><div class="skel skel-line sm w-50"></div><div class="skel skel-line lg w-70" style="margin-top:10px"></div></div>`;
+  const row = `<div style="display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)"><div class="skel skel-circle" style="width:32px;height:32px"></div><div style="flex:1"><div class="skel skel-line w-50"></div><div class="skel skel-line sm w-30" style="margin-top:8px"></div></div><div class="skel skel-line sm" style="width:60px"></div></div>`;
+  return `<div class="page">
+    <div class="page-head"><div><div class="skel skel-line lg w-30"></div><div class="skel skel-line sm w-50" style="margin-top:10px"></div></div></div>
+    <div class="kpi-grid">${kpi}${kpi}${kpi}</div>
+    <div class="card" style="margin-top:16px">${row.repeat(5)}</div>
+  </div>`;
+}
+
+function rulesSkeleton() {
+  const tab = `<div class="skel skel-line" style="height:32px;border-radius:8px;width:100px"></div>`;
+  const row = `<div style="display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)"><div style="flex:1"><div class="skel skel-line w-70"></div><div class="skel skel-line sm w-50" style="margin-top:8px"></div></div><div class="skel skel-line sm" style="width:40px"></div></div>`;
+  return `<div class="page">
+    <div class="page-head"><div><div class="skel skel-line lg w-30"></div><div class="skel skel-line sm w-50" style="margin-top:10px"></div></div></div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">${tab}${tab}${tab}</div>
+    <div class="card">${row.repeat(5)}</div>
+  </div>`;
+}
+
+function settingsSkeleton() {
+  const row = `<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)"><div><div class="skel skel-line w-50"></div><div class="skel skel-line sm w-70" style="margin-top:6px"></div></div><div class="skel skel-line" style="width:60px;height:28px;border-radius:6px"></div></div>`;
+  return `<div class="page">
+    <div class="page-head"><div><div class="skel skel-line lg w-30"></div><div class="skel skel-line sm w-50" style="margin-top:10px"></div></div></div>
+    <div class="grid-2">
+      <div class="card"><div class="skel skel-line w-30" style="margin-bottom:16px"></div>${row.repeat(4)}</div>
+      <div class="card"><div class="skel skel-line w-30" style="margin-bottom:16px"></div>${row.repeat(3)}</div>
+    </div>
+  </div>`;
+}
+
+async function renderDashboard(c) { c.innerHTML = dashboardSkeleton(); try { await refreshMonths(); await _renderDashboard(c); } catch(e) { console.error('Dashboard error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderTransactions(c) { c.innerHTML = transactionsSkeleton(); try { await _renderTransactions(c); } catch(e) { console.error('Transactions error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderBudgets(c) { c.innerHTML = budgetsSkeleton(); try { await _renderBudgets(c); } catch(e) { console.error('Budgets error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderAccounts(c) { c.innerHTML = accountsSkeleton(); try { await _renderAccounts(c); } catch(e) { console.error('Accounts error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderYear(c) { c.innerHTML = yearSkeleton(); try { await _renderYear(c); } catch(e) { console.error('Year error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderImport(c) { c.innerHTML = importSkeleton(); try { await _renderImport(c); } catch(e) { console.error('Import error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderSchedules(c) { c.innerHTML = schedulesSkeleton(); try { await _renderSchedules(c); } catch(e) { console.error('Schedules error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderRules(c) { c.innerHTML = rulesSkeleton(); try { await _renderRules(c); } catch(e) { console.error('Rules error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderSettings(c) { c.innerHTML = settingsSkeleton(); try { await _renderSettings(c); } catch(e) { console.error('Settings error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
 
 // ══════════════════════════════════════════════════════════════
 // INIT
@@ -571,11 +722,13 @@ async function init() {
   }
   // Render initial view
   navigateTo('dashboard');
+  // Load alert badge
+  refreshAlertsBadge();
 }
 
 function renderOnboarding(c) {
   c.innerHTML = `<div class="page"><div class="onboarding">
-    <div class="brand-mark-lg"><svg viewBox="0 0 24 24" width="32" height="32" fill="none"><path d="M12 3 L7 10 L9.5 10 L6.5 14 L9 14 L5 19 L19 19 L15 14 L17.5 14 L14.5 10 L17 10 Z" fill="currentColor" opacity="0.95"/><rect x="11" y="19" width="2" height="3" rx="0.5" fill="currentColor" opacity="0.6"/></svg></div>
+    <div class="brand-mark-lg"><svg viewBox="0 0 512 512" width="32" height="32" fill="none"><polygon points="256,80 196,180 316,180" fill="currentColor"/><polygon points="256,140 176,260 336,260" fill="currentColor"/><polygon points="256,210 156,340 356,340" fill="currentColor"/><rect x="240" y="340" width="32" height="52" rx="4" fill="currentColor" opacity="0.7"/></svg></div>
     <h1>Welcome to Boreal.</h1>
     <p class="lede">A personal finance dashboard that lives on your computer. Drop in a bank export, and you'll see your money in 30 seconds — no signup, no cloud, no tracking.</p>
     <div class="onb-cards">
@@ -609,6 +762,97 @@ document.addEventListener('DOMContentLoaded', init);
 // ══════════════════════════════════════════════════════════════
 // DASHBOARD VIEW
 // ══════════════════════════════════════════════════════════════
+
+function svgForecastChart(historical, forecast, width=760, height=200) {
+  const all = [...historical, ...forecast];
+  if (all.length < 2) return '';
+  const pad = { t: 20, b: 30, l: 50, r: 16 };
+  const w = width - pad.l - pad.r;
+  const h = height - pad.t - pad.b;
+  const maxVal = Math.max(...all.map(d => Math.max(d.income, d.expenses))) * 1.1 || 1;
+  const n = all.length;
+  const xStep = w / (n - 1);
+  const y = v => pad.t + h - (v / maxVal * h);
+  const x = i => pad.l + i * xStep;
+  const histLen = historical.length;
+  const splitX = x(histLen - 1);
+
+  // Grid lines
+  let grid = '';
+  for (let i = 0; i <= 4; i++) {
+    const gy = pad.t + (h / 4) * i;
+    const val = maxVal - (maxVal / 4) * i;
+    grid += `<line x1="${pad.l}" y1="${gy}" x2="${width-pad.r}" y2="${gy}" stroke="var(--line-1)" stroke-width="0.5"/>`;
+    grid += `<text x="${pad.l-6}" y="${gy+4}" fill="var(--ink-4)" font-size="10" text-anchor="end">$${(val/1000).toFixed(1)}k</text>`;
+  }
+
+  // Month labels
+  let labels = '';
+  all.forEach((d, i) => {
+    const [yr, mo] = d.month.split('-').map(Number);
+    const label = new Date(yr, mo-1, 15).toLocaleString('en-CA', {month: 'short'});
+    if (i % Math.ceil(n / 8) === 0 || i === n - 1) {
+      labels += `<text x="${x(i)}" y="${height-4}" fill="var(--ink-4)" font-size="10" text-anchor="middle">${label}</text>`;
+    }
+  });
+
+  // Income line
+  const incPts = all.map((d, i) => `${x(i)},${y(d.income)}`).join(' ');
+  // Expense line
+  const expPts = all.map((d, i) => `${x(i)},${y(d.expenses)}`).join(' ');
+
+  // Projected zone shading
+  const projShade = histLen < n ? `<rect x="${splitX}" y="${pad.t}" width="${width-pad.r-splitX}" height="${h}" fill="var(--accent)" opacity="0.04" rx="4"/>` : '';
+
+  // Dashed projection lines (from split point onward)
+  let dashInc = '', dashExp = '';
+  if (histLen < n) {
+    const dashIncPts = all.slice(histLen - 1).map((d, i) => `${x(histLen - 1 + i)},${y(d.income)}`).join(' ');
+    const dashExpPts = all.slice(histLen - 1).map((d, i) => `${x(histLen - 1 + i)},${y(d.expenses)}`).join(' ');
+    dashInc = `<polyline points="${dashIncPts}" fill="none" stroke="var(--pos)" stroke-width="2" stroke-dasharray="6,4" opacity="0.7"/>`;
+    dashExp = `<polyline points="${dashExpPts}" fill="none" stroke="var(--ink-2)" stroke-width="2" stroke-dasharray="6,4" opacity="0.7"/>`;
+  }
+
+  // Solid historical lines
+  const solidIncPts = all.slice(0, histLen).map((d, i) => `${x(i)},${y(d.income)}`).join(' ');
+  const solidExpPts = all.slice(0, histLen).map((d, i) => `${x(i)},${y(d.expenses)}`).join(' ');
+
+  return `<svg viewBox="0 0 ${width} ${height}" style="width:100%;height:auto;display:block;margin-top:12px">
+    ${grid}${labels}${projShade}
+    <polyline points="${solidIncPts}" fill="none" stroke="var(--pos)" stroke-width="2"/>
+    <polyline points="${solidExpPts}" fill="none" stroke="var(--ink-2)" stroke-width="2"/>
+    ${dashInc}${dashExp}
+    ${histLen < n ? `<line x1="${splitX}" y1="${pad.t}" x2="${splitX}" y2="${pad.t+h}" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
+    <text x="${splitX+6}" y="${pad.t+12}" fill="var(--accent)" font-size="10">Forecast →</text>` : ''}
+  </svg>`;
+}
+
+async function loadForecastCard() {
+  const card = document.getElementById('forecast-card');
+  if (!card) return;
+  const data = await api('/api/forecast');
+  if (!data || (!data.historical.length && !data.forecast.length)) {
+    card.innerHTML = `<div class="card-h"><h3>Cash-flow forecast</h3></div><div style="color:var(--ink-3);font-size:13px;padding:8px 0">Not enough data yet — need at least 1 month of transactions.</div>`;
+    return;
+  }
+  const netPerMonth = data.projected_monthly_net;
+  const chart = svgForecastChart(data.historical, data.forecast);
+  card.innerHTML = `
+    <div class="card-h">
+      <h3>Cash-flow forecast</h3>
+      <div style="display:flex;gap:12px;font-size:12px;color:var(--ink-3)">
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:2px;background:var(--pos)"></span>Income</span>
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:2px;background:var(--ink-2)"></span>Expenses</span>
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:2px;background:var(--pos);border:1px dashed var(--pos)"></span>Projected</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;font-size:13px;margin-top:4px">
+      <span>Projected monthly net: <strong style="color:${netPerMonth >= 0 ? 'var(--pos)' : 'var(--danger)'}">${netPerMonth >= 0 ? '+' : ''}${fmtCurrency(netPerMonth, true)}</strong></span>
+      <span style="color:var(--ink-3)">Recurring: ${fmtCurrency(data.recurring_income, true)} in · ${fmtCurrency(data.recurring_expense, true)} out</span>
+    </div>
+    ${chart}`;
+}
+
 async function _renderDashboard(c) {
   const month = currentMonth();
   const [summary, trends, recurring, goals, accounts, netWorth] = await Promise.all([
@@ -637,6 +881,8 @@ async function _renderDashboard(c) {
   const totalExp = topCats.reduce((s,x) => s + x.total, 0);
   const budgets = summary.budgets || [];
   const recList = recurring?.recurring || (Array.isArray(recurring) ? recurring : []);
+  const subTotal = recList.reduce((s, r) => s + (r.avg_amount || 0), 0);
+  const subCount = recList.length;
   const trendHistory = (trends || []).map(t => { const [y,mo] = (t.month||'').split('-').map(Number); return { m: mo ? new Date(y,mo-1,15).toLocaleString('en-CA',{month:'short'}) : t.month, income: t.income, expenses: t.expenses }; });
   // Calculate deltas vs previous month (from summary API, relative to selected month)
   const prevIncome = summary.prev_income || 0;
@@ -659,8 +905,8 @@ async function _renderDashboard(c) {
   c.innerHTML = `<div class="page">
     <div class="page-head">
       <div>
-        <div class="page-title">Dashboard</div>
-        <div class="page-sub">You saved ${fmtCurrency(net,true)} this month — ${savingsRate.toFixed(0)}% savings rate.</div>
+        <div class="page-sub" style="font-size:13px;color:var(--ink-3);margin-bottom:4px">${new Date(month+'-15').toLocaleString('en-CA',{month:'long',year:'numeric'})}</div>
+        <div class="page-title" style="font-size:22px;font-weight:500;letter-spacing:-0.015em">You saved <span style="color:${net>=0?'var(--pos)':'var(--danger)'};font-variant-numeric:tabular-nums">${fmtCurrency(net,true)}</span> · ${savingsRate.toFixed(0)}% savings rate</div>
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn" onclick="window.location.href='/api/export?month=${month||''}'">${icon('download',14)} Export</button>
@@ -671,14 +917,14 @@ async function _renderDashboard(c) {
     ${insightsHTML}
 
     <div class="kpi-grid">
-      <div class="kpi hero-aurora" style="grid-column:span 2;padding:20px 22px">
+      <div class="kpi hero-aurora">
         <div class="kpi-label">Net worth</div>
         <div class="kpi-value">${fmtCurrencyHTML(currentNW)}</div>
         <div class="kpi-delta">
-          <span class="chip ${deltaNW >= 0 ? 'chip-up' : 'chip-dn'}">${icon(deltaNW >= 0 ? 'arrow_up' : 'arrow_dn',11)} ${Math.abs(deltaNW).toFixed(1)}%</span>
+          <span class="chip ${deltaNW >= 0 ? 'chip-up' : 'chip-dn'}">${icon(deltaNW >= 0 ? 'arrow_up' : 'arrow_dn', 11)} ${Math.abs(deltaNW).toFixed(1)}%</span>
           <span>vs ${prevMonthName}</span>
         </div>
-        ${svgSparkline(nwData.map(d=>d.v), 120, 36, 'rgba(255,255,255,0.7)')}
+        ${svgSparkline(nwData.map(d=>d.v), 200, 24, 'rgba(255,255,255,0.7)')}
       </div>
       <div class="kpi">
         <div class="kpi-label">Income</div>
@@ -687,7 +933,7 @@ async function _renderDashboard(c) {
           <span class="chip ${incomeDelta >= 0 ? 'chip-up' : 'chip-dn'}">${icon(incomeDelta >= 0 ? 'arrow_up' : 'arrow_dn', 11)} ${Math.abs(incomeDelta).toFixed(1)}%</span>
           <span>vs ${prevMonthName}</span>
         </div>
-        ${svgSparkline(trendHistory.map(h=>h.income), 80, 24, 'var(--pos)')}
+        ${svgSparkline(trendHistory.map(h=>h.income), 200, 24, 'var(--pos)')}
       </div>
       <div class="kpi">
         <div class="kpi-label">Expenses</div>
@@ -696,22 +942,22 @@ async function _renderDashboard(c) {
           <span class="chip ${expDelta <= 0 ? 'chip-up' : 'chip-dn'}">${icon(expDelta <= 0 ? 'arrow_dn' : 'arrow_up', 11)} ${Math.abs(expDelta).toFixed(1)}%</span>
           <span>vs ${prevMonthName}</span>
         </div>
-        ${svgSparkline(trendHistory.map(h=>h.expenses), 80, 24, 'var(--ink-3)')}
+        ${svgSparkline(trendHistory.map(h=>h.expenses), 200, 24, 'var(--ink-3)')}
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Subscriptions</div>
+        <div class="kpi-value">${fmtCurrencyHTML(subTotal)}</div>
+        <div class="kpi-delta">
+          <span class="chip" style="background:var(--accent-soft);color:var(--accent-ink)">${subCount} active</span>
+          <span>${expenses > 0 ? (subTotal/expenses*100).toFixed(0)+'% of spend' : 'monthly committed'}</span>
+        </div>
       </div>
     </div>
 
     <div class="grid-2" style="margin-bottom:16px">
       <div class="card">
         <div class="card-h">
-          <div>
-            <h3>Net worth, last 12 months</h3>
-            <div style="font-size:22px;font-weight:500;letter-spacing:-0.02em;margin-top:4px;font-variant-numeric:tabular-nums">
-              ${fmtCurrency(totalBalance,true)}
-              ${nwData.length >= 2 ? `<span style="margin-left:10px;font-size:13px;color:${totalBalance - nwData[0].v >= 0 ? 'var(--pos)' : 'var(--danger)'};font-weight:500">
-                ${totalBalance - nwData[0].v >= 0 ? '+' : ''}${fmtCurrency(totalBalance - nwData[0].v, true)} <span style="color:var(--ink-3)">this year</span>
-              </span>` : ''}
-            </div>
-          </div>
+          <h3>Net worth trend</h3>
           <div style="display:flex;gap:4px" id="nw-filters">
             <button class="filter-chip" data-months="1">1M</button>
             <button class="filter-chip" data-months="6">6M</button>
@@ -719,6 +965,9 @@ async function _renderDashboard(c) {
             <button class="filter-chip" data-months="0">All</button>
           </div>
         </div>
+        ${nwData.length >= 2 ? `<div style="font-size:12px;color:var(--ink-3);margin-bottom:6px">
+          <span style="color:${totalBalance - nwData[0].v >= 0 ? 'var(--pos)' : 'var(--danger)'};font-weight:500">${totalBalance - nwData[0].v >= 0 ? '+' : ''}${fmtCurrency(totalBalance - nwData[0].v, true)}</span> this period
+        </div>` : ''}
         <div id="nw-chart-container">${svgNetWorthChart(nwData)}</div>
       </div>
       <div class="card">
@@ -750,13 +999,13 @@ async function _renderDashboard(c) {
       </div>
       <div class="card">
         <div class="card-h"><h3>Accounts</h3><button class="muted-link" onclick="navigateTo('accounts')">Manage →</button></div>
-        ${(accounts||[]).map(a => `<div class="acct-row">
+        ${(accounts||[]).map(a => { const ac = acctColor(a); return `<div class="acct-row">
           <div class="left">
-            <div class="acct-glyph" style="background:${catColor(a.name)}15;color:${catColor(a.name)};border-color:${catColor(a.name)}30">${esc((a.name||'?')[0])}</div>
+            <div class="acct-glyph" style="background:${ac}18;color:${ac};border-color:${ac}40">${esc((a.name||'?')[0])}</div>
             <div><div class="name">${esc(a.name)}</div><div class="type">${esc(a.account_type||'')}</div></div>
           </div>
           <div class="bal" style="color:${a.balance<0?'var(--danger)':'var(--ink-1)'}">${fmtCurrency(a.balance)}</div>
-        </div>`).join('')}
+        </div>`; }).join('')}
         <div style="display:flex;justify-content:space-between;padding-top:12px;border-top:1px solid var(--line-1);margin-top:4px">
           <span style="color:var(--ink-3);font-size:12px">Total</span>
           <span style="font-weight:600;font-size:15px;font-variant-numeric:tabular-nums">${fmtCurrency(totalBalance)}</span>
@@ -796,7 +1045,14 @@ async function _renderDashboard(c) {
       </div>
       ${svgSpendBars(trendHistory)}
     </div>
+
+    <div class="card" id="forecast-card">
+      <div class="card-h"><h3>Cash-flow forecast</h3><span style="font-size:12px;color:var(--ink-3)">Loading…</span></div>
+    </div>
   </div>`;
+
+  // Load forecast async (non-blocking)
+  loadForecastCard();
 
   // Net worth time range filter
   document.querySelectorAll('#nw-filters .filter-chip').forEach(btn => {
@@ -1542,7 +1798,7 @@ async function _renderAccounts(c) {
     <div class="card" style="padding:0;overflow:hidden">
       ${list.length ? list.map((a, i) => {
         const pct = (Math.abs(a.balance||0) / maxBalance) * 100;
-        const ac = catColor(a.name);
+        const ac = acctColor(a);
         const isDebt = (a.balance||0) < 0;
         return `<div style="display:grid;grid-template-columns:auto 1fr auto auto auto;gap:16px;padding:16px 20px;align-items:center;${i < list.length-1 ? 'border-bottom:1px solid var(--line-1)' : ''};cursor:pointer" onclick="editAccount(${a.id})">
           <div class="acct-glyph" style="width:40px;height:40px;background:${ac}15;color:${ac};border-color:${ac}30;font-size:15px;font-weight:600">${esc((a.name||'?')[0])}</div>
@@ -1620,7 +1876,7 @@ window.closeAccountModal = function() { document.getElementById('acct-modal-back
 function acctRow(a) {
   return `<div class="acct-row" style="cursor:pointer" onclick="editAccount(${a.id})">
     <div class="left">
-      <div class="acct-glyph" style="background:${catColor(a.name)}15;color:${catColor(a.name)};border-color:${catColor(a.name)}30">${esc((a.name||'?')[0])}</div>
+      <div class="acct-glyph" style="background:${acctColor(a)}18;color:${acctColor(a)};border-color:${acctColor(a)}40">${esc((a.name||'?')[0])}</div>
       <div><div class="name">${esc(a.name)}</div><div class="type">${esc(a.account_type||'')}</div></div>
     </div>
     <div class="bal" style="color:${a.balance<0?'var(--danger)':'var(--ink-1)'}">

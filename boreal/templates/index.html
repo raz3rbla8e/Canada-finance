@@ -22,9 +22,11 @@
   <aside class="sidebar" id="sidebar">
     <div class="brand">
       <div class="brand-mark">
-        <svg viewBox="0 0 24 24" fill="none">
-          <path d="M12 3 L7 10 L9.5 10 L6.5 14 L9 14 L5 19 L19 19 L15 14 L17.5 14 L14.5 10 L17 10 Z" fill="currentColor" opacity="0.95"/>
-          <rect x="11" y="19" width="2" height="3" rx="0.5" fill="currentColor" opacity="0.6"/>
+        <svg viewBox="0 0 512 512" fill="none">
+          <polygon points="256,80 196,180 316,180" fill="currentColor"/>
+          <polygon points="256,140 176,260 336,260" fill="currentColor"/>
+          <polygon points="256,210 156,340 356,340" fill="currentColor"/>
+          <rect x="240" y="340" width="32" height="52" rx="4" fill="currentColor" opacity="0.7"/>
         </svg>
       </div>
       <div>
@@ -97,7 +99,7 @@
   <main class="main">
     <div class="topbar">
       <span class="topbar-crumb" id="topbar-crumb">Dashboard</span>
-      <span style="color:var(--ink-4)">/</span>
+      <span class="crumb-sep" style="color:var(--ink-4)">/</span>
       <div class="month-picker">
         <button onclick="stepMonth(-1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg></button>
         <span class="label" id="month-label"></span>
@@ -109,9 +111,13 @@
         <input placeholder="Search or jump to…" readonly style="pointer-events:none">
         <span class="kbd">⌘K</span>
       </div>
-      <button class="icon-btn" title="Notifications" onclick="showToast('No new notifications')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>
-      </button>
+      <div class="notif-wrap" id="notif-wrap">
+        <button class="icon-btn" title="Notifications" onclick="toggleAlerts()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>
+          <span class="notif-badge hidden" id="notif-badge"></span>
+        </button>
+        <div class="notif-dropdown hidden" id="notif-dropdown"></div>
+      </div>
     </div>
 
     <div id="view-container">
