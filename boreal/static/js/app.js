@@ -167,6 +167,8 @@ const ICONS = {
   funnel: '<path d="M3 5h18l-7 9v6l-4-2v-4z"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   sliders: '<path d="M4 6h12M4 12h7M4 18h16"/><circle cx="19" cy="6" r="2"/><circle cx="14" cy="12" r="2"/><circle cx="8" cy="18" r="2"/>',
+  tag: '<path d="M20 12V5h-7L3 15l6 6 11-9z"/><circle cx="15" cy="9" r="1.2"/>',
+  bookmark: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
 };
 function icon(name, size=16) {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon">${ICONS[name]||''}</svg>`;
@@ -225,7 +227,10 @@ function acctColor(acct) {
 }
 function catPill(name) {
   const c = catColor(name);
-  return `<span class="cat-pill"><span class="dot" style="background:${c}"></span>${esc(name)}</span>`;
+  const style = `background:color-mix(in oklch, ${c} 14%, oklch(98% 0 0));`
+              + `color:color-mix(in oklch, ${c} 75%, oklch(20% 0 0));`
+              + `border-color:color-mix(in oklch, ${c} 32%, transparent);`;
+  return `<span class="cat-pill" style="${style}"><span class="dot" style="background:${c}"></span>${esc(name)}</span>`;
 }
 function merchantGlyph(name, color) {
   const ch = (name || '?').replace(/^(THE |INTERAC )/i, '').trim()[0]?.toUpperCase() || '?';
@@ -317,6 +322,8 @@ function setMonthPickerVisibility(view) {
 }
 function navigateTo(view) {
   STATE.view = view;
+  // Clean up floating bulk dock on navigation
+  document.getElementById('bulk-dock')?.classList.remove('open');
   // Update sidebar active state
   document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.view === view);
@@ -1176,33 +1183,26 @@ async function _renderTransactions(c) {
       </div>
     </div>
 
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+    <div class="tx-tools">
       <div class="searchbox">
         ${icon('search',14)}
-        <input id="tx-search" type="text" placeholder="Search…">
+        <input id="tx-search" type="text" placeholder="Search transactions…">
         <span class="kbd">/</span>
       </div>
-      <div class="chip-row">
-        <button class="filter-chip active" data-acct="">All accounts</button>
-        ${accts.map(a => `<button class="filter-chip" data-acct="${esc(a)}">${esc(a)}</button>`).join('')}
-      </div>
-      <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
-        <button class="btn btn-sm" id="tx-toggle-hidden" style="font-size:12px;padding:5px 10px">${icon('eye_off',12)} Hidden</button>
-        <select id="tx-cat-filter" class="btn btn-sm" style="border-style:dashed;padding:5px 10px;font-size:12px;background:var(--bg-surface);color:var(--ink-2);cursor:pointer">
-          <option value="">Category</option>
-          <option value="Uncategorized">Uncategorized</option>
-          ${allCats.filter(c => c !== 'Uncategorized').map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
-        </select>
+      <div id="tx-filter-pills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <button class="fpill add" id="tx-add-filter">
+        ${icon('plus', 11)} Add filter
+      </button>
+      <div class="tools-right">
+        <div class="seg" id="tx-view-seg">
+          <button class="on" data-view="visible">${icon('eye', 12)} Visible</button>
+          <button data-view="hidden">${icon('eye_off', 12)} Hidden</button>
+        </div>
       </div>
     </div>
+    <div class="tx-summary" id="tx-summary"></div>
 
-    <div id="tx-bulk-bar" style="display:none;background:var(--ink-1);color:white;padding:10px 16px;border-radius:10px;margin-bottom:12px;align-items:center;gap:12px;font-size:13px">
-      <span><strong id="tx-sel-count">0</strong> selected</span>
-      <button class="btn btn-sm" style="color:white;border-color:rgba(255,255,255,0.3)" onclick="txBulkAction('categorize')">Categorize</button>
-      <button class="btn btn-sm" id="tx-bulk-hide-btn" style="color:white;border-color:rgba(255,255,255,0.3)" onclick="txBulkAction('hide')">Hide</button>
-      <button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="txBulkAction('delete')">Delete</button>
-      <button class="btn btn-sm" style="color:white;border-color:rgba(255,255,255,0.3);margin-left:auto" onclick="txSelected=new Set();refresh();updateBulkBar()">Clear</button>
-    </div>
+    <!-- Bulk dock mounted dynamically — see updateBulkBar() -->
 
     <div class="card" style="padding:0;overflow:hidden">
       <table class="tbl" id="tx-table">
@@ -1226,17 +1226,186 @@ async function _renderTransactions(c) {
 
   const tbody = document.getElementById('tx-body');
   const searchInput = document.getElementById('tx-search');
-  const catFilter = document.getElementById('tx-cat-filter');
   const checkAll = document.getElementById('tx-check-all');
-  let activeAcct = '';
+  const pillsHost = document.getElementById('tx-filter-pills');
+  const summaryHost = document.getElementById('tx-summary');
+  const addFilterBtn = document.getElementById('tx-add-filter');
+  const viewSeg = document.getElementById('tx-view-seg');
 
-  // Account filter chips
-  document.querySelectorAll('.filter-chip[data-acct]').forEach(chip => {
-    chip.addEventListener('click', () => {
-      document.querySelectorAll('.filter-chip[data-acct]').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      activeAcct = chip.dataset.acct;
-      refresh();
+  // Unified filter state
+  const filterState = { accounts: [], category: '' };
+  let viewMode = 'visible';
+
+  function renderPills() {
+    const items = [];
+    if (filterState.accounts.length) {
+      const label = filterState.accounts.length === 1
+        ? filterState.accounts[0]
+        : `${filterState.accounts.length} accounts`;
+      items.push({ kind: 'accounts', ic: icon('wallet', 11), label: 'Account', value: label, swatch: null });
+    }
+    if (filterState.category) {
+      items.push({ kind: 'category', ic: icon('tag', 11), label: 'Category', value: filterState.category, swatch: catColor(filterState.category) });
+    }
+    pillsHost.innerHTML = items.map(it => `
+      <div class="fpop" data-kind="${it.kind}">
+        <button class="fpill" data-action="open">
+          <span class="label">${it.ic} ${esc(it.label)}</span>
+          <span class="value">${it.swatch ? `<span class="swatch" style="background:${it.swatch}"></span>` : ''}${esc(it.value)}</span>
+          <button class="x" data-action="clear" title="Clear">&times;</button>
+        </button>
+      </div>
+    `).join('');
+  }
+
+  function openFilterPopover(kind, anchor) {
+    document.querySelectorAll('.fpop.open .fpop-panel').forEach(p => p.parentElement.classList.remove('open'));
+    document.querySelectorAll('#tx-add-filter-pop').forEach(p => p.remove());
+
+    const host = anchor.closest('.fpop') || anchor.parentElement;
+    const panel = document.createElement('div');
+    panel.className = 'fpop-panel';
+    panel.id = 'tx-pop-' + kind;
+
+    if (kind === 'accounts') {
+      panel.innerHTML = `
+        <div class="fpop-search">${icon('search', 12)}<input placeholder="Filter accounts…" autofocus></div>
+        ${accts.map(a => `
+          <button class="fpop-opt ${filterState.accounts.includes(a) ? 'sel' : ''}" data-acct="${esc(a)}">
+            <span class="sw" style="background:${acctColor({ name: a })}"></span>
+            ${esc(a)}
+            <span class="ck">${icon('check', 13)}</span>
+          </button>
+        `).join('')}
+      `;
+    } else if (kind === 'category') {
+      const cats = ['Uncategorized', ...allCats.filter(c => c !== 'Uncategorized')];
+      panel.innerHTML = `
+        <div class="fpop-search">${icon('search', 12)}<input placeholder="Filter categories…" autofocus></div>
+        <div id="tx-cat-opts">
+          ${cats.map(c => `
+            <button class="fpop-opt ${filterState.category === c ? 'sel' : ''}" data-cat="${esc(c)}">
+              <span class="sw" style="background:${catColor(c)}"></span>
+              ${esc(c)}
+              <span class="ck">${icon('check', 13)}</span>
+            </button>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    host.appendChild(panel);
+    host.classList.add('open');
+
+    panel.querySelector('.fpop-search input')?.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase();
+      panel.querySelectorAll('.fpop-opt').forEach(o => {
+        o.style.display = o.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+    panel.querySelectorAll('.fpop-opt').forEach(opt => {
+      opt.addEventListener('click', () => {
+        if (kind === 'accounts') {
+          const a = opt.dataset.acct;
+          if (filterState.accounts.includes(a)) {
+            filterState.accounts = filterState.accounts.filter(x => x !== a);
+          } else {
+            filterState.accounts.push(a);
+          }
+          opt.classList.toggle('sel');
+        } else if (kind === 'category') {
+          filterState.category = filterState.category === opt.dataset.cat ? '' : opt.dataset.cat;
+          host.classList.remove('open');
+        }
+        renderPills();
+        refresh();
+      });
+    });
+  }
+
+  function openAddFilterMenu(anchor) {
+    document.querySelectorAll('.fpop.open').forEach(p => p.classList.remove('open'));
+    document.querySelectorAll('#tx-add-filter-pop').forEach(p => p.remove());
+    const panel = document.createElement('div');
+    panel.className = 'fpop-panel';
+    panel.id = 'tx-add-filter-pop';
+    panel.style.cssText = 'display:block;position:absolute;top:calc(100% + 6px);left:0;width:200px';
+    panel.innerHTML = `
+      <div class="fpop-group">Filter by</div>
+      <button class="fpop-opt" data-kind="accounts">${icon('wallet', 13)} Account ${filterState.accounts.length ? `<span class="ck" style="opacity:1">\u2713</span>` : ''}</button>
+      <button class="fpop-opt" data-kind="category">${icon('tag', 13)} Category ${filterState.category ? `<span class="ck" style="opacity:1">\u2713</span>` : ''}</button>
+    `;
+    const wrap = document.createElement('div');
+    wrap.className = 'fpop open';
+    wrap.style.cssText = 'position:relative;display:inline-block';
+    anchor.replaceWith(wrap);
+    wrap.appendChild(anchor);
+    wrap.appendChild(panel);
+    panel.querySelectorAll('.fpop-opt').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const kind = opt.dataset.kind;
+        wrap.classList.remove('open');
+        panel.remove();
+        if (kind === 'accounts' && !filterState.accounts.length) filterState.accounts = [accts[0]];
+        if (kind === 'category' && !filterState.category) filterState.category = (allCats[0] || 'Uncategorized');
+        renderPills();
+        const newPill = pillsHost.querySelector(`.fpop[data-kind="${kind}"]`);
+        if (newPill) openFilterPopover(kind, newPill.querySelector('.fpill'));
+        refresh();
+      });
+    });
+  }
+
+  // Click handlers on pill host
+  pillsHost.addEventListener('click', (e) => {
+    const action = e.target.closest('[data-action]')?.dataset.action;
+    const host = e.target.closest('.fpop');
+    if (!host) return;
+    if (action === 'clear') {
+      e.stopPropagation();
+      const kind = host.dataset.kind;
+      if (kind === 'accounts') filterState.accounts = [];
+      if (kind === 'category') filterState.category = '';
+      renderPills(); refresh();
+      return;
+    }
+    if (action === 'open') {
+      const kind = host.dataset.kind;
+      if (host.classList.contains('open')) { host.classList.remove('open'); return; }
+      openFilterPopover(kind, e.target);
+    }
+  });
+
+  addFilterBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openAddFilterMenu(addFilterBtn);
+  });
+
+  // Close popovers on outside click
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.fpop, #tx-add-filter')) {
+      document.querySelectorAll('.fpop.open').forEach(p => p.classList.remove('open'));
+      document.querySelectorAll('#tx-add-filter-pop').forEach(p => p.remove());
+    }
+  });
+
+  // View segment (Visible / Hidden)
+  viewSeg?.querySelectorAll('button').forEach(b => {
+    b.addEventListener('click', async () => {
+      if (b.classList.contains('on')) return;
+      viewSeg.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      viewMode = b.dataset.view;
+      const p = new URLSearchParams();
+      if (month) p.set('month', month);
+      p.set('limit', '200');
+      if (viewMode === 'hidden') p.set('hidden', '1');
+      invalidateApiCache('/api/transactions');
+      const fresh = await api(`/api/transactions?${p}`);
+      const items = [...(fresh?.transactions || fresh || [])];
+      txns.length = 0; items.forEach(t => txns.push(t));
+      txSelected = new Set();
+      refresh(); updateBulkBar();
     });
   });
 
@@ -1258,14 +1427,13 @@ async function _renderTransactions(c) {
 
   function getFiltered() {
     const q = (searchInput?.value||'').toLowerCase();
-    const cat = catFilter?.value||'';
     return txns.filter(t => {
       if (q && !(t.name||'').toLowerCase().includes(q) && !(t.category||'').toLowerCase().includes(q) && !(t.notes||'').toLowerCase().includes(q)) return false;
-      if (cat) {
+      if (filterState.category) {
         const txCat = t.category || 'Uncategorized';
-        if (txCat.toLowerCase() !== cat.toLowerCase()) return false;
+        if (txCat.toLowerCase() !== filterState.category.toLowerCase()) return false;
       }
-      if (activeAcct && t.account !== activeAcct) return false;
+      if (filterState.accounts.length && !filterState.accounts.includes(t.account)) return false;
       return true;
     });
   }
@@ -1275,38 +1443,20 @@ async function _renderTransactions(c) {
     renderRows(filtered);
     const showingEl = document.getElementById('tx-showing');
     if (showingEl) showingEl.textContent = filtered.length;
+    if (summaryHost) {
+      const inSum = filtered.filter(t => t.type === 'Income').reduce((s, t) => s + Math.abs(t.amount || 0), 0);
+      const outSum = filtered.filter(t => t.type !== 'Income').reduce((s, t) => s + Math.abs(t.amount || 0), 0);
+      summaryHost.innerHTML = `
+        <span><strong>${filtered.length}</strong> matched</span>
+        <span style="color:var(--pos)">${fmtCurrency(inSum)} in</span>
+        <span>${fmtCurrency(outSum)} out</span>
+        <button class="save-view" onclick="showToast('View saved (stub)')">${icon('bookmark', 11)} Save as view</button>
+      `;
+    }
   }
   refresh();
 
   searchInput?.addEventListener('input', refresh);
-  catFilter?.addEventListener('change', refresh);
-
-  let viewingHidden = false;
-  const toggleHiddenBtn = document.getElementById('tx-toggle-hidden');
-  const bulkHideBtn = document.getElementById('tx-bulk-hide-btn');
-  toggleHiddenBtn?.addEventListener('click', async () => {
-    viewingHidden = !viewingHidden;
-    const p = new URLSearchParams();
-    if (month) p.set('month', month);
-    p.set('limit', '200');
-    if (viewingHidden) p.set('hidden', '1');
-    invalidateApiCache('/api/transactions');
-    const fresh = await api(`/api/transactions?${p}`);
-    const items = [...(fresh?.transactions || fresh || [])];
-    txns.length = 0;
-    items.forEach(t => txns.push(t));
-    toggleHiddenBtn.classList.toggle('active', viewingHidden);
-    toggleHiddenBtn.innerHTML = viewingHidden
-      ? `${icon('eye',12)} Visible`
-      : `${icon('eye_off',12)} Hidden`;
-    if (bulkHideBtn) {
-      bulkHideBtn.textContent = viewingHidden ? 'Unhide' : 'Hide';
-      bulkHideBtn.setAttribute('onclick', viewingHidden ? "txBulkAction('unhide')" : "txBulkAction('hide')");
-    }
-    txSelected = new Set();
-    refresh();
-    updateBulkBar();
-  });
 
   checkAll?.addEventListener('change', () => {
     const checked = checkAll.checked;
@@ -1331,10 +1481,48 @@ async function _renderTransactions(c) {
   });
 
   function updateBulkBar() {
-    const bar = document.getElementById('tx-bulk-bar');
-    const cnt = document.getElementById('tx-sel-count');
-    if (bar) bar.style.display = txSelected.size ? 'flex' : 'none';
-    if (cnt) cnt.textContent = txSelected.size;
+    let dock = document.getElementById('bulk-dock');
+    if (!txSelected.size) {
+      dock?.classList.remove('open');
+      return;
+    }
+    if (!dock) {
+      dock = document.createElement('div');
+      dock.id = 'bulk-dock';
+      dock.className = 'bulk-dock';
+      document.body.appendChild(dock);
+    }
+    const hideLabel = viewMode === 'hidden' ? 'Unhide' : 'Hide';
+    const hideAction = viewMode === 'hidden' ? 'unhide' : 'hide';
+    dock.innerHTML = `
+      <span class="count"><span class="num-badge">${txSelected.size}</span> selected</span>
+      <span class="sep"></span>
+      <button class="pchip" data-action="categorize">${icon('tag', 11)} Categorize</button>
+      <button class="pchip" data-action="${hideAction}">${icon(viewMode === 'hidden' ? 'eye' : 'eye_off', 11)} ${hideLabel}</button>
+      <button class="pchip danger" data-action="delete">${icon('trash', 11)} Delete</button>
+      <span class="sep"></span>
+      <button class="pchip close" data-action="clear" title="Clear selection">&times;</button>
+    `;
+    dock.classList.add('open');
+    dock.querySelectorAll('.pchip[data-action]').forEach(btn => {
+      btn.onclick = () => {
+        const a = btn.dataset.action;
+        if (a === 'clear') {
+          txSelected = new Set(); refresh(); updateBulkBar();
+        } else {
+          txBulkAction(a);
+        }
+      };
+    });
+  }
+
+  // Honor pending category filter from insights navigation
+  if (window.__pendingTxCatFilter) {
+    filterState.category = window.__pendingTxCatFilter;
+    window.__pendingTxCatFilter = null;
+    renderPills(); refresh();
+  } else {
+    renderPills();
   }
 }
 
