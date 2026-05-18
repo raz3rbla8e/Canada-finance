@@ -9,7 +9,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 
 from boreal.models.users import (
     create_user, verify_password, get_user_by_email, mark_verified, update_password, user_count,
-    get_user_db_path,
+    get_user_db_path, set_admin,
 )
 from boreal.models.database import init_user_db
 from boreal.services.email import (
@@ -79,6 +79,9 @@ def signup():
         else:
             try:
                 user = create_user(email, display_name, password)
+                # First user ever → auto-promote to admin
+                if user_count() == 1:
+                    set_admin(user.id, True)
                 # Initialize the user's database
                 db_path = get_user_db_path(user.id)
                 init_user_db(db_path)
