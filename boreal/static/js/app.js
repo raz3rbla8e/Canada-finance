@@ -1287,8 +1287,9 @@ async function _renderTransactions(c) {
     p.set('limit', '200');
     if (showHiddenEl.checked) p.set('hidden', 'all');
     const fresh = await api(`/api/transactions?${p}`);
+    const items = [...(fresh?.transactions || fresh || [])];
     txns.length = 0;
-    (fresh.transactions || fresh || []).forEach(t => txns.push(t));
+    items.forEach(t => txns.push(t));
     refresh();
   });
 
