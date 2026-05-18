@@ -1287,6 +1287,7 @@ async function _renderTransactions(c) {
     if (month) p.set('month', month);
     p.set('limit', '200');
     if (viewingHidden) p.set('hidden', '1');
+    invalidateApiCache('/api/transactions');
     const fresh = await api(`/api/transactions?${p}`);
     const items = [...(fresh?.transactions || fresh || [])];
     txns.length = 0;
