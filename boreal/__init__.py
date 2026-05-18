@@ -13,11 +13,14 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from boreal.config import DB_PATH, PROJECT_ROOT, DEMO_MODE
-from boreal.models.database import init_db, close_db, init_user_db
+from boreal.models.database import init_db, close_db, init_user_db, run_migrations
 from boreal.models.users import (
     init_users_db, get_user_by_id, close_users_db, get_user_db_path, DATA_DIR,
 )
 from boreal.routes import register_blueprints
+
+# Track which per-user DBs have been migrated this process (avoids re-checking every request)
+_migrated_dbs: set = set()
 
 
 def _get_secret_key() -> str:
@@ -284,6 +287,15 @@ def create_app():
         db_path = get_user_db_path(current_user.id)
         if not os.path.exists(db_path):
             init_user_db(db_path)
+        elif db_path not in _migrated_dbs:
+            # Apply any pending migrations to existing user DBs (once per process)
+            import sqlite3
+            _udb = sqlite3.connect(db_path)
+            try:
+                run_migrations(_udb)
+            finally:
+                _udb.close()
+            _migrated_dbs.add(db_path)
         g.db_path = db_path
 
     _register_csrf(app)

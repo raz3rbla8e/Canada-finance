@@ -77,7 +77,7 @@ def _seed_demo_data(wipe=True):
         config, bank_name = detect_bank_config(first_line, configs)
         if config:
             txns = parse_with_config(text, config, learned)
-            added, dupes = save_transactions(txns)
+            added, dupes, *_ = save_transactions(txns)
             total_added += added
 
     # ── 2. Accounts (3 types) ──────────────────────────────────────────────────

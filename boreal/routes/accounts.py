@@ -46,6 +46,18 @@ def api_accounts_list():
         WHERE account IS NOT NULL AND account != ''
           AND account NOT IN (SELECT name FROM accounts)
     """)
+    # Fix-up: auto-detect account type for accounts still defaulted to 'chequing'
+    # whose name clearly indicates a different type
+    for row in db.execute(
+        "SELECT id, name FROM accounts WHERE account_type = 'chequing'"
+    ).fetchall():
+        lower = row["name"].lower()
+        if any(kw in lower for kw in ("credit card", "visa", "mastercard", "amex", "mc ")):
+            db.execute("UPDATE accounts SET account_type='credit' WHERE id=?", (row["id"],))
+        elif any(kw in lower for kw in ("invest", "tfsa", "rrsp")):
+            db.execute("UPDATE accounts SET account_type='investment' WHERE id=?", (row["id"],))
+        elif "saving" in lower:
+            db.execute("UPDATE accounts SET account_type='savings' WHERE id=?", (row["id"],))
     # Backfill account_id for any transactions missing it
     db.execute("""
         UPDATE transactions SET account_id = (
@@ -165,6 +177,20 @@ def api_accounts_delete(aid):
 def api_net_worth():
     """Compute net worth at each month-end from accounts."""
     db = get_db()
+    # Ensure accounts and account_id FKs are populated (idempotent, cheap)
+    db.execute("""
+        INSERT OR IGNORE INTO accounts (name, account_type, opening_balance)
+        SELECT DISTINCT account, 'chequing', 0
+        FROM transactions
+        WHERE account IS NOT NULL AND account != ''
+          AND account NOT IN (SELECT name FROM accounts)
+    """)
+    db.execute("""
+        UPDATE transactions SET account_id = (
+            SELECT id FROM accounts WHERE accounts.name = transactions.account
+        ) WHERE account_id IS NULL AND account IS NOT NULL AND account != ''
+    """)
+    db.commit()
     accounts = db.execute("SELECT * FROM accounts").fetchall()
     if not accounts:
         return jsonify([])

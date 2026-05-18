@@ -139,7 +139,7 @@ def seed_demo():
         config, bank_name = detect_bank_config(first_line, configs)
         if config:
             txns = parse_with_config(text, config, learned)
-            added, dupes = save_transactions(txns)
+            added, dupes, *_ = save_transactions(txns)
             total_added += added
             results.append({"file": fname, "bank": config.get("name", bank_name), "added": added, "dupes": dupes})
         else:

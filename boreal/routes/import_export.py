@@ -534,7 +534,7 @@ def api_import_ofx():
             continue
 
         txns = _parse_ofx(text, learned)
-        added, dupes = save_transactions(txns)
+        added, dupes, *_ = save_transactions(txns)
         results.append({
             "file": f.filename, "bank": "OFX Import",
             "added": added, "dupes": dupes,
