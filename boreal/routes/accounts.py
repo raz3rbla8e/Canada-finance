@@ -38,6 +38,15 @@ def api_account_names():
 def api_accounts_list():
     """List all registered accounts with computed balances."""
     db = get_db()
+    # Backfill: auto-register any transaction account names not yet in accounts table
+    db.execute("""
+        INSERT OR IGNORE INTO accounts (name, account_type, opening_balance)
+        SELECT DISTINCT account, 'chequing', 0
+        FROM transactions
+        WHERE account IS NOT NULL AND account != ''
+          AND account NOT IN (SELECT name FROM accounts)
+    """)
+    db.commit()
     accounts = db.execute("SELECT * FROM accounts ORDER BY name").fetchall()
     if not accounts:
         return jsonify([])
