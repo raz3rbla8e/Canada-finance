@@ -13,7 +13,7 @@ from boreal.services.categorization import load_learned_dict
 from boreal.services.csv_parser import (
     load_bank_configs, detect_bank_config, parse_with_config,
 )
-from boreal.services.rules_engine import save_transactions
+from boreal.services.rules_engine import save_transactions, detect_transfer_pairs
 
 import_export_bp = Blueprint("import_export", __name__)
 
@@ -47,10 +47,11 @@ def api_import():
         config, bank_name = detect_bank_config(first_line, configs)
         if config:
             txns = parse_with_config(text, config, learned)
-            added, dupes = save_transactions(txns)
+            added, dupes, transfers = save_transactions(txns)
             results.append({
                 "file": f.filename, "bank": config.get("name", bank_name),
                 "added": added, "dupes": dupes,
+                "transfers_detected": len(transfers),
                 "last_verified": config.get("last_verified", ""),
             })
         else:
@@ -58,7 +59,88 @@ def api_import():
                 "file": f.filename, "bank": "unknown", "added": 0, "dupes": 0,
                 "last_verified": "",
             })
-    return jsonify(results)
+    # After all files imported, detect cross-account transfer pairs
+    pairs = detect_transfer_pairs(db)
+    transfer_pairs = []
+    for p in pairs:
+        transfer_pairs.append({
+            "source": {
+                "id": p["source"]["id"], "date": p["source"]["date"],
+                "name": p["source"]["name"], "amount": p["source"]["amount"],
+                "account": p["source"]["account"],
+            },
+            "match": {
+                "id": p["match"]["id"], "date": p["match"]["date"],
+                "name": p["match"]["name"], "amount": p["match"]["amount"],
+                "account": p["match"]["account"],
+            },
+        })
+
+    return jsonify({"files": results, "transfer_pairs": transfer_pairs})
+
+
+@import_export_bp.route("/api/transfer-pairs")
+def api_transfer_pairs():
+    """Get unlinked transfer pair suggestions."""
+    db = get_db()
+    pairs = detect_transfer_pairs(db)
+    result = []
+    for p in pairs:
+        result.append({
+            "source": {
+                "id": p["source"]["id"], "date": p["source"]["date"],
+                "name": p["source"]["name"], "amount": p["source"]["amount"],
+                "account": p["source"]["account"],
+            },
+            "match": {
+                "id": p["match"]["id"], "date": p["match"]["date"],
+                "name": p["match"]["name"], "amount": p["match"]["amount"],
+                "account": p["match"]["account"],
+            },
+        })
+    return jsonify(result)
+
+
+@import_export_bp.route("/api/transfer-link", methods=["POST"])
+def api_transfer_link():
+    """Confirm a transfer pair — link two transactions."""
+    from boreal.services.rules_engine import link_transfer_pair
+    d = request.json or {}
+    id_a = d.get("id_a")
+    id_b = d.get("id_b")
+    if not id_a or not id_b:
+        return jsonify({"error": "id_a and id_b required"}), 400
+    try:
+        id_a = int(id_a)
+        id_b = int(id_b)
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid IDs"}), 400
+    db = get_db()
+    tid = link_transfer_pair(id_a, id_b, db)
+    return jsonify({"ok": True, "transfer_id": tid})
+
+
+@import_export_bp.route("/api/transfer-unlink", methods=["POST"])
+def api_transfer_unlink():
+    """Unlink a transfer pair — restore both transactions."""
+    d = request.json or {}
+    tx_id = d.get("id")
+    if not tx_id:
+        return jsonify({"error": "id required"}), 400
+    try:
+        tx_id = int(tx_id)
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid ID"}), 400
+    db = get_db()
+    tx = db.execute("SELECT transfer_id FROM transactions WHERE id=?", (tx_id,)).fetchone()
+    if not tx or not tx["transfer_id"]:
+        return jsonify({"error": "Not a linked transfer"}), 404
+    db.execute(
+        "UPDATE transactions SET transfer_id=NULL, hidden=0, category='' WHERE transfer_id=?",
+        (tx["transfer_id"],),
+    )
+    db.commit()
+    return jsonify({"ok": True})
 
 
 @import_export_bp.route("/api/detect-csv", methods=["POST"])

@@ -333,7 +333,12 @@ button{font-family:inherit;cursor:pointer}input,select,textarea{font-family:inhe
   width: 480px;
   animation: none;
 }
-.drawer.drawer-edit:not(.open) {
+.drawer.drawer-wide {
+  width: 520px;
+  animation: none;
+}
+.drawer.drawer-edit:not(.open),
+.drawer.drawer-wide:not(.open) {
   transform: translateX(100%);
 }
 
@@ -614,11 +619,36 @@ button{font-family:inherit;cursor:pointer}input,select,textarea{font-family:inhe
 .td-kbd-hint .kbd { font-size: 10px; padding: 1px 5px; }
 
 @media (max-width: 720px) {
-  .drawer.drawer-edit { width: 100%; }
+  .drawer.drawer-edit, .drawer.drawer-wide { width: 100%; }
   .td-foot { flex-direction: column-reverse; align-items: stretch; gap: 8px; }
   .td-foot-right { flex-direction: row; }
   .td-kbd-hint { display: none; }
   .td-amt { font-size: 28px; }
+}
+
+/* Transfer pair review card */
+.tr-pair-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px; border-radius: 10px;
+  background: var(--bg-sunken); margin: 8px 0 16px;
+}
+.tr-pair-side {
+  flex: 1; min-width: 0;
+}
+.tr-pair-acct {
+  font-size: 11px; font-weight: 600; color: var(--ink-2);
+  text-transform: uppercase; letter-spacing: 0.3px;
+  margin-bottom: 4px;
+}
+.tr-pair-name {
+  font-size: 14px; font-weight: 500; color: var(--ink-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tr-pair-meta {
+  font-size: 12px; color: var(--ink-3); margin-top: 2px;
+}
+.tr-pair-arrow {
+  color: var(--accent); flex-shrink: 0;
 }
 
 /* CSV WIZARD */

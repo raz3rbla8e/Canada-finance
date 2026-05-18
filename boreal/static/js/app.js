@@ -1711,6 +1711,7 @@ async function _renderTransactions(c) {
       <span class="count"><span class="num-badge">${txSelected.size}</span> selected</span>
       <span class="sep"></span>
       <button class="pchip" data-action="categorize">${icon('tag', 11)} Categorize</button>
+      <button class="pchip" data-action="transfer">${icon('arrow_r', 11)} Transfer</button>
       <button class="pchip" data-action="${hideAction}">${icon(viewMode === 'hidden' ? 'eye' : 'eye_off', 11)} ${hideLabel}</button>
       <button class="pchip danger" data-action="delete">${icon('trash', 11)} Delete</button>
       <span class="sep"></span>
@@ -1784,6 +1785,9 @@ window.txBulkAction = async function(action) {
     const cat = await appSelect('Choose a category:', { title: 'Bulk categorize', options: allCats });
     if (!cat) return;
     await api('/api/bulk-categorize', 'POST', { ids, category: cat });
+  } else if (action === 'transfer') {
+    await api('/api/bulk-transfer', 'POST', { ids });
+    showToast(`${ids.length} transaction${ids.length === 1 ? '' : 's'} marked as transfer`);
   }
   txSelected = new Set();
   document.getElementById('bulk-dock')?.classList.remove('open');
@@ -1967,6 +1971,13 @@ function openTxDrawer(tx, cats, onSave) {
             </div>
             <div class="td-toggle-row">
               <div>
+                <div class="td-toggle-lbl">Mark as transfer</div>
+                <div class="td-toggle-desc">Hides from P&amp;L — money moved between your own accounts</div>
+              </div>
+              <button class="btn btn-sm" id="dr-transfer-btn">${tx.category === 'Transfer' ? icon('check', 12) + ' Transfer' : icon('arrow_r', 12) + ' Mark'}</button>
+            </div>
+            <div class="td-toggle-row">
+              <div>
                 <div class="td-toggle-lbl">Split transaction</div>
                 <div class="td-toggle-desc">Divide across multiple categories</div>
               </div>
@@ -2049,6 +2060,7 @@ function openTxDrawer(tx, cats, onSave) {
     drawer.querySelector('#dr-save')?.addEventListener('click', save);
     drawer.querySelector('#dr-del')?.addEventListener('click', del);
     drawer.querySelector('#dr-split-btn')?.addEventListener('click', split);
+    drawer.querySelector('#dr-transfer-btn')?.addEventListener('click', markTransfer);
   }
 
   async function save() {
@@ -2093,6 +2105,20 @@ function openTxDrawer(tx, cats, onSave) {
     await api(`/api/transactions/${tx.id}/split`, 'POST', { amount: parseFloat(splitAmt) });
     showToast('Transaction split');
     closeTxDrawer();
+    refreshCurrentView();
+  }
+
+  async function markTransfer() {
+    if (tx.category === 'Transfer') {
+      // Unmark — restore via unlink
+      await api('/api/transfer-unlink', 'POST', { id: tx.id });
+      showToast('Transfer unmarked');
+    } else {
+      await api('/api/bulk-transfer', 'POST', { ids: [tx.id] });
+      showToast('Marked as transfer');
+    }
+    closeTxDrawer();
+    await refreshMonths();
     refreshCurrentView();
   }
 
@@ -3125,22 +3151,120 @@ async function _renderImport(c) {
       const res = await authFetch('/api/import', { method: 'POST', body: importFd, headers: { 'X-CSRF-Token': _csrfToken } });
       if (!res) { showToast('Import failed'); return; }
       if (!res.ok) { const err = await res.json().catch(() => ({})); showToast(err.error || 'Import failed'); return; }
-      const result = await res.json();
-      // result is an array of per-file results
-      const total = Array.isArray(result) ? result.reduce((s, r) => s + (r.added || 0), 0) : (result.imported || 0);
-      const dupes = Array.isArray(result) ? result.reduce((s, r) => s + (r.dupes || 0), 0) : 0;
-      const errors = Array.isArray(result) ? result.filter(r => r.error) : [];
+      const resultData = await res.json();
+      // New format: {files: [...], transfer_pairs: [...]}
+      // Backward compat: old format was a flat array
+      const fileResults = resultData.files || (Array.isArray(resultData) ? resultData : []);
+      const transferPairs = resultData.transfer_pairs || [];
+      const total = fileResults.reduce((s, r) => s + (r.added || 0), 0);
+      const dupes = fileResults.reduce((s, r) => s + (r.dupes || 0), 0);
+      const transfers = fileResults.reduce((s, r) => s + (r.transfers_detected || 0), 0);
+      const errors = fileResults.filter(r => r.error);
       if (errors.length) {
         showToast(`Import had errors: ${errors.map(e => e.error).join(', ')}`);
       } else {
-        showToast(`Imported ${total} transaction${total!==1?'s':''}${dupes ? ` (${dupes} duplicate${dupes!==1?'s':''} skipped)` : ''}`);
+        let msg = `Imported ${total} transaction${total!==1?'s':''}${dupes ? ` (${dupes} duplicate${dupes!==1?'s':''} skipped)` : ''}`;
+        if (transfers) msg += ` · ${transfers} transfer${transfers!==1?'s':''} detected`;
+        showToast(msg);
       }
       invalidateApiCache();
       wizard.style.display = 'none';
       wizard.innerHTML = '';
+
+      // Show transfer pair review if any detected
+      if (transferPairs.length) {
+        await showTransferReview(transferPairs);
+      }
+
       navigateTo('transactions');
     });
   }
+}
+
+// ══════════════════════════════════════════════════════════════
+// TRANSFER REVIEW (post-import)
+// ══════════════════════════════════════════════════════════════
+async function showTransferReview(pairs) {
+  if (!pairs.length) return;
+  let overlay = document.getElementById('drawer-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'drawer-overlay';
+    overlay.className = 'drawer-overlay';
+    document.body.appendChild(overlay);
+  }
+  let drawer = document.getElementById('tx-drawer');
+  if (!drawer) {
+    drawer = document.createElement('div');
+    drawer.id = 'tx-drawer';
+    document.body.appendChild(drawer);
+  }
+  drawer.className = 'drawer drawer-wide';
+
+  const remaining = [...pairs];
+  let confirmed = 0;
+  let dismissed = 0;
+
+  function renderReview() {
+    if (!remaining.length) {
+      closeTxDrawer();
+      if (confirmed) showToast(`${confirmed} transfer pair${confirmed !== 1 ? 's' : ''} linked`);
+      return;
+    }
+    const p = remaining[0];
+    drawer.innerHTML = `
+      <div class="td-head">
+        <div class="td-head-text">
+          <div class="td-head-name" style="font-size:15px">Transfer review</div>
+          <div class="td-head-sub">${remaining.length} pair${remaining.length !== 1 ? 's' : ''} remaining · ${confirmed} confirmed</div>
+        </div>
+        <button class="icon-btn" onclick="closeTxDrawer()" aria-label="Close">${icon('x', 14)}</button>
+      </div>
+      <div class="drawer-body td-body">
+        <div class="td-label">These two transactions look like a transfer between your accounts:</div>
+        <div class="tr-pair-card">
+          <div class="tr-pair-side">
+            <div class="tr-pair-acct">${esc(p.source.account)}</div>
+            <div class="tr-pair-name">${esc(p.source.name)}</div>
+            <div class="tr-pair-meta">${esc(fmtDate(p.source.date))} · ${fmtCurrency(Math.abs(p.source.amount))}</div>
+          </div>
+          <div class="tr-pair-arrow">${icon('arrow_r', 18)}</div>
+          <div class="tr-pair-side">
+            <div class="tr-pair-acct">${esc(p.match.account)}</div>
+            <div class="tr-pair-name">${esc(p.match.name)}</div>
+            <div class="tr-pair-meta">${esc(fmtDate(p.match.date))} · ${fmtCurrency(Math.abs(p.match.amount))}</div>
+          </div>
+        </div>
+      </div>
+      <div class="td-foot">
+        <button class="btn" id="tr-dismiss">Not a transfer</button>
+        <div class="td-foot-right">
+          <button class="btn" id="tr-skip">Skip</button>
+          <button class="btn btn-primary" id="tr-confirm">${icon('check', 13)} Confirm transfer</button>
+        </div>
+      </div>
+    `;
+    drawer.querySelector('#tr-confirm')?.addEventListener('click', async () => {
+      await api('/api/transfer-link', 'POST', { id_a: p.source.id, id_b: p.match.id });
+      confirmed++;
+      remaining.shift();
+      renderReview();
+    });
+    drawer.querySelector('#tr-dismiss')?.addEventListener('click', () => {
+      dismissed++;
+      remaining.shift();
+      renderReview();
+    });
+    drawer.querySelector('#tr-skip')?.addEventListener('click', () => {
+      remaining.shift();
+      renderReview();
+    });
+  }
+
+  overlay.classList.add('open');
+  drawer.classList.add('open');
+  overlay.onclick = () => closeTxDrawer();
+  renderReview();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3160,6 +3284,7 @@ async function _renderRules(c) {
     if (r.action === 'label') actionLabel = `Label as <span style="color:var(--accent)">${esc(r.action_value||'')}</span>`;
     else if (r.action === 'hide') actionLabel = 'Hide transaction';
     else if (r.action === 'pass') actionLabel = 'Skip (pass)';
+    else if (r.action === 'transfer') actionLabel = 'Mark as transfer';
     return { conds, actionLabel };
   }
 
@@ -3331,6 +3456,7 @@ function openRuleModal(existing) {
           <div class="field"><label>Action</label><select id="rule-action">
             <option value="label" ${(existing?.action||'label')==='label'?'selected':''}>Label (set category)</option>
             <option value="hide" ${existing?.action==='hide'?'selected':''}>Hide transaction</option>
+            <option value="transfer" ${existing?.action==='transfer'?'selected':''}>Mark as transfer</option>
             <option value="pass" ${existing?.action==='pass'?'selected':''}>Pass (skip)</option>
           </select></div>
           <div class="field" id="action-value-field" style="${(existing?.action||'label')==='label'?'':'display:none'}"><label>Category</label><input id="rule-action-value" value="${esc(existing?.action_value||'')}" placeholder="e.g. Groceries"></div>

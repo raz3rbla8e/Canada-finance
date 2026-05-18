@@ -7,11 +7,12 @@ from boreal.config import RULES_TEMPLATE_DIR
 from boreal.models.database import get_db
 from boreal.services.rules_engine import (
     load_enabled_rules, _condition_matches, evaluate_rules, apply_rule_to_transaction,
+    detect_transfer_pairs, link_transfer_pair,
 )
 
 rules_bp = Blueprint("rules", __name__)
 
-VALID_RULE_ACTIONS = {"hide", "label", "pass"}
+VALID_RULE_ACTIONS = {"hide", "label", "pass", "transfer"}
 VALID_RULE_FIELDS = {"description", "amount", "account", "type"}
 VALID_RULE_OPERATORS = {"contains", "not_contains", "equals", "not_equals", "contains_any", "starts_with", "ends_with", "greater_than", "less_than"}
 
@@ -206,6 +207,7 @@ def api_rules_apply_all():
     db = get_db()
     rows = db.execute("SELECT * FROM transactions").fetchall()
     affected = 0
+    transfer_flagged = []
     for r in rows:
         tx = dict(r)
         matched = evaluate_rules(tx, rules)
@@ -225,8 +227,21 @@ def api_rules_apply_all():
                     (tx.get("hidden", 0), tx["type"], tx["category"], tx["id"]),
                 )
                 affected += 1
+                # Track transactions flagged as transfers for pair matching
+                if matched["action"] == "transfer":
+                    transfer_flagged.append(tx["id"])
     db.commit()
-    return jsonify({"affected": affected})
+
+    # After apply-all, run pair detection for any newly flagged transfers
+    pairs_linked = 0
+    if transfer_flagged:
+        pairs = detect_transfer_pairs(db)
+        for p in pairs:
+            if p["source"]["id"] in transfer_flagged or p["match"]["id"] in transfer_flagged:
+                link_transfer_pair(p["source"]["id"], p["match"]["id"], db)
+                pairs_linked += 1
+
+    return jsonify({"affected": affected, "pairs_linked": pairs_linked})
 
 
 @rules_bp.route("/api/rule-templates")
