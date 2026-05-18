@@ -13,8 +13,9 @@
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ range(10000,99999) | random }}">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ asset_v }}">
 </head>
 <body>
 
@@ -146,7 +147,7 @@
   <button class="x-btn" onclick="dismissToast()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
 </div>
 
-<script src="{{ url_for('static', filename='js/app.js') }}?v={{ range(10000,99999) | random }}"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_v }}"></script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/static/sw.js').catch(()=>{})}</script>
 </body>
 </html>

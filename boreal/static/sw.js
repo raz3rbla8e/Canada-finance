@@ -26,8 +26,12 @@ self.addEventListener('fetch', event => {
   if (event.request.url.includes('/api/')) {
     event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
   } else {
+    // Strip query params for cache matching (cache-bust params like ?v=xxx)
+    const url = new URL(event.request.url);
+    url.search = '';
+    const cleanRequest = new Request(url.toString(), event.request);
     event.respondWith(
-      caches.match(event.request).then(cached => cached || fetch(event.request))
+      caches.match(cleanRequest).then(cached => cached || fetch(event.request))
     );
   }
 });

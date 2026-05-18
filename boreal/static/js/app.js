@@ -330,17 +330,14 @@ function navigateTo(view) {
   renderView(view);
 }
 async function updateNavCounts() {
-  const [txRes, schedRes, rulesRes] = await Promise.all([
-    api('/api/transactions?limit=1'),
-    api('/api/schedules'),
-    api('/api/rules'),
-  ]);
+  const data = await api('/api/counts');
+  if (!data) return;
   const txEl = document.getElementById('nav-txn-count');
   const schedEl = document.getElementById('nav-sched-count');
   const rulesEl = document.getElementById('nav-rules-count');
-  if (txEl && txRes) txEl.textContent = txRes.total || '';
-  if (schedEl && schedRes) schedEl.textContent = (schedRes.length || '') ;
-  if (rulesEl && rulesRes) rulesEl.textContent = (rulesRes.length || '');
+  if (txEl) txEl.textContent = data.transactions || '';
+  if (schedEl) schedEl.textContent = data.schedules || '';
+  if (rulesEl) rulesEl.textContent = data.rules || '';
 }
 
 function renderView(view) {
@@ -731,15 +728,12 @@ async function renderMyAccount(c) { c.innerHTML = settingsSkeleton(); try { awai
 // INIT
 // ══════════════════════════════════════════════════════════════
 async function init() {
-  // Load all initial data in parallel
-  const [me, cats, settings, months, demo, health] = await Promise.all([
-    api('/api/me'),
-    api('/api/categories'),
-    api('/api/settings'),
-    api('/api/months'),
-    api('/api/demo'),
-    api('/api/health'),
-  ]);
+  // Single bootstrap call replaces 6 separate API calls
+  const boot = await api('/api/bootstrap');
+  if (!boot) return;
+
+  const { me, categories: cats, settings, months, demo, db_exists, counts } = boot;
+
   // Apply user info
   if (me) {
     const avatarEl = document.getElementById('user-avatar');
@@ -779,9 +773,18 @@ async function init() {
     updateMonthLabel();
   }
   // Check demo
-  if (demo) STATE.isDemo = demo.demo;
+  STATE.isDemo = !!demo;
+  // Apply nav counts immediately
+  if (counts) {
+    const txEl = document.getElementById('nav-txn-count');
+    const schedEl = document.getElementById('nav-sched-count');
+    const rulesEl = document.getElementById('nav-rules-count');
+    if (txEl) txEl.textContent = counts.transactions || '';
+    if (schedEl) schedEl.textContent = counts.schedules || '';
+    if (rulesEl) rulesEl.textContent = counts.rules || '';
+  }
   // Check if DB exists
-  if (health && !health.db_exists) {
+  if (!db_exists) {
     STATE.view = 'onboarding';
     renderOnboarding(document.getElementById('view-container'));
     return;

@@ -435,3 +435,85 @@ def api_forecast():
         "recurring_income": round(recurring_income, 2),
         "current_net_worth": round(nw, 2),
     })
+
+
+@summary_bp.route("/api/counts")
+def api_counts():
+    """Lightweight endpoint returning nav badge counts (replaces 3 separate fetches)."""
+    db = get_db()
+    tx_count = db.execute(
+        "SELECT COUNT(*) as c FROM transactions WHERE hidden=0"
+    ).fetchone()["c"]
+    sched_count = db.execute(
+        "SELECT COUNT(*) as c FROM scheduled_transactions"
+    ).fetchone()["c"]
+    rules_count = db.execute(
+        "SELECT COUNT(*) as c FROM import_rules"
+    ).fetchone()["c"]
+    return jsonify({
+        "transactions": tx_count,
+        "schedules": sched_count,
+        "rules": rules_count,
+    })
+
+
+@summary_bp.route("/api/bootstrap")
+def api_bootstrap():
+    """Single endpoint returning all data needed for initial app load.
+    Replaces 6 separate init() calls: /me, /categories, /settings, /months, /demo, /health.
+    """
+    from flask import current_app
+    from flask_login import current_user
+    from boreal.models.users import get_user_db_path
+    import os
+
+    # User info
+    me = {
+        "id": current_user.id,
+        "email": current_user.email,
+        "display_name": current_user.display_name,
+        "verified": current_user.verified,
+        "is_admin": current_user.is_admin,
+    }
+
+    db = get_db()
+
+    # Categories
+    cats = [dict(r) for r in db.execute(
+        "SELECT id, name, type, icon, user_created, sort_order, group_id FROM categories ORDER BY type, sort_order"
+    ).fetchall()]
+
+    # Settings
+    settings = {r["key"]: r["value"] for r in db.execute(
+        "SELECT key, value FROM settings"
+    ).fetchall()}
+
+    # Months
+    months = [r["m"] for r in db.execute(
+        "SELECT DISTINCT substr(date,1,7) as m FROM transactions WHERE hidden=0 ORDER BY m DESC"
+    ).fetchall()]
+
+    # Demo
+    demo = current_app.config.get("DEMO_MODE", False)
+
+    # Health (DB exists check)
+    db_exists = os.path.isfile(get_user_db_path(current_user.id))
+
+    # Nav counts
+    tx_count = db.execute("SELECT COUNT(*) as c FROM transactions WHERE hidden=0").fetchone()["c"]
+    sched_count = db.execute("SELECT COUNT(*) as c FROM scheduled_transactions").fetchone()["c"]
+    rules_count = db.execute("SELECT COUNT(*) as c FROM import_rules").fetchone()["c"]
+
+    return jsonify({
+        "me": me,
+        "categories": cats,
+        "settings": settings,
+        "months": months,
+        "demo": demo,
+        "db_exists": db_exists,
+        "counts": {
+            "transactions": tx_count,
+            "schedules": sched_count,
+            "rules": rules_count,
+        },
+    })

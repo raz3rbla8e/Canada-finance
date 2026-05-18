@@ -17,17 +17,27 @@ def api_accounts_list():
     """List all registered accounts with computed balances."""
     db = get_db()
     accounts = db.execute("SELECT * FROM accounts ORDER BY name").fetchall()
+    if not accounts:
+        return jsonify([])
+    # Single query to compute income/expenses per account
+    totals = db.execute(
+        """SELECT account, type, COALESCE(SUM(amount),0) as total
+           FROM transactions WHERE hidden=0
+           GROUP BY account, type"""
+    ).fetchall()
+    acct_totals = {}
+    for r in totals:
+        key = r["account"]
+        if key not in acct_totals:
+            acct_totals[key] = {"income": 0, "expenses": 0}
+        if r["type"] == "Income":
+            acct_totals[key]["income"] = r["total"]
+        else:
+            acct_totals[key]["expenses"] = r["total"]
     result = []
     for a in accounts:
-        income = db.execute(
-            "SELECT COALESCE(SUM(amount),0) as t FROM transactions WHERE account=? AND type='Income' AND hidden=0",
-            (a["name"],),
-        ).fetchone()["t"]
-        expenses = db.execute(
-            "SELECT COALESCE(SUM(amount),0) as t FROM transactions WHERE account=? AND type='Expense' AND hidden=0",
-            (a["name"],),
-        ).fetchone()["t"]
-        balance = a["opening_balance"] + income - expenses
+        t = acct_totals.get(a["name"], {"income": 0, "expenses": 0})
+        balance = a["opening_balance"] + t["income"] - t["expenses"]
         result.append({
             "id": a["id"],
             "name": a["name"],
@@ -113,21 +123,42 @@ def api_net_worth():
     all_months = [r["m"] for r in months_rows]
     # Limit to last 24 months
     all_months = all_months[-24:]
+    if not all_months:
+        return jsonify([])
+
+    # Single aggregated query: cumulative totals per account per month
+    totals = db.execute(
+        """SELECT account, substr(date,1,7) as month, type, SUM(amount) as total
+           FROM transactions WHERE hidden=0
+           GROUP BY account, month, type
+           ORDER BY month"""
+    ).fetchall()
+    # Build cumulative map: {account: {month: cumulative_net}}
+    # First, build monthly deltas
+    monthly_delta = {}  # {account: {month: net_delta}}
+    for r in totals:
+        acct = r["account"]
+        m = r["month"]
+        if acct not in monthly_delta:
+            monthly_delta[acct] = {}
+        if m not in monthly_delta[acct]:
+            monthly_delta[acct][m] = 0
+        if r["type"] == "Income":
+            monthly_delta[acct][m] += r["total"]
+        else:
+            monthly_delta[acct][m] -= r["total"]
+
+    # Compute net worth at each target month
     result = []
     for m in all_months:
         total = 0
         for a in accounts:
-            like = f"{m}%"
-            # Sum all transactions up to and including this month
-            income = db.execute(
-                "SELECT COALESCE(SUM(amount),0) as t FROM transactions WHERE account=? AND type='Income' AND hidden=0 AND date <= ?",
-                (a["name"], f"{m}-31"),
-            ).fetchone()["t"]
-            expenses = db.execute(
-                "SELECT COALESCE(SUM(amount),0) as t FROM transactions WHERE account=? AND type='Expense' AND hidden=0 AND date <= ?",
-                (a["name"], f"{m}-31"),
-            ).fetchone()["t"]
-            balance = a["opening_balance"] + income - expenses
+            balance = a["opening_balance"]
+            acct_deltas = monthly_delta.get(a["name"], {})
+            # Sum all deltas up to and including this month
+            for dm, delta in acct_deltas.items():
+                if dm <= m:
+                    balance += delta
             total += balance
         result.append({"month": m, "net_worth": round(total, 2)})
     return jsonify(result)

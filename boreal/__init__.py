@@ -1,3 +1,4 @@
+import hashlib
 import os
 import re
 import secrets
@@ -5,6 +6,7 @@ import threading
 from datetime import timedelta
 
 from flask import Flask, session, request, jsonify, g
+from flask_compress import Compress
 from flask_login import LoginManager, current_user
 from flask_mail import Mail
 from flask_limiter import Limiter
@@ -143,7 +145,7 @@ def _start_demo_reset_timer(app):
 
 
 def _register_security_headers(app):
-    """Add security headers to every response."""
+    """Add security headers and cache control to every response."""
 
     @app.after_request
     def security_headers(response):
@@ -158,7 +160,21 @@ def _register_security_headers(app):
             "img-src 'self' data:; "
             "connect-src 'self'"
         )
+        # Cache static assets aggressively (they have hash-based cache busters)
+        if request.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
+
+
+def _compute_asset_hash():
+    """Compute a stable hash from static assets for cache-busting."""
+    h = hashlib.md5()
+    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+    for fname in ("js/app.js", "css/style.css"):
+        fpath = os.path.join(static_dir, fname)
+        if os.path.exists(fpath):
+            h.update(str(os.path.getmtime(fpath)).encode())
+    return h.hexdigest()[:10]
 
 
 def create_app():
@@ -167,6 +183,22 @@ def create_app():
     app.config["DEMO_MODE"] = DEMO_MODE
     app.secret_key = _get_secret_key()
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
+
+    # ── Compression (gzip/brotli) ─────────────────────────────────────────────
+    app.config["COMPRESS_MIMETYPES"] = [
+        "text/html", "text/css", "text/xml",
+        "application/json", "application/javascript",
+    ]
+    app.config["COMPRESS_MIN_SIZE"] = 512
+    app.config["COMPRESS_STREAMS"] = True
+    Compress(app)
+
+    # ── Asset cache-busting hash ──────────────────────────────────────────────
+    app.config["ASSET_HASH"] = _compute_asset_hash()
+
+    @app.context_processor
+    def inject_asset_hash():
+        return {"asset_v": app.config["ASSET_HASH"]}
 
     # ── Session cookie settings ───────────────────────────────────────────────
     app.config["REMEMBER_COOKIE_DURATION"] = timedelta(days=30)
