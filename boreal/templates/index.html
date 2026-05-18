@@ -33,7 +33,6 @@
       </div>
       <div>
         <div class="brand-name">Boreal</div>
-        <div class="brand-sub">v2.4 · local</div>
       </div>
     </div>
 
@@ -102,14 +101,17 @@
 
   <!-- MAIN -->
   <main class="main">
-    <div class="topbar">
-      <span class="topbar-crumb" id="topbar-crumb">Dashboard</span>
-      <span class="crumb-sep" style="color:var(--ink-4)">/</span>
-      <div class="month-picker">
-        <button onclick="stepMonth(-1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg></button>
-        <span class="label" id="month-label"></span>
-        <button onclick="stepMonth(1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6l6 6-6 6"/></svg></button>
+    <div class="topbar" id="topbar">
+      <div class="topbar-section" id="topbar-section">
+        <span class="ic" id="topbar-icon"></span>
+        <span id="topbar-crumb">Dashboard</span>
       </div>
+      <div class="month-chip">
+        <button onclick="stepMonth(-1)" aria-label="Previous month"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg></button>
+        <button class="val" id="month-label" onclick="openMonthPicker()"></button>
+        <button onclick="stepMonth(1)" aria-label="Next month"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6l6 6-6 6"/></svg></button>
+      </div>
+      <button class="month-reset hidden" id="month-reset" onclick="resetMonth()">This month</button>
       <div class="topbar-spacer"></div>
       <div class="searchbox" onclick="openCommandPalette()" style="cursor:pointer">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>

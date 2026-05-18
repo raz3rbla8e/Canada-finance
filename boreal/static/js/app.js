@@ -138,6 +138,7 @@ const ICONS = {
   upload: '<path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4M12 3v12M7 8l5-5 5 5"/>',
   cog: '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.15-1.43l2-1.55-2-3.46-2.36.85a7 7 0 0 0-2.48-1.43L13.5 2h-3l-.51 2.98a7 7 0 0 0-2.48 1.43l-2.36-.85-2 3.46 2 1.55A7 7 0 0 0 5 12c0 .49.05.96.15 1.43l-2 1.55 2 3.46 2.36-.85a7 7 0 0 0 2.48 1.43L10.5 22h3l.51-2.98a7 7 0 0 0 2.48-1.43l2.36.85 2-3.46-2-1.55c.1-.47.15-.94.15-1.43z"/>',
   chev_l: '<path d="M14 6l-6 6 6 6"/>',
+  grip: '<circle cx="9" cy="6" r="1.2"/><circle cx="15" cy="6" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/><circle cx="9" cy="18" r="1.2"/><circle cx="15" cy="18" r="1.2"/>',
   chev_r: '<path d="M10 6l6 6-6 6"/>',
   chev_d: '<path d="M6 9l6 6 6-6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
@@ -288,7 +289,10 @@ async function toggleAlerts() {
   dd.classList.remove('hidden');
   const data = await api('/api/alerts');
   if (!data || !data.alerts.length) {
-    dd.innerHTML = '<div class="notif-header">Notifications</div><div class="notif-empty">No alerts right now</div>';
+    dd.innerHTML = `<div class="notif-header">Notifications</div><div class="notif-empty">
+      <div style="font-size:13px;color:var(--ink-2);font-weight:500;margin-bottom:4px">All caught up</div>
+      <div style="font-size:11.5px;color:var(--ink-3);line-height:1.5;max-width:240px;margin:0 auto">Boreal pings you on bank price changes, over-pace budgets, and unexpected income.</div>
+    </div>`;
     return;
   }
   const toneMap = { warn:['var(--warn-soft)','var(--warn)'], accent:['var(--accent-soft)','var(--accent)'], pos:['var(--pos-soft)','var(--pos)'] };
@@ -313,13 +317,46 @@ document.addEventListener('click', (e) => {
 // ── NAVIGATION ────────────────────────────────────────────────
 const MONTH_AWARE_VIEWS = new Set(['dashboard','transactions','budgets']);
 function setMonthPickerVisibility(view) {
-  const mp = document.querySelector('.topbar .month-picker');
-  const sep = document.querySelector('.topbar .crumb-sep');
-  if (!mp) return;
-  const show = MONTH_AWARE_VIEWS.has(view);
-  mp.classList.toggle('is-hidden', !show);
-  if (sep) sep.classList.toggle('is-hidden', !show);
+  // Now handled by .topbar.no-month CSS class via updateTopbar()
 }
+// Section icons for topbar (Case 08)
+const SECTION_ICONS = {
+  dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
+  transactions: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>',
+  budgets: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>',
+  accounts: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 1 0-4h12"/><circle cx="17" cy="13" r="1.2"/></svg>',
+  year: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="13" width="3" height="7" rx="1"/><rect x="10.5" y="9" width="3" height="11" rx="1"/><rect x="17" y="5" width="3" height="15" rx="1"/></svg>',
+  schedules: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  rules: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h10M4 12h7M4 18h10"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
+  import: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4M12 3v12M7 8l5-5 5 5"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.15-1.43l2-1.55-2-3.46-2.36.85a7 7 0 0 0-2.48-1.43L13.5 2h-3l-.51 2.98a7 7 0 0 0-2.48 1.43l-2.36-.85-2 3.46 2 1.55A7 7 0 0 0 5 12c0 .49.05.96.15 1.43l-2 1.55 2 3.46 2.36-.85a7 7 0 0 0 2.48 1.43L10.5 22h3l.51-2.98a7 7 0 0 0 2.48-1.43l2.36.85 2-3.46-2-1.55c.1-.47.15-.94.15-1.43z"/></svg>',
+  account: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+};
+const MONTH_SCOPED_VIEWS = new Set(['dashboard', 'transactions', 'budgets', 'accounts', 'year']);
+const VIEW_LABELS = { dashboard:'Dashboard', transactions:'Transactions', budgets:'Budgets', accounts:'Accounts', year:'Year review', import:'Import', schedules:'Scheduled', rules:'Rules', settings:'Settings', account:'Account' };
+
+function updateTopbar(view) {
+  const topbar = document.getElementById('topbar');
+  const crumb = document.getElementById('topbar-crumb');
+  const iconHost = document.getElementById('topbar-icon');
+  if (crumb) crumb.textContent = VIEW_LABELS[view] || view;
+  if (iconHost) iconHost.innerHTML = SECTION_ICONS[view] || '';
+  topbar?.classList.toggle('no-month', !MONTH_SCOPED_VIEWS.has(view));
+  const reset = document.getElementById('month-reset');
+  const today = new Date().toISOString().slice(0, 7);
+  if (reset) reset.classList.toggle('hidden', currentMonth() === today);
+}
+
+function resetMonth() {
+  const today = new Date().toISOString().slice(0, 7);
+  setMonth(today);
+  document.getElementById('month-reset')?.classList.add('hidden');
+}
+
+function openMonthPicker() {
+  // Stub: for now, fall through to month stepping. Full calendar can come later.
+}
+
 function navigateTo(view) {
   STATE.view = view;
   // Clean up floating bulk dock on navigation
@@ -328,9 +365,8 @@ function navigateTo(view) {
   document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.view === view);
   });
-  // Update topbar crumb
-  const labels = { dashboard:'Dashboard', transactions:'Transactions', budgets:'Budgets', accounts:'Accounts', year:'Year review', import:'Import', schedules:'Scheduled', rules:'Rules', settings:'Settings', account:'Account' };
-  document.getElementById('topbar-crumb').textContent = labels[view] || view;
+  // Update topbar (Case 08)
+  updateTopbar(view);
   // Hide month picker on views that don't consume the month
   setMonthPickerVisibility(view);
   // Render view
@@ -929,6 +965,21 @@ async function loadForecastCard() {
     ${chart}`;
 }
 
+// ── EMPTY STATE RENDERER (Case 11) ────────────────────────────
+function renderEmptyState({ title, body, primary, secondary, iconKey = 'upload' }) {
+  return `<div class="empty-v2">
+    <div class="art">${icon(iconKey, 32)}</div>
+    <div>
+      <h4>${esc(title)}</h4>
+      <p>${esc(body)}</p>
+    </div>
+    <div class="actions">
+      ${primary ? `<button class="btn btn-primary" onclick="${primary.onclick}">${esc(primary.label)}</button>` : ''}
+      ${secondary ? `<button class="btn" onclick="${secondary.onclick}">${esc(secondary.label)}</button>` : ''}
+    </div>
+  </div>`;
+}
+
 // ── BUDGET PACING RENDERER (Case 06) ──────────────────────────
 function renderBudgetV2(b) {
   const pct = b.limit ? Math.min(b.spent / b.limit * 100, 100) : 0;
@@ -981,7 +1032,16 @@ async function _renderDashboard(c) {
     api('/api/accounts-list'),
     api('/api/net-worth'),
   ]);
-  if (!summary) { c.innerHTML = '<div class="page"><div class="page-title">No data yet</div><div class="page-sub">Import a bank CSV or add transactions manually to get started.</div></div>'; return; }
+  if (!summary) {
+    c.innerHTML = `<div class="page">${renderEmptyState({
+      title: 'Pull in your first month',
+      body: 'Drag a CSV or OFX from any supported bank \u2014 Boreal will detect the format and categorize 80% of your transactions on import.',
+      primary: { label: 'Import file', onclick: "navigateTo('import')" },
+      secondary: { label: 'Add manually', onclick: 'openAddModal()' },
+      iconKey: 'upload',
+    })}</div>`;
+    return;
+  }
 
   const income = summary.income || 0;
   const expenses = summary.expenses || 0;
@@ -2568,19 +2628,24 @@ async function _renderYear(c) {
           <span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:var(--ink-2)"></span>Expenses</span>
         </div>
       </div>
-      <div class="year-strip">
+      <div class="year-strip-v2">
         ${allMonths.map((m,i) => {
           const incH = max ? ((m.income||0)/max*100) : 0;
           const expH = max ? ((m.expenses||0)/max*100) : 0;
           const isCurrent = m.month === currentMonth();
-          return `<div class="year-bar${isCurrent?' current':''}" title="${monthLabel(m.month)}: ${fmtCurrency(m.income||0)} in / ${fmtCurrency(m.expenses||0)} out">
-            <div style="display:flex;align-items:flex-end;gap:3px;height:calc(100% - 18px);justify-content:center">
-              <div class="ypos" style="width:11px;height:${incH}%;min-height:${m.income?2:0}px"></div>
-              <div class="yneg" style="width:11px;height:${expH}%;min-height:${m.expenses?2:0}px"></div>
+          return `<div class="col${isCurrent?' cur':''}" title="${monthLabel(m.month)}: ${fmtCurrency(m.income||0)} in / ${fmtCurrency(m.expenses||0)} out">
+            <div class="row-pair">
+              <div class="b-inc" style="--h:${incH}%"></div>
+              <div class="b-exp" style="--h:${expH}%"></div>
             </div>
-            <div class="ymo">${monthShort(m.month)}</div>
+            <div class="ym">${monthShort(m.month)}</div>
           </div>`;
         }).join('')}
+      </div>
+      <div class="year-strip-v2-legend">
+        <span><span class="sw" style="background:var(--pos)"></span>Income \u2191</span>
+        <span>shared zero line</span>
+        <span><span class="sw" style="background:var(--ink-2);opacity:0.85"></span>Expenses \u2193</span>
       </div>
     </div>
 
@@ -3080,7 +3145,8 @@ async function _renderRules(c) {
 
       ${rList.length ? rList.map((r, i) => {
         const { conds, actionLabel } = ruleDesc(r);
-        return `<div class="rule-card">
+        return `<div class="rule-card" draggable="true" data-rule-id="${r.id}">
+        <span class="drag-handle">${icon('grip',14)}</span>
         <div class="rule-num">${r.priority != null ? r.priority : (i+1)}</div>
         <div style="flex:1">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
@@ -3160,6 +3226,27 @@ async function _renderRules(c) {
       if (result?.matched) el.innerHTML = `${icon('check',14)} Matched: <strong>${esc(result.rule_name)}</strong> → ${esc(result.action)} ${esc(result.action_value||'')}`;
       else el.textContent = 'No rule matched';
     }
+  });
+
+  // QH-6: Drag-and-drop reorder for rules
+  const ruleCards = c.querySelectorAll('.rule-card[draggable]');
+  let dragSrc = null;
+  ruleCards.forEach(card => {
+    card.addEventListener('dragstart', e => { dragSrc = card; card.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+    card.addEventListener('dragend', () => { card.classList.remove('dragging'); dragSrc = null; });
+    card.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+    card.addEventListener('drop', async e => {
+      e.preventDefault();
+      if (!dragSrc || dragSrc === card) return;
+      const container = card.parentNode;
+      const cards = [...container.querySelectorAll('.rule-card[draggable]')];
+      const fromIdx = cards.indexOf(dragSrc);
+      const toIdx = cards.indexOf(card);
+      if (fromIdx < toIdx) card.after(dragSrc); else card.before(dragSrc);
+      const order = [...container.querySelectorAll('.rule-card[draggable]')].map(c => +c.dataset.ruleId);
+      await api('/api/rules/reorder', 'POST', { order });
+      _renderRules(c);
+    });
   });
 }
 

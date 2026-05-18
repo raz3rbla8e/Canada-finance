@@ -240,7 +240,7 @@ html.dark .cat-pill{background:var(--bg-sunken);color:var(--ink-2);border-color:
 .chip-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .filter-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid var(--line-1);background:var(--bg-surface);border-radius:6px;font-size:12px;color:var(--ink-2);cursor:pointer}
 .filter-chip:hover{background:var(--bg-hover)}
-.filter-chip.active{background:var(--ink-1);color:var(--bg-app);border-color:var(--ink-1)}
+.filter-chip.active{background:var(--accent-soft);color:var(--accent-ink);border-color:color-mix(in oklch, var(--accent) 25%, transparent)}
 
 /* LIST + SECTION */
 .list-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line-1)}
@@ -273,7 +273,11 @@ html.dark .cat-pill{background:var(--bg-sunken);color:var(--ink-2);border-color:
 .settings-group{border:1px solid var(--line-1);border-radius:12px;overflow:hidden;margin-bottom:20px}
 
 /* RULES */
-.rule-card{background:var(--bg-surface);border:1px solid var(--line-1);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:16px;margin-bottom:10px}
+.rule-card{background:var(--bg-surface);border:1px solid var(--line-1);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:16px;margin-bottom:10px;transition:box-shadow 0.15s}
+.rule-card[draggable="true"]{cursor:grab}
+.rule-card.dragging{opacity:0.4;box-shadow:var(--shadow-lg)}
+.rule-card .drag-handle{cursor:grab;color:var(--ink-3);flex-shrink:0;touch-action:none}
+.rule-card .drag-handle:active{cursor:grabbing}
 .rule-num{width:24px;height:24px;border-radius:6px;background:var(--bg-sunken);border:1px solid var(--line-1);display:grid;place-items:center;font-family:var(--font-mono);font-size:12px;color:var(--ink-2)}
 
 /* SCHEDULE */
@@ -624,7 +628,9 @@ html.dark .cat-pill{background:var(--bg-sunken);color:var(--ink-2);border-color:
 .wiz-step{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3);padding:4px 10px;border-radius:999px}
 .wiz-step.done{color:var(--accent)}.wiz-step.active{color:var(--ink-1);font-weight:500;background:var(--accent-soft)}
 .wiz-step .num{width:20px;height:20px;border-radius:50%;background:var(--bg-surface);border:1px solid var(--line-2);display:grid;place-items:center;font-size:11px;font-variant-numeric:tabular-nums;font-weight:500}
-.wiz-step.active .num,.wiz-step.done .num{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.wiz-step.active .num{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.wiz-step.done .num{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-size:0;position:relative}
+.wiz-step.done .num::after{content:"";position:absolute;inset:0;background:no-repeat center/12px 12px;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M4 12l5 5L20 6'/></svg>")}
 .wiz-body{padding:24px}
 .wiz-preview{background:var(--bg-sunken);border:1px solid var(--line-1);border-radius:10px;padding:14px;font-family:var(--font-mono);font-size:12px;color:var(--ink-2);overflow-x:auto}
 .wiz-preview pre{margin:0}
@@ -852,6 +858,52 @@ tr.selected{background:var(--accent-soft)}
 body:has(.bulk-dock.open) .undo-toast { bottom: 88px; }
 
 /* ============================================================
+   CASE 08 — Topbar v2 — period chip
+   ============================================================ */
+.topbar { gap: 12px; }
+.topbar-section {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 14.5px; font-weight: 500;
+  letter-spacing: -0.01em; color: var(--ink-1);
+}
+.topbar-section .ic {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--bg-sunken);
+  display: grid; place-items: center; color: var(--ink-2);
+}
+.topbar-section .ic svg { width: 13px; height: 13px; }
+.month-chip {
+  display: inline-flex; align-items: center;
+  border: 1px solid var(--line-1); border-radius: 999px;
+  background: var(--bg-surface); overflow: hidden;
+  font-size: 12.5px;
+}
+.month-chip button {
+  border: none; background: none; padding: 5px 10px;
+  color: var(--ink-3); cursor: pointer; font-family: inherit;
+}
+.month-chip button:hover { background: var(--bg-hover); color: var(--ink-1); }
+.month-chip .val {
+  padding: 5px 14px; font-weight: 500; color: var(--ink-1);
+  font-variant-numeric: tabular-nums;
+  border-left: 1px solid var(--line-1);
+  border-right: 1px solid var(--line-1);
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer; background: none;
+  font-family: inherit; font-size: 12.5px;
+}
+.month-chip .val:hover { background: var(--bg-hover); }
+.month-reset {
+  height: 28px; font-size: 12px;
+  background: var(--bg-surface); border: 1px solid var(--line-1);
+  border-radius: 999px; padding: 0 12px; cursor: pointer;
+  color: var(--ink-2); font-family: inherit;
+}
+.month-reset:hover { background: var(--bg-hover); color: var(--ink-1); }
+.month-reset.hidden { display: none; }
+.topbar.no-month .month-chip, .topbar.no-month .month-reset { display: none; }
+
+/* ============================================================
    CASE 03 — Dashboard tiered hierarchy
    ============================================================ */
 .dash-hero {
@@ -1068,6 +1120,80 @@ body:has(.bulk-dock.open) .undo-toast { bottom: 88px; }
 }
 @media (max-width: 720px) {
   .dash-flow { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   CASE 11a — Year strip (diverging axis)
+   ============================================================ */
+.year-strip-v2 {
+  display: grid; grid-template-columns: repeat(12, 1fr);
+  gap: 6px; align-items: stretch;
+}
+.year-strip-v2 .col {
+  display: flex; flex-direction: column; cursor: pointer;
+}
+.year-strip-v2 .col .row-pair {
+  display: grid; grid-template-rows: 80px 80px;
+}
+.year-strip-v2 .col .b-inc, .year-strip-v2 .col .b-exp {
+  position: relative; display: flex;
+}
+.year-strip-v2 .col .b-inc { align-items: flex-end; padding-top: 4px; }
+.year-strip-v2 .col .b-exp { align-items: flex-start; padding-bottom: 4px; }
+.year-strip-v2 .col .b-inc::before {
+  content: ""; flex: 1; background: var(--pos);
+  border-radius: 3px 3px 0 0; min-height: 2px;
+  height: var(--h, 60%);
+}
+.year-strip-v2 .col .b-exp::before {
+  content: ""; flex: 1; background: var(--ink-2);
+  border-radius: 0 0 3px 3px; min-height: 2px; opacity: 0.85;
+  height: var(--h, 50%);
+}
+.year-strip-v2 .col.cur .ym { color: var(--ink-1); font-weight: 600; }
+.year-strip-v2 .col .ym {
+  text-align: center; font-size: 10.5px; color: var(--ink-3); margin-top: 6px;
+}
+.year-strip-v2 .col:hover .b-inc::before,
+.year-strip-v2 .col:hover .b-exp::before { filter: brightness(0.9); }
+.year-strip-v2-legend {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--ink-3); margin-top: 10px;
+}
+.year-strip-v2-legend .sw {
+  display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+  vertical-align: -1px; margin-right: 5px;
+}
+
+/* ============================================================
+   CASE 11b — Empty states
+   ============================================================ */
+.empty-v2 {
+  background: var(--bg-surface); border: 1px solid var(--line-1);
+  border-radius: 14px; padding: 36px 32px;
+  display: grid; grid-template-columns: 64px 1fr auto;
+  gap: 20px; align-items: center;
+}
+.empty-v2 .art {
+  width: 64px; height: 64px; border-radius: 14px;
+  background: var(--aurora);
+  display: grid; place-items: center; color: white;
+  box-shadow: var(--shadow-md);
+}
+.empty-v2 .art svg { width: 32px; height: 32px; }
+.empty-v2 h4 {
+  font-size: 16px; font-weight: 500; margin: 0 0 4px; letter-spacing: -0.01em;
+}
+.empty-v2 p {
+  margin: 0; font-size: 13px; color: var(--ink-3); line-height: 1.5;
+  max-width: 460px;
+}
+.empty-v2 .actions {
+  display: flex; flex-direction: column; gap: 6px;
+}
+@media (max-width: 720px) {
+  .empty-v2 { grid-template-columns: 64px 1fr; }
+  .empty-v2 .actions { grid-column: span 2; flex-direction: row; }
 }
 
 /* RESPONSIVE */
