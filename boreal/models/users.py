@@ -10,9 +10,8 @@ import bcrypt
 from flask import g, current_app
 from flask_login import UserMixin
 
-from boreal.config import PROJECT_ROOT
+from boreal.config import DATA_DIR
 
-DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 USERS_DB_PATH = os.path.join(DATA_DIR, "users.db")
 
 # Strict hex-only pattern — prevents path traversal

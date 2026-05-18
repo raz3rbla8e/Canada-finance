@@ -212,7 +212,7 @@ def create_app():
         get_remote_address,
         app=app,
         default_limits=["120/minute"],
-        storage_uri="memory://",
+        storage_uri=os.environ.get("RATELIMIT_STORAGE", "memory://"),
     )
     app.limiter = limiter  # expose so auth blueprint can use decorators
 
