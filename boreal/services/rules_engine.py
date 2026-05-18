@@ -133,4 +133,17 @@ def save_transactions(txns: list) -> tuple:
         except sqlite3.IntegrityError:
             dupes += 1
     db.commit()
+
+    # Auto-create accounts for any new account names seen in this import
+    account_names = set(t["account"] for t in txns if t.get("account"))
+    for name in account_names:
+        try:
+            db.execute(
+                "INSERT OR IGNORE INTO accounts (name, account_type, opening_balance) VALUES (?, 'chequing', 0)",
+                (name,)
+            )
+        except Exception:
+            pass
+    db.commit()
+
     return added, dupes

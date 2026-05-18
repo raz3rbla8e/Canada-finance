@@ -14,12 +14,24 @@ accounts_bp = Blueprint("accounts_extra", __name__)
 
 @accounts_bp.route("/api/account-names")
 def api_account_names():
-    """Return distinct account names from transactions (what the user actually has)."""
+    """Return distinct account names from transactions (what the user actually has).
+    Also auto-creates accounts table entries for any missing names."""
     db = get_db()
     rows = db.execute(
         "SELECT DISTINCT account FROM transactions WHERE account IS NOT NULL AND account != '' ORDER BY account"
     ).fetchall()
-    return jsonify([r["account"] for r in rows])
+    names = [r["account"] for r in rows]
+    # Auto-register any missing accounts
+    for name in names:
+        try:
+            db.execute(
+                "INSERT OR IGNORE INTO accounts (name, account_type, opening_balance) VALUES (?, 'chequing', 0)",
+                (name,)
+            )
+        except Exception:
+            pass
+    db.commit()
+    return jsonify(names)
 
 
 @accounts_bp.route("/api/accounts-list")
