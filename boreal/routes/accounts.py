@@ -46,21 +46,28 @@ def api_accounts_list():
         WHERE account IS NOT NULL AND account != ''
           AND account NOT IN (SELECT name FROM accounts)
     """)
+    # Backfill account_id for any transactions missing it
+    db.execute("""
+        UPDATE transactions SET account_id = (
+            SELECT id FROM accounts WHERE accounts.name = transactions.account
+        ) WHERE account_id IS NULL AND account IS NOT NULL AND account != ''
+    """)
     db.commit()
     accounts = db.execute("SELECT * FROM accounts ORDER BY name").fetchall()
     if not accounts:
         return jsonify([])
-    # Single query to compute income/expenses per account
+    # Single query to compute income/expenses per account using account_id FK
     # Include ALL transactions (even hidden) for accurate balances —
     # hiding is for dashboard/summary display, not accounting
     totals = db.execute(
-        """SELECT account, type, COALESCE(SUM(amount),0) as total
+        """SELECT account_id, type, COALESCE(SUM(amount),0) as total
            FROM transactions
-           GROUP BY account, type"""
+           WHERE account_id IS NOT NULL
+           GROUP BY account_id, type"""
     ).fetchall()
     acct_totals = {}
     for r in totals:
-        key = r["account"]
+        key = r["account_id"]
         if key not in acct_totals:
             acct_totals[key] = {"income": 0, "expenses": 0}
         if r["type"] == "Income":
@@ -69,7 +76,7 @@ def api_accounts_list():
             acct_totals[key]["expenses"] = r["total"]
     result = []
     for a in accounts:
-        t = acct_totals.get(a["name"], {"income": 0, "expenses": 0})
+        t = acct_totals.get(a["id"], {"income": 0, "expenses": 0})
         balance = a["opening_balance"] + t["income"] - t["expenses"]
         result.append({
             "id": a["id"],
@@ -126,7 +133,8 @@ def api_accounts_update(aid):
             (name, account_type, opening_balance, aid),
         )
         if name != old_name:
-            db.execute("UPDATE transactions SET account=? WHERE account=?", (name, old_name))
+            # Update denormalized account TEXT on transactions for display
+            db.execute("UPDATE transactions SET account=? WHERE account_id=?", (name, aid))
         db.commit()
         return jsonify({"ok": True})
     except sqlite3.IntegrityError:
@@ -161,16 +169,16 @@ def api_net_worth():
 
     # Single aggregated query: cumulative totals per account per month
     totals = db.execute(
-        """SELECT account, substr(date,1,7) as month, type, SUM(amount) as total
+        """SELECT account_id, substr(date,1,7) as month, type, SUM(amount) as total
            FROM transactions
-           GROUP BY account, month, type
+           WHERE account_id IS NOT NULL
+           GROUP BY account_id, month, type
            ORDER BY month"""
     ).fetchall()
-    # Build cumulative map: {account: {month: cumulative_net}}
-    # First, build monthly deltas
-    monthly_delta = {}  # {account: {month: net_delta}}
+    # Build cumulative map: {account_id: {month: net_delta}}
+    monthly_delta = {}
     for r in totals:
-        acct = r["account"]
+        acct = r["account_id"]
         m = r["month"]
         if acct not in monthly_delta:
             monthly_delta[acct] = {}
@@ -187,7 +195,7 @@ def api_net_worth():
         total = 0
         for a in accounts:
             balance = a["opening_balance"]
-            acct_deltas = monthly_delta.get(a["name"], {})
+            acct_deltas = monthly_delta.get(a["id"], {})
             # Sum all deltas up to and including this month
             for dm, delta in acct_deltas.items():
                 if dm <= m:
@@ -288,10 +296,12 @@ def api_schedules_post_due():
         h = tx_hash(s["next_due"], s["name"], s["amount"], s["account"])
         existing = db.execute("SELECT id FROM transactions WHERE tx_hash=?", (h,)).fetchone()
         if not existing:
+            acct_row = db.execute("SELECT id FROM accounts WHERE name=?", (s["account"],)).fetchone()
+            aid = acct_row["id"] if acct_row else None
             db.execute(
-                "INSERT INTO transactions (date, type, name, category, amount, account, notes, source, tx_hash) VALUES (?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO transactions (date, type, name, category, amount, account, account_id, notes, source, tx_hash) VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (s["next_due"], s["type"], s["name"], s["category"], s["amount"],
-                 s["account"], "Auto-posted from schedule", "scheduled", h),
+                 s["account"], aid, "Auto-posted from schedule", "scheduled", h),
             )
             posted += 1
         # Advance next_due
@@ -333,10 +343,12 @@ def api_schedule_post_single(sid):
     existing = db.execute("SELECT id FROM transactions WHERE tx_hash=?", (h,)).fetchone()
     posted = 0
     if not existing:
+        acct_row = db.execute("SELECT id FROM accounts WHERE name=?", (s["account"],)).fetchone()
+        aid = acct_row["id"] if acct_row else None
         db.execute(
-            "INSERT INTO transactions (date, type, name, category, amount, account, notes, source, tx_hash) VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO transactions (date, type, name, category, amount, account, account_id, notes, source, tx_hash) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (post_date, s["type"], s["name"], s["category"], s["amount"],
-             s["account"], "Posted from schedule", "scheduled", h),
+             s["account"], aid, "Posted from schedule", "scheduled", h),
         )
         posted = 1
     # Always advance next_due
@@ -387,21 +399,27 @@ def api_transfers_create():
     notes = (d.get("notes") or "").strip()
 
     db = get_db()
+    # Resolve account_ids
+    from_row = db.execute("SELECT id FROM accounts WHERE name=?", (from_account,)).fetchone()
+    to_row = db.execute("SELECT id FROM accounts WHERE name=?", (to_account,)).fetchone()
+    from_aid = from_row["id"] if from_row else None
+    to_aid = to_row["id"] if to_row else None
+
     h1 = tx_hash(tx_date, f"Transfer to {to_account}", amount, from_account)
     h2 = tx_hash(tx_date, f"Transfer from {from_account}", amount, to_account)
 
     # Outflow from source
     db.execute(
-        "INSERT INTO transactions (date, type, name, category, amount, account, notes, source, tx_hash, hidden) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO transactions (date, type, name, category, amount, account, account_id, notes, source, tx_hash, hidden) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         (tx_date, "Expense", f"Transfer to {to_account}", "Transfer", amount,
-         from_account, notes, "transfer", h1, 1),
+         from_account, from_aid, notes, "transfer", h1, 1),
     )
     out_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
     # Inflow to destination
     db.execute(
-        "INSERT INTO transactions (date, type, name, category, amount, account, notes, source, tx_hash, hidden, transfer_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO transactions (date, type, name, category, amount, account, account_id, notes, source, tx_hash, hidden, transfer_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (tx_date, "Income", f"Transfer from {from_account}", "Transfer", amount,
-         to_account, notes, "transfer", h2, 1, out_id),
+         to_account, to_aid, notes, "transfer", h2, 1, out_id),
     )
     in_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
     # Link outflow to inflow

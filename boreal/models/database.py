@@ -199,6 +199,20 @@ def _migrate_v8(db):
     """)
 
 
+def _migrate_v9(db):
+    """Add account_id FK to transactions, backfill from accounts table."""
+    db.execute("ALTER TABLE transactions ADD COLUMN account_id INTEGER DEFAULT NULL REFERENCES accounts(id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_tx_account_id ON transactions(account_id)")
+    # Backfill: link existing transactions to their accounts by name
+    db.execute("""
+        UPDATE transactions SET account_id = (
+            SELECT id FROM accounts WHERE accounts.name = transactions.account
+        )
+        WHERE account_id IS NULL
+          AND account IS NOT NULL AND account != ''
+    """)
+
+
 MIGRATIONS = [
     (1, "initial schema", _migrate_v1),
     (2, "split transactions", _migrate_v2),
@@ -208,6 +222,7 @@ MIGRATIONS = [
     (6, "scheduled transactions", _migrate_v6),
     (7, "transfer linking", _migrate_v7),
     (8, "undo history", _migrate_v8),
+    (9, "account_id FK", _migrate_v9),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0]

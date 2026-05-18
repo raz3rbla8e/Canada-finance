@@ -178,12 +178,14 @@ def save_transactions(txns: list) -> tuple:
             pass
     db.commit()
 
-    # Build account_type lookup
+    # Build account_type and account_id lookup
     account_types = {}
+    account_ids = {}
     for name in account_names:
-        row = db.execute("SELECT account_type FROM accounts WHERE name=?", (name,)).fetchone()
+        row = db.execute("SELECT id, account_type FROM accounts WHERE name=?", (name,)).fetchone()
         if row:
             account_types[name] = row["account_type"]
+            account_ids[name] = row["id"]
 
     transfer_detected = []
 
@@ -204,13 +206,15 @@ def save_transactions(txns: list) -> tuple:
             t["hidden"] = 1
             transfer_detected.append(t)
 
+        acct_id = account_ids.get(t.get("account", ""))
         h = tx_hash(t["date"], t["name"], t["amount"], t["account"])
         try:
             db.execute("""INSERT INTO transactions
-                (date,type,name,category,amount,account,notes,source,tx_hash,hidden)
-                VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (date,type,name,category,amount,account,account_id,notes,source,tx_hash,hidden)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                 (t["date"], t["type"], t["name"], t["category"],
-                 t["amount"], t["account"], t.get("notes", ""), t.get("source", "csv"), h,
+                 t["amount"], t["account"], acct_id,
+                 t.get("notes", ""), t.get("source", "csv"), h,
                  t.get("hidden", 0)))
             added += 1
         except sqlite3.IntegrityError:

@@ -44,8 +44,14 @@ def api_transactions():
             params.append(typ)
         acct = request.args.get("account", "")
         if acct:
-            q += " AND account=?"
-            params.append(acct)
+            # Support both account name (legacy) and account_id (numeric)
+            try:
+                acct_id = int(acct)
+                q += " AND account_id=?"
+                params.append(acct_id)
+            except ValueError:
+                q += " AND account=?"
+                params.append(acct)
         q += " ORDER BY date DESC, id DESC"
 
     if limit is not None:
@@ -78,11 +84,14 @@ def api_add():
         account = d.get("account") or "Unassigned"
         h = tx_hash(d["date"], d["name"], amount, account)
         db = get_db()
+        # Resolve account_id from name
+        acct_row = db.execute("SELECT id FROM accounts WHERE name=?", (account,)).fetchone()
+        acct_id = acct_row["id"] if acct_row else None
         cur = db.execute("""INSERT INTO transactions
-            (date,type,name,category,amount,account,notes,source,tx_hash)
-            VALUES (?,?,?,?,?,?,?,?,?)""",
+            (date,type,name,category,amount,account,account_id,notes,source,tx_hash)
+            VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (d["date"], d["type"], d["name"], d["category"],
-             amount, account, d.get("notes", ""), "manual", h))
+             amount, account, acct_id, d.get("notes", ""), "manual", h))
         db.commit()
         return jsonify({"ok": True, "id": cur.lastrowid})
     except sqlite3.IntegrityError:
@@ -97,8 +106,14 @@ def api_update(tid):
     if not d:
         return jsonify({"error": "Request body required"}), 400
     allowed = ["date", "type", "name", "category", "amount", "account", "notes"]
-    sets = ", ".join(f"{k}=?" for k in d if k in allowed)
-    vals = [d[k] for k in d if k in allowed] + [tid]
+    updates = {k: d[k] for k in d if k in allowed}
+    # If account name changed, also resolve and update account_id
+    if "account" in updates:
+        db = get_db()
+        acct_row = db.execute("SELECT id FROM accounts WHERE name=?", (updates["account"],)).fetchone()
+        updates["account_id"] = acct_row["id"] if acct_row else None
+    sets = ", ".join(f"{k}=?" for k in updates)
+    vals = list(updates.values()) + [tid]
     if not sets:
         return jsonify({"error": "Nothing to update"}), 400
     db = get_db()
@@ -327,11 +342,11 @@ def api_split_transaction(tid):
         h = tx_hash(parent["date"], f"{parent['name']}__split{i}", float(s["amount"]), parent["account"])
         db.execute(
             """INSERT INTO transactions
-               (date, type, name, category, amount, account, notes, source, tx_hash, hidden, parent_id)
-               VALUES (?,?,?,?,?,?,?,?,?,0,?)""",
+               (date, type, name, category, amount, account, account_id, notes, source, tx_hash, hidden, parent_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?,0,?)""",
             (parent["date"], parent["type"], parent["name"],
              s.get("category", "UNCATEGORIZED"), float(s["amount"]),
-             parent["account"], s.get("notes", parent["notes"]), parent["source"], h, tid),
+             parent["account"], parent["account_id"], s.get("notes", parent["notes"]), parent["source"], h, tid),
         )
     # Hide the parent
     db.execute("UPDATE transactions SET hidden=1 WHERE id=?", (tid,))
