@@ -108,14 +108,17 @@ def api_update(tid):
         db.execute("""INSERT INTO learned_merchants (keyword, category) VALUES (?,?)
             ON CONFLICT(keyword) DO UPDATE SET category=excluded.category, updated_at=datetime('now')
         """, (orig_name, new_cat))
+        # Retro-apply: match only if the FULL learned keyword appears in the
+        # transaction name (substring match).  The old word-level `any()` was
+        # too aggressive — e.g. a single word like "interac" would recategorise
+        # every e-Transfer.
         all_learned = db.execute("SELECT keyword, category FROM learned_merchants").fetchall()
         orig_cat = original["category"]
         fixable = "SELECT id, name FROM transactions WHERE id!=? AND (category='UNCATEGORIZED' OR category=?)"
         for row in db.execute(fixable, (tid, orig_cat)).fetchall():
             rn = row["name"].lower()
             for lrow in all_learned:
-                words = [w for w in lrow["keyword"].split() if len(w) > 3]
-                if any(w in rn for w in words):
+                if lrow["keyword"] in rn:
                     db.execute("UPDATE transactions SET category=? WHERE id=?", (lrow["category"], row["id"]))
                     retro_fixed += 1
                     break
@@ -209,22 +212,19 @@ def api_bulk_categorize():
         f"UPDATE transactions SET category=? WHERE id IN ({placeholders})",
         [category] + ids,
     )
-    # Retroactively fix other matching transactions
+    # Retroactively fix other matching transactions (full keyword substring match)
     retro_fixed = 0
     all_learned = db.execute("SELECT keyword, category FROM learned_merchants").fetchall()
-    for row in rows:
-        orig_name = row["name"].lower().strip()
-        words = [w for w in orig_name.split() if len(w) > 3]
-        if not words:
-            continue
-        for txn in db.execute(
-            f"SELECT id, name FROM transactions WHERE id NOT IN ({placeholders}) AND (category='UNCATEGORIZED' OR category=?)",
-            ids + [category],
-        ).fetchall():
-            rn = txn["name"].lower()
-            if any(w in rn for w in words):
-                db.execute("UPDATE transactions SET category=? WHERE id=?", (category, txn["id"]))
+    for txn in db.execute(
+        f"SELECT id, name FROM transactions WHERE id NOT IN ({placeholders}) AND (category='UNCATEGORIZED' OR category=?)",
+        ids + [category],
+    ).fetchall():
+        rn = txn["name"].lower()
+        for lrow in all_learned:
+            if lrow["keyword"] in rn:
+                db.execute("UPDATE transactions SET category=? WHERE id=?", (lrow["category"], txn["id"]))
                 retro_fixed += 1
+                break
     db.commit()
     return jsonify({"ok": True, "updated": len(ids), "learned": len(rows), "retro_fixed": retro_fixed})
 

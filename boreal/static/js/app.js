@@ -1184,9 +1184,10 @@ async function _renderTransactions(c) {
         ${accts.map(a => `<button class="filter-chip" data-acct="${esc(a)}">${esc(a)}</button>`).join('')}
       </div>
       <div style="margin-left:auto;display:flex;gap:6px">
-        <select id="tx-cat-filter" class="btn btn-sm" style="border-style:dashed;padding:5px 10px;font-size:12px;background:transparent;color:var(--ink-2);cursor:pointer">
+        <select id="tx-cat-filter" class="btn btn-sm" style="border-style:dashed;padding:5px 10px;font-size:12px;background:var(--bg-surface);color:var(--ink-2);cursor:pointer">
           <option value="">Category</option>
-          ${allCats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+          <option value="Uncategorized">Uncategorized</option>
+          ${allCats.filter(c => c !== 'Uncategorized').map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
         </select>
       </div>
     </div>
@@ -1256,7 +1257,10 @@ async function _renderTransactions(c) {
     const cat = catFilter?.value||'';
     return txns.filter(t => {
       if (q && !(t.name||'').toLowerCase().includes(q) && !(t.category||'').toLowerCase().includes(q) && !(t.notes||'').toLowerCase().includes(q)) return false;
-      if (cat && t.category !== cat) return false;
+      if (cat) {
+        const txCat = t.category || 'Uncategorized';
+        if (txCat.toLowerCase() !== cat.toLowerCase()) return false;
+      }
       if (activeAcct && t.account !== activeAcct) return false;
       return true;
     });
@@ -1356,6 +1360,7 @@ function openTxDrawer(tx, cats, onSave) {
       <div class="section-h" style="margin-top:24px"><h2 style="font-size:13px">Category</h2></div>
       <div style="display:flex;flex-wrap:wrap;gap:6px" id="dr-chips">
         ${quickCats.map(c => `<button class="filter-chip${c===tx.category?' active':''}" data-cat="${esc(c)}" style="${c===tx.category ? 'background:'+catColor(c)+'22;border-color:'+catColor(c)+';color:'+catColor(c)+';font-weight:500' : ''}">${esc(c)}</button>`).join('')}
+        <button class="filter-chip" id="dr-add-cat" style="border-style:dashed;color:var(--ink-3)">${icon('plus',11)} New</button>
       </div>
 
       <div class="section-h"><h2 style="font-size:13px">Details</h2></div>
@@ -1413,18 +1418,46 @@ function openTxDrawer(tx, cats, onSave) {
 
   // Category chip selection
   let selectedCat = tx.category;
-  document.querySelectorAll('#dr-chips .filter-chip').forEach(chip => {
-    chip.onclick = () => {
-      document.querySelectorAll('#dr-chips .filter-chip').forEach(c => {
-        c.classList.remove('active');
-        c.style.cssText = '';
-      });
-      chip.classList.add('active');
-      selectedCat = chip.dataset.cat;
-      const clr = catColor(selectedCat);
-      chip.style.cssText = `background:${clr}22;border-color:${clr};color:${clr};font-weight:500`;
-    };
-  });
+  function bindChipClicks() {
+    document.querySelectorAll('#dr-chips .filter-chip[data-cat]').forEach(chip => {
+      chip.onclick = () => {
+        document.querySelectorAll('#dr-chips .filter-chip').forEach(c => {
+          c.classList.remove('active');
+          c.style.cssText = c.id === 'dr-add-cat' ? 'border-style:dashed;color:var(--ink-3)' : '';
+        });
+        chip.classList.add('active');
+        selectedCat = chip.dataset.cat;
+        const clr = catColor(selectedCat);
+        chip.style.cssText = `background:${clr}22;border-color:${clr};color:${clr};font-weight:500`;
+      };
+    });
+  }
+  bindChipClicks();
+
+  // Add new category from drawer
+  document.getElementById('dr-add-cat').onclick = async () => {
+    const name = await appPrompt('New category name', { title: 'Add category', placeholder: 'e.g. Groceries' });
+    if (!name || !name.trim()) return;
+    const r = await api('/api/categories', 'POST', { name: name.trim() });
+    if (!r || r.error) { showToast(r?.error || 'Failed to create category'); return; }
+    invalidateApiCache('/api/categories');
+    // Add chip and select it
+    const addBtn = document.getElementById('dr-add-cat');
+    const clr = catColor(name.trim());
+    const newChip = document.createElement('button');
+    newChip.className = 'filter-chip active';
+    newChip.dataset.cat = name.trim();
+    newChip.textContent = name.trim();
+    newChip.style.cssText = `background:${clr}22;border-color:${clr};color:${clr};font-weight:500`;
+    // Deselect all existing
+    document.querySelectorAll('#dr-chips .filter-chip').forEach(c => {
+      c.classList.remove('active');
+      c.style.cssText = c.id === 'dr-add-cat' ? 'border-style:dashed;color:var(--ink-3)' : '';
+    });
+    addBtn.parentNode.insertBefore(newChip, addBtn);
+    selectedCat = name.trim();
+    bindChipClicks();
+  };
 
   document.getElementById('dr-save').onclick = async () => {
     const isHidden = document.getElementById('dr-hidden').checked;
@@ -1438,9 +1471,9 @@ function openTxDrawer(tx, cats, onSave) {
       await api(`/api/transactions/${tx.id}/${isHidden ? 'hide' : 'unhide'}`, 'PATCH');
     }
     closeTxDrawer();
+    invalidateApiCache();
     await refreshMonths();
-    if (onSave) onSave();
-    else refreshCurrentView();
+    refreshCurrentView();
   };
 
   document.getElementById('dr-del').onclick = async () => {

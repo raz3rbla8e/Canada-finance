@@ -38,6 +38,7 @@
 }
 
 html.dark {
+  color-scheme:dark;
   --bg-app:oklch(13% 0.015 240);--bg-sidebar:oklch(15% 0.018 240);--bg-surface:oklch(17% 0.02 240);--bg-hover:oklch(21% 0.022 240);--bg-sunken:oklch(14% 0.018 240);
   --line-1:oklch(24% 0.022 240);--line-2:oklch(28% 0.025 240);--line-strong:oklch(38% 0.03 240);
   --ink-1:oklch(96% 0.005 95);--ink-2:oklch(80% 0.01 240);--ink-3:oklch(68% 0.012 240);--ink-4:oklch(48% 0.012 240);
