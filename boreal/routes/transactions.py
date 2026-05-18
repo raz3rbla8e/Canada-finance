@@ -14,11 +14,16 @@ def api_transactions():
     cat = request.args.get("category", "")
     typ = request.args.get("type", "")
     search = request.args.get("search", "").strip()
-    show_hidden = request.args.get("hidden", "0") == "1"
+    show_hidden = request.args.get("hidden", "0")
     limit = request.args.get("limit", type=int)
     offset = request.args.get("offset", 0, type=int)
     db = get_db()
-    hidden_filter = "hidden=1" if show_hidden else "hidden=0"
+    if show_hidden == "all":
+        hidden_filter = "1=1"
+    elif show_hidden == "1":
+        hidden_filter = "hidden=1"
+    else:
+        hidden_filter = "hidden=0"
     if search:
         term = f"%{search}%"
         q = f"""SELECT * FROM transactions WHERE {hidden_filter} AND

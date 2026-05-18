@@ -1183,7 +1183,10 @@ async function _renderTransactions(c) {
         <button class="filter-chip active" data-acct="">All accounts</button>
         ${accts.map(a => `<button class="filter-chip" data-acct="${esc(a)}">${esc(a)}</button>`).join('')}
       </div>
-      <div style="margin-left:auto;display:flex;gap:6px">
+      <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-3);cursor:pointer;user-select:none">
+          <input type="checkbox" id="tx-show-hidden"/> Show hidden
+        </label>
         <select id="tx-cat-filter" class="btn btn-sm" style="border-style:dashed;padding:5px 10px;font-size:12px;background:var(--bg-surface);color:var(--ink-2);cursor:pointer">
           <option value="">Category</option>
           <option value="Uncategorized">Uncategorized</option>
@@ -1241,7 +1244,7 @@ async function _renderTransactions(c) {
       const amt = t.amount || 0;
       const isInc = t.type === 'Income';
       const displayAmt = isInc ? `+${fmtCurrency(Math.abs(amt))}` : `−${fmtCurrency(Math.abs(amt))}`;
-      return `<tr data-id="${t.id}" class="${txSelected.has(t.id)?'selected':''}${t.is_hidden?' hidden-row':''}" style="cursor:pointer">
+      return `<tr data-id="${t.id}" class="${txSelected.has(t.id)?'selected':''}${t.hidden?' hidden-row':''}" style="cursor:pointer">
         <td><input type="checkbox" class="tx-check" data-id="${t.id}" ${txSelected.has(t.id)?'checked':''}></td>
         <td style="color:var(--ink-3);font-size:12.5px;white-space:nowrap">${fmtDate(t.date)}</td>
         <td><div class="name-cell">${merchantGlyph(t.name)}<div><div style="font-weight:500">${esc(t.name)}</div>${t.notes?`<div style="font-size:11.5px;color:var(--ink-3)">${esc(t.notes)}</div>`:''}</div></div></td>
@@ -1276,6 +1279,18 @@ async function _renderTransactions(c) {
 
   searchInput?.addEventListener('input', refresh);
   catFilter?.addEventListener('change', refresh);
+
+  const showHiddenEl = document.getElementById('tx-show-hidden');
+  showHiddenEl?.addEventListener('change', async () => {
+    const p = new URLSearchParams();
+    if (month) p.set('month', month);
+    p.set('limit', '200');
+    if (showHiddenEl.checked) p.set('hidden', 'all');
+    const fresh = await api(`/api/transactions?${p}`);
+    txns.length = 0;
+    (fresh.transactions || fresh || []).forEach(t => txns.push(t));
+    refresh();
+  });
 
   checkAll?.addEventListener('change', () => {
     const checked = checkAll.checked;
@@ -1315,6 +1330,36 @@ window.txBulkAction = async function(action) {
     await api('/api/bulk-delete', 'POST', { ids });
   } else if (action === 'hide') {
     await api('/api/bulk-hide', 'POST', { ids });
+    // Offer to create auto-hide rule
+    const suggestions = await api('/api/suggest-hide-rules', 'POST', { ids });
+    if (suggestions?.suggestions?.length) {
+      const topMatch = suggestions.suggestions[0].description;
+      const keyword = await appPrompt(
+        `Create an auto-hide rule? Future transactions matching this keyword will be hidden automatically on import.`,
+        { title: 'Create auto-hide rule', defaultVal: topMatch, placeholder: 'e.g. INTERAC E-TRANSFER' }
+      );
+      if (keyword && keyword.trim()) {
+        // Preview how many existing transactions match
+        const preview = await api('/api/rules/test', 'POST', {
+          conditions: [{ field: 'description', operator: 'contains', value: keyword.trim() }]
+        });
+        const matchCount = preview?.count || 0;
+        const doCreate = await appConfirm(
+          `This rule will match ${matchCount} existing transaction${matchCount === 1 ? '' : 's'}.\n\nRule: Hide transactions where description contains "${keyword.trim()}"`,
+          { title: 'Confirm auto-hide rule' }
+        );
+        if (doCreate) {
+          await api('/api/rules', 'POST', {
+            name: `Auto-hide: ${keyword.trim()}`,
+            action: 'hide',
+            conditions: [{ field: 'description', operator: 'contains', value: keyword.trim() }]
+          });
+          // Apply retroactively to existing matching transactions
+          await api('/api/rules/apply-all', 'POST');
+          showToast(`Auto-hide rule created — ${matchCount} transactions hidden`);
+        }
+      }
+    }
   } else if (action === 'categorize') {
     const cat = await appPrompt('Enter category name:', { title: 'Bulk categorize', placeholder: 'e.g. Groceries' });
     if (!cat) return;
