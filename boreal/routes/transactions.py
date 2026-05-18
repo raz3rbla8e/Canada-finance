@@ -70,18 +70,19 @@ def api_add():
     d = request.json
     if not d:
         return jsonify({"error": "Request body required"}), 400
-    for f in ["date", "type", "name", "category", "amount", "account"]:
+    for f in ["date", "type", "name", "category", "amount"]:
         if not d.get(f):
             return jsonify({"error": f"Missing: {f}"}), 400
     try:
         amount = float(d["amount"])
-        h = tx_hash(d["date"], d["name"], amount, d["account"])
+        account = d.get("account") or "Unassigned"
+        h = tx_hash(d["date"], d["name"], amount, account)
         db = get_db()
         cur = db.execute("""INSERT INTO transactions
             (date,type,name,category,amount,account,notes,source,tx_hash)
             VALUES (?,?,?,?,?,?,?,?,?)""",
             (d["date"], d["type"], d["name"], d["category"],
-             amount, d["account"], d.get("notes", ""), "manual", h))
+             amount, account, d.get("notes", ""), "manual", h))
         db.commit()
         return jsonify({"ok": True, "id": cur.lastrowid})
     except sqlite3.IntegrityError:
