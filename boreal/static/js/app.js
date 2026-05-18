@@ -1184,9 +1184,7 @@ async function _renderTransactions(c) {
         ${accts.map(a => `<button class="filter-chip" data-acct="${esc(a)}">${esc(a)}</button>`).join('')}
       </div>
       <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
-        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-3);cursor:pointer;user-select:none">
-          <input type="checkbox" id="tx-show-hidden"/> Show hidden
-        </label>
+        <button class="btn btn-sm" id="tx-toggle-hidden" style="font-size:12px;padding:5px 10px">${icon('eye_off',12)} Hidden</button>
         <select id="tx-cat-filter" class="btn btn-sm" style="border-style:dashed;padding:5px 10px;font-size:12px;background:var(--bg-surface);color:var(--ink-2);cursor:pointer">
           <option value="">Category</option>
           <option value="Uncategorized">Uncategorized</option>
@@ -1198,7 +1196,7 @@ async function _renderTransactions(c) {
     <div id="tx-bulk-bar" style="display:none;background:var(--ink-1);color:white;padding:10px 16px;border-radius:10px;margin-bottom:12px;align-items:center;gap:12px;font-size:13px">
       <span><strong id="tx-sel-count">0</strong> selected</span>
       <button class="btn btn-sm" style="color:white;border-color:rgba(255,255,255,0.3)" onclick="txBulkAction('categorize')">Categorize</button>
-      <button class="btn btn-sm" style="color:white;border-color:rgba(255,255,255,0.3)" onclick="txBulkAction('hide')">Hide</button>
+      <button class="btn btn-sm" id="tx-bulk-hide-btn" style="color:white;border-color:rgba(255,255,255,0.3)" onclick="txBulkAction('hide')">Hide</button>
       <button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="txBulkAction('delete')">Delete</button>
       <button class="btn btn-sm" style="color:white;border-color:rgba(255,255,255,0.3);margin-left:auto" onclick="txSelected=new Set();refresh();updateBulkBar()">Clear</button>
     </div>
@@ -1280,17 +1278,30 @@ async function _renderTransactions(c) {
   searchInput?.addEventListener('input', refresh);
   catFilter?.addEventListener('change', refresh);
 
-  const showHiddenEl = document.getElementById('tx-show-hidden');
-  showHiddenEl?.addEventListener('change', async () => {
+  let viewingHidden = false;
+  const toggleHiddenBtn = document.getElementById('tx-toggle-hidden');
+  const bulkHideBtn = document.getElementById('tx-bulk-hide-btn');
+  toggleHiddenBtn?.addEventListener('click', async () => {
+    viewingHidden = !viewingHidden;
     const p = new URLSearchParams();
     if (month) p.set('month', month);
     p.set('limit', '200');
-    if (showHiddenEl.checked) p.set('hidden', 'all');
+    if (viewingHidden) p.set('hidden', '1');
     const fresh = await api(`/api/transactions?${p}`);
     const items = [...(fresh?.transactions || fresh || [])];
     txns.length = 0;
     items.forEach(t => txns.push(t));
+    toggleHiddenBtn.classList.toggle('active', viewingHidden);
+    toggleHiddenBtn.innerHTML = viewingHidden
+      ? `${icon('eye',12)} Visible`
+      : `${icon('eye_off',12)} Hidden`;
+    if (bulkHideBtn) {
+      bulkHideBtn.textContent = viewingHidden ? 'Unhide' : 'Hide';
+      bulkHideBtn.setAttribute('onclick', viewingHidden ? "txBulkAction('unhide')" : "txBulkAction('hide')");
+    }
+    txSelected = new Set();
     refresh();
+    updateBulkBar();
   });
 
   checkAll?.addEventListener('change', () => {
@@ -1361,6 +1372,8 @@ window.txBulkAction = async function(action) {
         }
       }
     }
+  } else if (action === 'unhide') {
+    await api('/api/bulk-unhide', 'POST', { ids });
   } else if (action === 'categorize') {
     const cat = await appPrompt('Enter category name:', { title: 'Bulk categorize', placeholder: 'e.g. Groceries' });
     if (!cat) return;
