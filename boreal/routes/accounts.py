@@ -12,6 +12,16 @@ accounts_bp = Blueprint("accounts_extra", __name__)
 
 # ── ACCOUNTS ──────────────────────────────────────────────────────────────────
 
+@accounts_bp.route("/api/account-names")
+def api_account_names():
+    """Return distinct account names from transactions (what the user actually has)."""
+    db = get_db()
+    rows = db.execute(
+        "SELECT DISTINCT account FROM transactions WHERE account IS NOT NULL AND account != '' ORDER BY account"
+    ).fetchall()
+    return jsonify([r["account"] for r in rows])
+
+
 @accounts_bp.route("/api/accounts-list")
 def api_accounts_list():
     """List all registered accounts with computed balances."""

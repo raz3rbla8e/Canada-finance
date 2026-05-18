@@ -654,11 +654,11 @@ function openAddModal() {
   const today = new Date().toISOString().slice(0,10);
   const catOpts = STATE.expenseCats.map(c => `<option value="${esc(c.name)}">${esc(c.icon||'')} ${esc(c.name)}</option>`).join('');
   const incOpts = STATE.incomeCats.map(c => `<option value="${esc(c.name)}">${esc(c.icon||'')} ${esc(c.name)}</option>`).join('');
-  // Fetch accounts for dropdown
-  api('/api/accounts-list').then(accts => {
-    const acctOpts = (accts||[]).map(a => `<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
+  // Fetch accounts for dropdown (from distinct transaction accounts + registered accounts)
+  api('/api/account-names').then(names => {
+    const acctOpts = (names||[]).map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
     const el = document.getElementById('add-account');
-    if (el) el.innerHTML = acctOpts + '<option value="">Other…</option>';
+    if (el) el.innerHTML = acctOpts + '<option value="">None</option>';
   });
   const ol = document.getElementById('overlays');
   ol.innerHTML = `<div class="modal-back" onclick="closeOverlays()">
@@ -2117,8 +2117,8 @@ function openTxDrawer(tx, cats, onSave) {
   drawer._removeKeys = () => window.removeEventListener('keydown', onKey);
 
   // Lazy-load accounts (only meaningful when Details is open, but cheap)
-  api('/api/accounts-list').then(accts => {
-    accountsList = accts || [];
+  api('/api/account-names').then(names => {
+    accountsList = (names || []).map(n => ({ name: n }));
     if (state.showDetails) render();
   });
 
