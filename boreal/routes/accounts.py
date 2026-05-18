@@ -51,9 +51,11 @@ def api_accounts_list():
     if not accounts:
         return jsonify([])
     # Single query to compute income/expenses per account
+    # Include ALL transactions (even hidden) for accurate balances —
+    # hiding is for dashboard/summary display, not accounting
     totals = db.execute(
         """SELECT account, type, COALESCE(SUM(amount),0) as total
-           FROM transactions WHERE hidden=0
+           FROM transactions
            GROUP BY account, type"""
     ).fetchall()
     acct_totals = {}
@@ -149,7 +151,7 @@ def api_net_worth():
     if not accounts:
         return jsonify([])
     months_rows = db.execute(
-        "SELECT DISTINCT substr(date,1,7) as m FROM transactions WHERE hidden=0 ORDER BY m"
+        "SELECT DISTINCT substr(date,1,7) as m FROM transactions ORDER BY m"
     ).fetchall()
     all_months = [r["m"] for r in months_rows]
     # Limit to last 24 months
@@ -160,7 +162,7 @@ def api_net_worth():
     # Single aggregated query: cumulative totals per account per month
     totals = db.execute(
         """SELECT account, substr(date,1,7) as month, type, SUM(amount) as total
-           FROM transactions WHERE hidden=0
+           FROM transactions
            GROUP BY account, month, type
            ORDER BY month"""
     ).fetchall()
