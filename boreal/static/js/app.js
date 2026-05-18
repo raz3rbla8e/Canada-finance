@@ -61,6 +61,17 @@ async function _ensureCsrf() {
   try { const r = await fetch('/api/csrf-token'); const d = await r.json(); _csrfToken = d.csrf_token; } catch(e) { _csrfToken = ''; }
   return _csrfToken;
 }
+// ── API RESPONSE CACHE ────────────────────────────────────────
+const _apiCache = {};       // { url: { data, ts } }
+const _apiInflight = {};    // { url: Promise } — dedup concurrent GETs
+const API_CACHE_TTL = 15000; // 15 seconds
+
+function invalidateApiCache(urlPrefix) {
+  // Clear cache entries matching a prefix (or all if no arg)
+  if (!urlPrefix) { Object.keys(_apiCache).forEach(k => delete _apiCache[k]); return; }
+  Object.keys(_apiCache).forEach(k => { if (k.startsWith(urlPrefix)) delete _apiCache[k]; });
+}
+
 async function api(url, methodOrOpts, body) {
   try {
     let opts = {};
@@ -71,21 +82,43 @@ async function api(url, methodOrOpts, body) {
       opts = methodOrOpts;
     }
     const method = (opts.method || 'GET').toUpperCase();
-    if (method !== 'GET' && method !== 'HEAD') {
-      const token = await _ensureCsrf();
-      opts.headers = opts.headers || {};
-      opts.headers['X-CSRF-Token'] = token;
-      if (!opts.headers['Content-Type'] && opts.body && typeof opts.body === 'string') opts.headers['Content-Type'] = 'application/json';
+
+    // Cache GET responses
+    if (method === 'GET') {
+      const cached = _apiCache[url];
+      if (cached && (Date.now() - cached.ts) < API_CACHE_TTL) return cached.data;
+      // Dedup: if same GET is already in flight, await it
+      if (_apiInflight[url]) return _apiInflight[url];
+      const p = _apiFetch(url, opts, method);
+      _apiInflight[url] = p;
+      const data = await p;
+      delete _apiInflight[url];
+      if (data !== null) _apiCache[url] = { data, ts: Date.now() };
+      return data;
     }
-    const res = await fetch(url, opts);
-    if (res.status === 401) { window.location.href = '/login'; return null; }
-    if (!res.ok) {
-      let msg = `Server error (${res.status})`;
-      try { const b = await res.json(); if (b.error) msg = b.error; } catch(e) {}
-      showToast(msg); return null;
-    }
-    return await res.json();
+
+    // Mutating requests: clear cache after success
+    const data = await _apiFetch(url, opts, method);
+    if (data !== null) invalidateApiCache();
+    return data;
   } catch(e) { console.error('API error:', e); showToast('Network error — is the server running?'); return null; }
+}
+
+async function _apiFetch(url, opts, method) {
+  if (method !== 'GET' && method !== 'HEAD') {
+    const token = await _ensureCsrf();
+    opts.headers = opts.headers || {};
+    opts.headers['X-CSRF-Token'] = token;
+    if (!opts.headers['Content-Type'] && opts.body && typeof opts.body === 'string') opts.headers['Content-Type'] = 'application/json';
+  }
+  const res = await fetch(url, opts);
+  if (res.status === 401) { window.location.href = '/login'; return null; }
+  if (!res.ok) {
+    let msg = `Server error (${res.status})`;
+    try { const b = await res.json(); if (b.error) msg = b.error; } catch(e) {}
+    showToast(msg); return null;
+  }
+  return await res.json();
 }
 
 // ── AUTH-AWARE FETCH (for file uploads that bypass api()) ─────
@@ -295,8 +328,6 @@ function navigateTo(view) {
   setMonthPickerVisibility(view);
   // Render view
   renderView(view);
-  // Update nav count badges
-  updateNavCounts();
 }
 async function updateNavCounts() {
   const [txRes, schedRes, rulesRes] = await Promise.all([
@@ -328,7 +359,7 @@ function renderView(view) {
   }
 }
 
-function refreshCurrentView() { renderView(STATE.view); }
+function refreshCurrentView() { invalidateApiCache(); renderView(STATE.view); }
 
 async function refreshMonths() {
   const months = await api('/api/months');
@@ -698,8 +729,16 @@ async function renderSettings(c) { c.innerHTML = settingsSkeleton(); try { await
 // INIT
 // ══════════════════════════════════════════════════════════════
 async function init() {
-  // Load current user info
-  const me = await api('/api/me');
+  // Load all initial data in parallel
+  const [me, cats, settings, months, demo, health] = await Promise.all([
+    api('/api/me'),
+    api('/api/categories'),
+    api('/api/settings'),
+    api('/api/months'),
+    api('/api/demo'),
+    api('/api/health'),
+  ]);
+  // Apply user info
   if (me) {
     const avatarEl = document.getElementById('user-avatar');
     const nameEl = document.getElementById('user-display-name');
@@ -720,33 +759,27 @@ async function init() {
       }
     }
   }
-  // Load categories
-  const cats = await api('/api/categories');
+  // Apply categories
   if (cats) {
     STATE.categories = cats;
     STATE.expenseCats = cats.filter(c => c.type === 'Expense');
     STATE.incomeCats = cats.filter(c => c.type === 'Income');
   }
-  // Load settings
-  const settings = await api('/api/settings');
+  // Apply settings
   if (settings) {
     STATE.settings = settings;
     if (settings.theme) applyTheme(settings.theme);
   }
-  // Load months
-  const months = await api('/api/months');
+  // Apply months
   if (months && months.length) {
     STATE.months = months;
-    STATE.monthIdx = 0; // most recent
+    STATE.monthIdx = 0;
     updateMonthLabel();
   }
   // Check demo
-  const demo = await api('/api/demo');
   if (demo) STATE.isDemo = demo.demo;
   // Check if DB exists
-  const health = await api('/api/health');
   if (health && !health.db_exists) {
-    // Show onboarding
     STATE.view = 'onboarding';
     renderOnboarding(document.getElementById('view-container'));
     return;
