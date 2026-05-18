@@ -228,6 +228,28 @@ def api_recurring():
     for r in rows:
         entry = dict(r)
         entry["price_changed"] = round(r["max_amount"] - r["min_amount"], 2) > 0.01
+        # Fetch last 6 charges for price trail (Case 05)
+        history_rows = db.execute("""
+            SELECT date, amount FROM transactions
+            WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND hidden=0
+            ORDER BY date DESC LIMIT 6
+        """, (r["name"],)).fetchall()
+        entry["history"] = [{"date": h["date"], "amount": float(h["amount"])} for h in reversed(history_rows)]
+        # Estimate next charge date based on frequency
+        if r["last_seen"]:
+            from datetime import date as dt_date, timedelta
+            try:
+                last = dt_date.fromisoformat(r["last_seen"])
+                avg_gap = 30  # default monthly
+                if r["months_seen"] and r["total_charges"] > 1:
+                    first = dt_date.fromisoformat(r["first_seen"])
+                    total_days = (last - first).days
+                    avg_gap = max(total_days // (r["total_charges"] - 1), 7)
+                entry["next_date"] = (last + timedelta(days=avg_gap)).isoformat()
+            except (ValueError, TypeError):
+                entry["next_date"] = None
+        else:
+            entry["next_date"] = None
         recurring.append(entry)
     total_monthly = sum(
         r["avg_amount"] for r in recurring if r["type"] == "Expense"
@@ -517,3 +539,25 @@ def api_bootstrap():
             "rules": rules_count,
         },
     })
+
+
+@summary_bp.route("/api/insights/dismiss", methods=["POST"])
+def api_dismiss_insight():
+    """Persist dismissed insight IDs so they don't reappear."""
+    import json
+    data = request.get_json(force=True) or {}
+    insight_id = data.get("id", "")
+    if not insight_id:
+        return jsonify({"ok": True})
+    db = get_db()
+    # Store dismissed IDs in user settings JSON
+    row = db.execute("SELECT value FROM settings WHERE key='dismissed_insights'").fetchone()
+    dismissed = json.loads(row["value"]) if row else []
+    if insight_id not in dismissed:
+        dismissed.append(insight_id)
+    if row:
+        db.execute("UPDATE settings SET value=? WHERE key='dismissed_insights'", (json.dumps(dismissed),))
+    else:
+        db.execute("INSERT INTO settings (key, value) VALUES ('dismissed_insights', ?)", (json.dumps(dismissed),))
+    db.commit()
+    return jsonify({"ok": True})

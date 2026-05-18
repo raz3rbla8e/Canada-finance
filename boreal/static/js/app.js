@@ -929,6 +929,48 @@ async function loadForecastCard() {
     ${chart}`;
 }
 
+// ── BUDGET PACING RENDERER (Case 06) ──────────────────────────
+function renderBudgetV2(b) {
+  const pct = b.limit ? Math.min(b.spent / b.limit * 100, 100) : 0;
+  const now = new Date();
+  const monthStr = b.month || currentMonth() || now.toISOString().slice(0, 7);
+  const [y, m] = monthStr.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const todayInMonth = (monthStr === now.toISOString().slice(0, 7)) ? now.getDate() : daysInMonth;
+  const pacePct = (todayInMonth / daysInMonth) * 100;
+  const expectedSpend = (b.limit || 0) * (pacePct / 100);
+  const overUnder = (b.spent || 0) - expectedSpend;
+  const projectedTotal = (todayInMonth > 0) ? (b.spent || 0) * (daysInMonth / todayInMonth) : (b.spent || 0);
+
+  let statusCls = 'ok', statusText = '\u2713 On pace';
+  if (b.spent > b.limit) { statusCls = 'crit'; statusText = `\u2191 Over by ${fmtCurrency(b.spent - b.limit, true)}`; }
+  else if (overUnder > b.limit * 0.05) {
+    statusCls = 'over';
+    statusText = `\u2191 Over pace by ${fmtCurrency(overUnder, true)} \u2014 likely ${fmtCurrency(projectedTotal, true)} by month-end`;
+  }
+  else if (overUnder < -b.limit * 0.05) {
+    statusCls = 'ok';
+    statusText = `\u2713 Under pace \u2014 likely ${fmtCurrency(projectedTotal, true)} by month-end`;
+  }
+  const fillCls = b.spent > b.limit ? 'danger' : (overUnder > b.limit * 0.10 ? 'warn' : '');
+  const dotColor = catColor(b.category);
+
+  return `<div class="budget-v2">
+    <div class="b-row">
+      <div class="b-name"><span class="swatch" style="background:${dotColor}"></span>${esc(b.category)}</div>
+      <div class="b-amts"><strong>${fmtCurrency(b.spent, true)}</strong> of ${fmtCurrency(b.limit, true)} \u00b7 ${daysInMonth - todayInMonth} days left</div>
+    </div>
+    <div class="b-track">
+      <div class="b-fill ${fillCls}" style="width:${pct.toFixed(1)}%"></div>
+      <div class="b-pace" style="left:${pacePct.toFixed(1)}%" title="On pace"></div>
+    </div>
+    <div class="b-foot">
+      <span class="status ${statusCls}">${statusText}</span>
+      <span>Day ${todayInMonth} / ${daysInMonth}</span>
+    </div>
+  </div>`;
+}
+
 async function _renderDashboard(c) {
   const month = currentMonth();
   const [summary, trends, recurring, goals, accounts, netWorth] = await Promise.all([
@@ -967,13 +1009,50 @@ async function _renderDashboard(c) {
   const expDelta = prevExpenses ? ((expenses - prevExpenses) / prevExpenses * 100) : 0;
   const prevMonthName = summary.prev_month ? new Date(summary.prev_month + '-15').toLocaleString('en-CA', {month: 'short'}) : 'last month';
 
-  // Insights
+  // Build comparative headline (Case 03)
+  let headlineText = `You saved <span style="color:${net>=0?'var(--pos)':'var(--danger)'};font-variant-numeric:tabular-nums">${fmtCurrency(net,true)}</span> \u00b7 ${savingsRate.toFixed(0)}% savings rate`;
+  if (net > 0 && Array.isArray(trends) && trends.length > 2) {
+    const historicalSavings = trends.slice(0, -1).map(t => ({ m: t.month, s: (t.income || 0) - (t.expenses || 0) }));
+    const lastBetter = [...historicalSavings].reverse().find(h => h.s > net);
+    if (!lastBetter && historicalSavings.length) {
+      const oldest = historicalSavings[0].m;
+      const oldestName = new Date(oldest + '-15').toLocaleString('en-CA', { month: 'short' });
+      headlineText = `You saved <span style="color:var(--pos);font-variant-numeric:tabular-nums">${fmtCurrency(net, true)}</span> \u2014 your best run since ${oldestName}`;
+    }
+  }
+
+  // Insights v2 (Case 10)
   let insightsHTML = '';
   if (summary.insights && summary.insights.length) {
-    insightsHTML = `<div class="insights">${summary.insights.map(i => {
-      const toneMap = { warn:['var(--warn-soft)','var(--warn)'], accent:['var(--accent-soft)','var(--accent)'], pos:['var(--pos-soft)','var(--pos)'] };
-      const [bg,fg] = toneMap[i.tone] || toneMap.accent;
-      return `<div class="insight"><div class="icon-circle" style="background:${bg};color:${fg}">${icon(i.icon||'spark',15)}</div><div><div class="ttl">${esc(i.title)}</div><div class="dt">${esc(i.detail)}</div></div></div>`;
+    const top = summary.insights.slice(0, 2);
+    insightsHTML = `<div class="insights-v2">${top.map(i => {
+      const tone = i.tone || 'accent';
+      const tag = i.tag || ({ warn: 'Spike', pos: 'Streak', danger: 'Alert', accent: 'Notable' }[tone]) || 'Notable';
+      const compare = (i.compare && i.compare.a && i.compare.b) ? i.compare : null;
+      const actions = (i.actions && i.actions.length) ? i.actions : (
+        i.category
+          ? [{ label: 'See transactions', action: 'filter-cat', value: i.category, primary: true }]
+          : []
+      );
+      return `<div class="insight-v2 tone-${esc(tone)}">
+        <div class="top-row">
+          <span class="tag">${esc(tag)}</span>
+          <span class="date-mini">${esc(i.period || 'This month')}</span>
+        </div>
+        <h5>${i.title}</h5>
+        ${compare ? `<div class="compare-bar">
+          <span class="lbl">${esc(compare.a.label)}</span>
+          <div class="bar"><div class="fil" style="width:${Math.min(compare.a.pct || 60, 100)}%"></div></div>
+          <span class="amt">${fmtCurrency(compare.a.value, true)}</span>
+          <span class="lbl">${esc(compare.b.label)}</span>
+          <div class="bar"><div class="fil toned" style="width:${Math.min(compare.b.pct || 90, 100)}%"></div></div>
+          <span class="amt" style="color:var(--insight-fg)">${fmtCurrency(compare.b.value, true)}</span>
+        </div>` : ''}
+        ${actions.length ? `<div class="actions">
+          ${actions.map(a => `<button class="${a.primary ? 'primary' : ''}" data-insight-action="${esc(a.action)}" data-value="${esc(a.value || '')}">${esc(a.label)}</button>`).join('')}
+          <button data-insight-action="dismiss" data-insight-id="${esc(i.id || '')}">Dismiss</button>
+        </div>` : ''}
+      </div>`;
     }).join('')}</div>`;
   }
 
@@ -982,7 +1061,7 @@ async function _renderDashboard(c) {
     <div class="page-head">
       <div>
         <div class="page-sub" style="font-size:13px;color:var(--ink-3);margin-bottom:4px">${new Date(month+'-15').toLocaleString('en-CA',{month:'long',year:'numeric'})}</div>
-        <div class="page-title" style="font-size:22px;font-weight:500;letter-spacing:-0.015em">You saved <span style="color:${net>=0?'var(--pos)':'var(--danger)'};font-variant-numeric:tabular-nums">${fmtCurrency(net,true)}</span> · ${savingsRate.toFixed(0)}% savings rate</div>
+        <div class="page-title" style="font-size:22px;font-weight:500;letter-spacing:-0.015em">${headlineText}</div>
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn" onclick="window.location.href='/api/export?month=${month||''}'">${icon('download',14)} Export</button>
@@ -992,44 +1071,39 @@ async function _renderDashboard(c) {
 
     ${insightsHTML}
 
-    <div class="kpi-grid">
-      <div class="kpi hero-aurora">
-        <div class="kpi-label">Net worth</div>
-        <div class="kpi-value">${fmtCurrencyHTML(currentNW)}</div>
-        <div class="kpi-delta">
-          <span class="chip ${deltaNW >= 0 ? 'chip-up' : 'chip-dn'}">${icon(deltaNW >= 0 ? 'arrow_up' : 'arrow_dn', 11)} ${Math.abs(deltaNW).toFixed(1)}%</span>
-          <span>vs ${prevMonthName}</span>
+    <!-- TIER 1 — Hero -->
+    <div class="dash-hero">
+      <div>
+        <div class="h-label">Net worth \u00b7 ${new Date(month+'-15').toLocaleString('en-CA',{month:'short'})}</div>
+        <div class="h-value">${fmtCurrencyHTML(currentNW)}</div>
+        <div class="h-delta">
+          <strong>${currentNW - prevNW >= 0 ? '+' : ''}${fmtCurrency(currentNW - prevNW, true)}</strong> this month \u00b7
+          <strong>${deltaNW >= 0 ? '+' : ''}${Math.abs(deltaNW).toFixed(1)}%</strong> vs ${prevMonthName}
         </div>
-        ${svgSparkline(nwData.map(d=>d.v), 200, 24, 'rgba(255,255,255,0.7)')}
       </div>
-      <div class="kpi">
-        <div class="kpi-label">Income</div>
-        <div class="kpi-value" style="color:var(--pos)">${fmtCurrencyHTML(income)}</div>
-        <div class="kpi-delta">
-          <span class="chip ${incomeDelta >= 0 ? 'chip-up' : 'chip-dn'}">${icon(incomeDelta >= 0 ? 'arrow_up' : 'arrow_dn', 11)} ${Math.abs(incomeDelta).toFixed(1)}%</span>
-          <span>vs ${prevMonthName}</span>
-        </div>
-        ${svgSparkline(trendHistory.map(h=>h.income), 200, 24, 'var(--pos)')}
+      <div class="h-chart">${svgSparkline(nwData.map(d=>d.v), 480, 80, 'rgba(255,255,255,0.9)')}</div>
+    </div>
+
+    <!-- TIER 2 — Flow -->
+    <div class="dash-flow">
+      <div class="f-card">
+        <div class="lbl">In</div>
+        <div class="val" style="color:var(--pos)">${fmtCurrencyHTML(income)}</div>
+        <div class="delta ${incomeDelta >= 0 ? 'up' : 'dn'}">${incomeDelta >= 0 ? '+' : ''}${incomeDelta.toFixed(1)}% vs ${prevMonthName}</div>
       </div>
-      <div class="kpi">
-        <div class="kpi-label">Expenses</div>
-        <div class="kpi-value">${fmtCurrencyHTML(expenses)}</div>
-        <div class="kpi-delta">
-          <span class="chip ${expDelta <= 0 ? 'chip-up' : 'chip-dn'}">${icon(expDelta <= 0 ? 'arrow_dn' : 'arrow_up', 11)} ${Math.abs(expDelta).toFixed(1)}%</span>
-          <span>vs ${prevMonthName}</span>
-        </div>
-        ${svgSparkline(trendHistory.map(h=>h.expenses), 200, 24, 'var(--ink-3)')}
+      <div class="f-card">
+        <div class="lbl">Out</div>
+        <div class="val">${fmtCurrencyHTML(expenses)}</div>
+        <div class="delta ${expDelta <= 0 ? 'up' : 'dn'}">${expDelta >= 0 ? '+' : ''}${expDelta.toFixed(1)}% vs ${prevMonthName}</div>
       </div>
-      <div class="kpi">
-        <div class="kpi-label">Subscriptions</div>
-        <div class="kpi-value">${fmtCurrencyHTML(subTotal)}</div>
-        <div class="kpi-delta">
-          <span class="chip" style="background:var(--accent-soft);color:var(--accent-ink)">${subCount} active</span>
-          <span>${expenses > 0 ? (subTotal/expenses*100).toFixed(0)+'% of spend' : 'monthly committed'}</span>
-        </div>
+      <div class="f-card">
+        <div class="lbl">Recurring</div>
+        <div class="val">${fmtCurrencyHTML(subTotal)}</div>
+        <div class="delta muted">${subCount} subs \u00b7 ${expenses > 0 ? (subTotal/expenses*100).toFixed(0)+'% of spend' : '\u2014'}</div>
       </div>
     </div>
 
+    <!-- TIER 3 — Detail grid -->
     <div class="grid-2" style="margin-bottom:16px">
       <div class="card">
         <div class="card-h">
@@ -1047,7 +1121,7 @@ async function _renderDashboard(c) {
         <div id="nw-chart-container">${svgNetWorthChart(nwData)}</div>
       </div>
       <div class="card">
-        <div class="card-h"><h3>Where it went</h3><button class="muted-link" onclick="navigateTo('budgets')">See all →</button></div>
+        <div class="card-h"><h3>Where it went</h3><button class="muted-link" onclick="navigateTo('budgets')">See all \u2192</button></div>
         <div style="display:flex;align-items:center;gap:18px">
           ${svgDoughnut(topCats.map(x => ({ value: x.total, color: catColor(x.category) })), 140)}
           <div style="flex:1">${topCats.slice(0,5).map(x => {
@@ -1060,21 +1134,11 @@ async function _renderDashboard(c) {
 
     <div class="grid-2" style="margin-bottom:16px">
       <div class="card">
-        <div class="card-h"><h3>Budgets</h3><button class="muted-link" onclick="navigateTo('budgets')">Manage →</button></div>
-        ${budgets.length ? budgets.slice(0,6).map(b => {
-          const pct = b.limit ? (b.spent/b.limit*100) : 0;
-          const cls = pct >= 100 ? 'danger' : pct >= 85 ? 'warn' : '';
-          return `<div style="margin-bottom:14px">
-            <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">
-              <span style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:2px;background:${catColor(b.category)}"></span><span style="font-weight:500">${esc(b.category)}</span></span>
-              <span style="font-variant-numeric:tabular-nums;color:var(--ink-2)"><span style="color:${pct>=100?'var(--danger)':'var(--ink-1)'};font-weight:500">${fmtCurrency(b.spent,true)}</span><span style="color:var(--ink-3)"> / ${fmtCurrency(b.limit,true)}</span></span>
-            </div>
-            <div class="progress ${cls}"><div class="fill" style="width:${Math.min(pct,100)}%"></div></div>
-          </div>`;
-        }).join('') : '<div style="color:var(--ink-3);font-size:13px">No budgets set yet</div>'}
+        <div class="card-h"><h3>Budgets</h3><button class="muted-link" onclick="navigateTo('budgets')">Manage \u2192</button></div>
+        ${budgets.length ? budgets.slice(0,6).map(renderBudgetV2).join('') : '<div style="color:var(--ink-3);font-size:13px">No budgets set yet</div>'}
       </div>
       <div class="card">
-        <div class="card-h"><h3>Accounts</h3><button class="muted-link" onclick="navigateTo('accounts')">Manage →</button></div>
+        <div class="card-h"><h3>Accounts</h3><button class="muted-link" onclick="navigateTo('accounts')">Manage \u2192</button></div>
         ${(accounts||[]).map(a => { const ac = acctColor(a); return `<div class="acct-row">
           <div class="left">
             <div class="acct-glyph" style="background:${ac}18;color:${ac};border-color:${ac}40">${esc((a.name||'?')[0])}</div>
@@ -1092,11 +1156,41 @@ async function _renderDashboard(c) {
     <div class="grid-2" style="margin-bottom:16px">
       <div class="card">
         <div class="card-h"><h3>Recurring & subscriptions</h3><span style="font-size:12px;color:var(--ink-3)">${recList.length} detected</span></div>
-        ${recList.map(r => `<div class="recur-row">
-          ${merchantGlyph(r.name)}
-          <div><div class="nm">${esc(r.name)}${r.warn?'<span class="warn-badge">↑ price</span>':''}</div><div class="when">${esc(r.frequency||'Monthly')} · last ${fmtDate(r.last_date)}</div></div>
-          <div style="text-align:right"><div class="avg">${fmtCurrency(r.avg_amount)}</div><div class="freq">avg</div></div>
-        </div>`).join('') || '<div style="color:var(--ink-3);font-size:13px">No recurring transactions detected yet</div>'}
+        ${recList.map(r => {
+          const history = (r.history && r.history.length)
+            ? r.history.slice(-6)
+            : new Array(6).fill(0).map((_, i) => ({
+                amount: (i < 3 && r.price_changed) ? (r.avg_amount * 0.92) : r.avg_amount,
+              }));
+          const minH = Math.min(...history.map(h => h.amount));
+          const maxH = Math.max(...history.map(h => h.amount));
+          const range = maxH - minH || 1;
+          const lastAmt = history[history.length - 1].amount;
+          const oldAmt = history[0].amount;
+          const delta = lastAmt - oldAmt;
+          const catC = catColor(r.category || 'Uncategorized');
+          return `<div class="recur-v2">
+            ${merchantGlyph(r.name, catC)}
+            <div>
+              <div class="nm-row"><span class="nm">${esc(r.name)}</span><span class="freq-tag">${esc(r.frequency || 'Monthly')}</span></div>
+              <div class="next">${r.next_date ? `Next ${fmtDate(r.next_date)} \u00b7 ` : ''}${history.length} mo history</div>
+            </div>
+            <div class="trail">
+              ${history.map((h, i) => {
+                const isLast = i === history.length - 1;
+                const heightPct = 30 + ((h.amount - minH) / range) * 50;
+                const cls = isLast ? 'now-bar' : (h.amount > oldAmt * 1.02 ? 'up' : '');
+                return `<span class="${cls}" style="height:${heightPct.toFixed(0)}%"></span>`;
+              }).join('')}
+            </div>
+            <div class="amt-block">
+              <div class="amt">${fmtCurrency(lastAmt)}</div>
+              <div class="amt-delta ${Math.abs(delta) < 0.5 ? 'muted' : ''}">
+                ${Math.abs(delta) < 0.5 ? 'no change' : `${delta > 0 ? '\u2191' : '\u2193'} ${fmtCurrency(Math.abs(delta), true)} since start`}
+              </div>
+            </div>
+          </div>`;
+        }).join('') || '<div style="color:var(--ink-3);font-size:13px">No recurring transactions detected yet</div>'}
       </div>
       <div class="card">
         <div class="card-h"><h3>Savings goals</h3><button class="muted-link" onclick="navigateTo('budgets')">+ New</button></div>
@@ -1123,7 +1217,7 @@ async function _renderDashboard(c) {
     </div>
 
     <div class="card" id="forecast-card">
-      <div class="card-h"><h3>Cash-flow forecast</h3><span style="font-size:12px;color:var(--ink-3)">Loading…</span></div>
+      <div class="card-h"><h3>Cash-flow forecast</h3><span style="font-size:12px;color:var(--ink-3)">Loading\u2026</span></div>
     </div>
   </div>`;
 
@@ -1139,6 +1233,23 @@ async function _renderDashboard(c) {
       const filtered = months === 0 ? nwData : nwData.slice(-months);
       const container = document.getElementById('nw-chart-container');
       if (container) container.innerHTML = svgNetWorthChart(filtered);
+    });
+  });
+
+  // Wire insight actions (Case 10)
+  document.querySelectorAll('[data-insight-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.insightAction;
+      if (action === 'filter-cat') {
+        window.__pendingTxCatFilter = btn.dataset.value;
+        navigateTo('transactions');
+      } else if (action === 'set-budget') {
+        window.__pendingBudgetCategory = btn.dataset.value;
+        navigateTo('budgets');
+      } else if (action === 'dismiss') {
+        api('/api/insights/dismiss', 'POST', { id: btn.dataset.insightId });
+        btn.closest('.insight-v2')?.remove();
+      }
     });
   });
 }

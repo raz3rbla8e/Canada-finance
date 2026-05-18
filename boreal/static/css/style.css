@@ -851,6 +851,225 @@ tr.selected{background:var(--accent-soft)}
 .bulk-dock .pchip.close { padding: 6px 9px; }
 body:has(.bulk-dock.open) .undo-toast { bottom: 88px; }
 
+/* ============================================================
+   CASE 03 — Dashboard tiered hierarchy
+   ============================================================ */
+.dash-hero {
+  background: var(--aurora); color: white;
+  border-radius: 14px; padding: 22px 24px;
+  display: grid; grid-template-columns: 1fr 1.2fr;
+  gap: 32px; align-items: center;
+  margin-bottom: 14px; position: relative; overflow: hidden;
+}
+.dash-hero .h-label {
+  font-size: 10.5px; letter-spacing: 0.08em;
+  text-transform: uppercase; font-weight: 600;
+  opacity: 0.7;
+}
+.dash-hero .h-value {
+  font-size: 36px; font-weight: 500; letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  margin: 8px 0 4px; line-height: 1;
+}
+.dash-hero .h-value .cents { font-size: 22px; opacity: 0.7; }
+.dash-hero .h-delta {
+  font-size: 12.5px; opacity: 0.9;
+}
+.dash-hero .h-delta strong { font-weight: 600; }
+.dash-hero .h-chart { height: 80px; }
+.dash-hero .h-chart svg { width: 100%; height: 100%; }
+
+.dash-flow {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 12px; margin-bottom: 16px;
+}
+.dash-flow .f-card {
+  background: var(--bg-surface); border: 1px solid var(--line-1);
+  border-radius: 12px; padding: 12px 14px;
+}
+.dash-flow .f-card .lbl {
+  font-size: 11px; color: var(--ink-3); font-weight: 500;
+}
+.dash-flow .f-card .val {
+  font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em; margin-top: 3px; line-height: 1.1;
+}
+.dash-flow .f-card .delta {
+  font-size: 11px; margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.dash-flow .f-card .delta.up { color: var(--pos); }
+.dash-flow .f-card .delta.dn { color: var(--warn); }
+.dash-flow .f-card .delta.muted { color: var(--ink-3); }
+
+/* ============================================================
+   CASE 05 — Recurring v2 (price trail)
+   ============================================================ */
+.recur-v2 {
+  display: grid; grid-template-columns: 32px 1fr 90px 100px;
+  align-items: center; gap: 14px;
+  padding: 12px 0; border-bottom: 1px solid var(--line-1);
+}
+.recur-v2:last-child { border-bottom: none; }
+.recur-v2 .nm-row { display: flex; align-items: baseline; gap: 8px; }
+.recur-v2 .nm { font-size: 13.5px; font-weight: 500; color: var(--ink-1); }
+.recur-v2 .freq-tag {
+  font-size: 10.5px; color: var(--ink-3);
+  padding: 1px 5px; border: 1px solid var(--line-1);
+  border-radius: 4px; text-transform: uppercase;
+  letter-spacing: 0.04em; font-weight: 600;
+}
+.recur-v2 .next { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+.recur-v2 .trail {
+  display: flex; align-items: flex-end; gap: 3px; height: 28px;
+}
+.recur-v2 .trail span {
+  flex: 1; min-height: 2px; border-radius: 1.5px;
+  background: oklch(72% 0.02 240);
+}
+.recur-v2 .trail .now-bar { background: var(--ink-1); }
+.recur-v2 .trail .up { background: var(--warn); }
+.recur-v2 .amt-block { text-align: right; }
+.recur-v2 .amt {
+  font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums;
+}
+.recur-v2 .amt-delta {
+  font-size: 11px; color: var(--warn); font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; gap: 3px; margin-top: 2px;
+}
+.recur-v2 .amt-delta.muted { color: var(--ink-3); }
+
+/* ============================================================
+   CASE 06 — Budget pacing
+   ============================================================ */
+.budget-v2 { margin-bottom: 18px; }
+.budget-v2 .b-row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.budget-v2 .b-name {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13.5px; font-weight: 500;
+}
+.budget-v2 .b-name .swatch { width: 9px; height: 9px; border-radius: 2px; }
+.budget-v2 .b-amts {
+  font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--ink-3);
+}
+.budget-v2 .b-amts strong { color: var(--ink-1); font-weight: 500; }
+.budget-v2 .b-track {
+  position: relative; height: 8px;
+  background: var(--bg-sunken); border-radius: 999px;
+  overflow: visible;
+}
+.budget-v2 .b-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: var(--accent); border-radius: 999px;
+}
+.budget-v2 .b-fill.warn { background: var(--warn); }
+.budget-v2 .b-fill.danger { background: var(--danger); }
+.budget-v2 .b-pace {
+  position: absolute; top: -3px; bottom: -3px; width: 2px;
+  background: var(--ink-1); border-radius: 1px;
+}
+.budget-v2 .b-pace::after {
+  content: ""; position: absolute; top: -3px; left: -3px;
+  width: 8px; height: 3px; background: var(--ink-1); border-radius: 2px;
+}
+.budget-v2 .b-foot {
+  display: flex; justify-content: space-between; margin-top: 8px;
+  font-size: 11.5px; color: var(--ink-3);
+}
+.budget-v2 .b-foot .status {
+  display: inline-flex; align-items: center; gap: 5px; font-weight: 500;
+}
+.budget-v2 .b-foot .status.over { color: var(--warn); }
+.budget-v2 .b-foot .status.ok { color: var(--pos); }
+.budget-v2 .b-foot .status.crit { color: var(--danger); }
+
+/* ============================================================
+   CASE 10 — Insights v2
+   ============================================================ */
+.insights-v2 {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  margin-bottom: 20px;
+}
+.insight-v2 {
+  background: var(--bg-surface); border: 1px solid var(--line-1);
+  border-radius: 14px; padding: 18px 18px 14px;
+  display: flex; flex-direction: column; gap: 12px;
+  position: relative; overflow: hidden;
+}
+.insight-v2::before {
+  content: ""; position: absolute; right: -30px; top: -30px;
+  width: 140px; height: 140px; border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--insight-bg, var(--accent-soft)) 0%, transparent 70%);
+}
+.insight-v2.tone-warn  { --insight-bg: var(--warn-soft);  --insight-fg: var(--warn); }
+.insight-v2.tone-pos   { --insight-bg: var(--pos-soft);   --insight-fg: var(--pos); }
+.insight-v2.tone-accent{ --insight-bg: var(--accent-soft); --insight-fg: var(--accent); }
+.insight-v2.tone-danger{ --insight-bg: var(--danger-soft); --insight-fg: var(--danger); }
+.insight-v2 .top-row {
+  display: flex; align-items: center; gap: 10px;
+  position: relative;
+}
+.insight-v2 .tag {
+  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  font-weight: 600; padding: 3px 8px; border-radius: 5px;
+  background: var(--insight-bg); color: var(--insight-fg);
+}
+.insight-v2 .date-mini {
+  font-size: 11px; color: var(--ink-3); margin-left: auto;
+}
+.insight-v2 h5 {
+  font-size: 14.5px; font-weight: 500; letter-spacing: -0.005em;
+  margin: 0; line-height: 1.4; max-width: 90%;
+  position: relative;
+}
+.insight-v2 h5 .strong {
+  color: var(--insight-fg); font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.insight-v2 .compare-bar {
+  display: grid; grid-template-columns: 50px 1fr 70px;
+  align-items: center; gap: 8px; font-size: 11.5px;
+  row-gap: 8px;
+}
+.insight-v2 .compare-bar .lbl { color: var(--ink-3); }
+.insight-v2 .compare-bar .bar {
+  height: 6px; background: var(--bg-sunken);
+  border-radius: 999px; overflow: hidden;
+}
+.insight-v2 .compare-bar .bar .fil {
+  height: 100%; background: var(--ink-2); border-radius: 999px;
+}
+.insight-v2 .compare-bar .bar .fil.toned { background: var(--insight-fg); }
+.insight-v2 .compare-bar .amt {
+  font-variant-numeric: tabular-nums; font-weight: 500;
+}
+.insight-v2 .actions {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;
+}
+.insight-v2 .actions button {
+  font-size: 11.5px; padding: 5px 11px; border-radius: 6px;
+  border: 1px solid var(--line-2); background: var(--bg-surface);
+  color: var(--ink-2); font-family: inherit; cursor: pointer;
+}
+.insight-v2 .actions button.primary {
+  background: var(--ink-1); color: var(--bg-surface); border-color: var(--ink-1);
+}
+.insight-v2 .actions button:hover { background: var(--bg-hover); color: var(--ink-1); }
+.insight-v2 .actions button.primary:hover { opacity: 0.92; background: var(--ink-1); color: var(--bg-surface); }
+
+@media (max-width: 1100px) {
+  .dash-hero { grid-template-columns: 1fr; gap: 12px; }
+  .dash-flow { grid-template-columns: 1fr 1fr; }
+  .insights-v2 { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .dash-flow { grid-template-columns: 1fr; }
+}
+
 /* RESPONSIVE */
 @media(max-width:1100px){
   .app{grid-template-columns:64px 1fr}.sidebar{padding:16px 8px;align-items:center}
