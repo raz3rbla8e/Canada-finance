@@ -13,7 +13,7 @@ from boreal.models.users import (
     list_all_users, user_count, get_user_db_path, set_admin,
     get_user_by_id, DATA_DIR, USERS_DB_PATH,
 )
-from boreal.config import PROJECT_ROOT
+from boreal.config import PROJECT_ROOT, SAMPLE_DATA_DIR, BANKS_DIR
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -108,3 +108,41 @@ def toggle_admin(user_id):
     new_status = not user.is_admin
     set_admin(user_id, new_status)
     return jsonify({"ok": True, "is_admin": new_status})
+
+
+@admin_bp.route("/api/seed-demo", methods=["POST"])
+def seed_demo():
+    """Import all sample CSVs into the current admin user's database."""
+    from boreal.models.database import get_db
+    from boreal.services.categorization import load_learned_dict
+    from boreal.services.csv_parser import load_bank_configs, detect_bank_config, parse_with_config
+    from boreal.services.rules_engine import save_transactions
+
+    if not os.path.isdir(SAMPLE_DATA_DIR):
+        return jsonify({"error": "No sample_data directory found"}), 404
+
+    csvs = sorted(f for f in os.listdir(SAMPLE_DATA_DIR) if f.endswith(".csv"))
+    if not csvs:
+        return jsonify({"error": "No CSV files in sample_data/"}), 404
+
+    db = get_db()
+    learned = load_learned_dict(db)
+    configs = load_bank_configs()
+    results = []
+    total_added = 0
+
+    for fname in csvs:
+        path = os.path.join(SAMPLE_DATA_DIR, fname)
+        with open(path, "r", encoding="utf-8-sig") as f:
+            text = f.read()
+        first_line = text.splitlines()[0] if text.strip() else ""
+        config, bank_name = detect_bank_config(first_line, configs)
+        if config:
+            txns = parse_with_config(text, config, learned)
+            added, dupes = save_transactions(txns)
+            total_added += added
+            results.append({"file": fname, "bank": config.get("name", bank_name), "added": added, "dupes": dupes})
+        else:
+            results.append({"file": fname, "bank": "unknown", "added": 0, "dupes": 0})
+
+    return jsonify({"total_added": total_added, "files": results})
