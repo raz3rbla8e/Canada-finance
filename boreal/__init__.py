@@ -2,11 +2,19 @@ import os
 import re
 import secrets
 import threading
+from datetime import timedelta
 
 from flask import Flask, session, request, jsonify, g
+from flask_login import LoginManager, current_user
+from flask_mail import Mail
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 from boreal.config import DB_PATH, PROJECT_ROOT, DEMO_MODE
-from boreal.models.database import init_db, close_db
+from boreal.models.database import init_db, close_db, init_user_db
+from boreal.models.users import (
+    init_users_db, get_user_by_id, close_users_db, get_user_db_path, DATA_DIR,
+)
 from boreal.routes import register_blueprints
 
 
@@ -134,6 +142,25 @@ def _start_demo_reset_timer(app):
     timer.start()
 
 
+def _register_security_headers(app):
+    """Add security headers to every response."""
+
+    @app.after_request
+    def security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com data:; "
+            "img-src 'self' data:; "
+            "connect-src 'self'"
+        )
+        return response
+
+
 def create_app():
     app = Flask(__name__)
     app.config["DB_PATH"] = DB_PATH
@@ -141,13 +168,98 @@ def create_app():
     app.secret_key = _get_secret_key()
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
 
-    init_db(app)
+    # ── Session cookie settings ───────────────────────────────────────────────
+    app.config["REMEMBER_COOKIE_DURATION"] = timedelta(days=30)
+    app.config["REMEMBER_COOKIE_HTTPONLY"] = True
+    app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    if os.environ.get("SECURE_COOKIES", "").lower() == "true":
+        app.config["REMEMBER_COOKIE_SECURE"] = True
+        app.config["SESSION_COOKIE_SECURE"] = True
+
+    # ── Flask-Mail ────────────────────────────────────────────────────────────
+    app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "")
+    app.config["MAIL_PORT"] = int(os.environ.get("MAIL_PORT", "587"))
+    app.config["MAIL_USE_TLS"] = os.environ.get("MAIL_USE_TLS", "true").lower() == "true"
+    app.config["MAIL_USERNAME"] = os.environ.get("MAIL_USERNAME", "")
+    app.config["MAIL_PASSWORD"] = os.environ.get("MAIL_PASSWORD", "")
+    app.config["MAIL_DEFAULT_SENDER"] = os.environ.get(
+        "MAIL_DEFAULT_SENDER", os.environ.get("MAIL_USERNAME", "noreply@boreal.app")
+    )
+    mail = Mail(app)
+
+    # ── Flask-Login ───────────────────────────────────────────────────────────
+    login_manager = LoginManager(app)
+    login_manager.login_view = "auth.login"
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        return get_user_by_id(user_id)
+
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "unauthorized"}), 401
+        return redirect_to_login()
+
+    def redirect_to_login():
+        from flask import redirect, url_for
+        return redirect(url_for("auth.login", next=request.path))
+
+    # ── Flask-Limiter ─────────────────────────────────────────────────────────
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=["120/minute"],
+        storage_uri="memory://",
+    )
+    app.limiter = limiter  # expose so auth blueprint can use decorators
+
+    # ── Database setup ────────────────────────────────────────────────────────
+    init_users_db()
+
+    # Keep legacy init_db for backward compat (demo mode, migration CLI)
+    if os.path.exists(app.config["DB_PATH"]):
+        init_db(app)
+
     app.teardown_appcontext(close_db)
+    app.teardown_appcontext(close_users_db)
+
+    # ── Auth: set per-user DB path before each request ────────────────────────
+    _PUBLIC_PREFIXES = ("/login", "/signup", "/logout", "/verify-email/",
+                        "/forgot-password", "/reset-password/", "/static/")
+    _PUBLIC_API = ("/api/health", "/api/csrf-token", "/api/demo", "/api/demo/reset")
+
+    @app.before_request
+    def set_user_db():
+        """Enforce auth and point get_db() to the current user's database file."""
+        path = request.path
+
+        # Public routes: no auth needed
+        if any(path.startswith(p) for p in _PUBLIC_PREFIXES):
+            return
+        if path in _PUBLIC_API:
+            return
+
+        # Everything else requires authentication
+        if not current_user.is_authenticated:
+            if path.startswith("/api/"):
+                return jsonify({"error": "unauthorized"}), 401
+            return redirect_to_login()
+
+        # Authenticated: resolve per-user DB
+        db_path = get_user_db_path(current_user.id)
+        if not os.path.exists(db_path):
+            init_user_db(db_path)
+        g.db_path = db_path
+
     _register_csrf(app)
     _register_demo_guard(app)
+    _register_security_headers(app)
     register_blueprints(app)
 
-    # Auto-seed sample data in demo mode
+    # ── Demo mode auto-seed ───────────────────────────────────────────────────
     if DEMO_MODE:
         with app.app_context():
             from boreal.models.database import get_db

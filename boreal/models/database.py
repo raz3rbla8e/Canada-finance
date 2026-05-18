@@ -6,8 +6,12 @@ from flask import current_app, g
 
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(current_app.config["DB_PATH"])
+        # Per-user DB: use g.db_path if set (by auth before_request),
+        # fall back to app config for CLI / migration contexts
+        db_path = getattr(g, "db_path", None) or current_app.config["DB_PATH"]
+        g.db = sqlite3.connect(db_path)
         g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA journal_mode=WAL")
     return g.db
 
 
@@ -18,7 +22,7 @@ def close_db(e=None):
 
 
 def get_db_path():
-    return current_app.config["DB_PATH"]
+    return getattr(g, "db_path", None) or current_app.config["DB_PATH"]
 
 
 def tx_hash(date_str: str, name: str, amount: float, account: str) -> str:
@@ -298,6 +302,19 @@ def init_db(app):
     try:
         run_migrations(db)
         _fix_legacy_hashes(db)
+        _seed_defaults(db)
+    finally:
+        db.close()
+
+
+def init_user_db(db_path):
+    """Initialize a per-user database file with full schema + defaults."""
+    import os
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    db = sqlite3.connect(db_path)
+    try:
+        db.execute("PRAGMA journal_mode=WAL")
+        run_migrations(db)
         _seed_defaults(db)
     finally:
         db.close()

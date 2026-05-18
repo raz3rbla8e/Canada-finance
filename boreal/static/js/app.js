@@ -78,6 +78,7 @@ async function api(url, methodOrOpts, body) {
       if (!opts.headers['Content-Type'] && opts.body && typeof opts.body === 'string') opts.headers['Content-Type'] = 'application/json';
     }
     const res = await fetch(url, opts);
+    if (res.status === 401) { window.location.href = '/login'; return null; }
     if (!res.ok) {
       let msg = `Server error (${res.status})`;
       try { const b = await res.json(); if (b.error) msg = b.error; } catch(e) {}
@@ -85,6 +86,13 @@ async function api(url, methodOrOpts, body) {
     }
     return await res.json();
   } catch(e) { console.error('API error:', e); showToast('Network error — is the server running?'); return null; }
+}
+
+// ── AUTH-AWARE FETCH (for file uploads that bypass api()) ─────
+async function authFetch(url, opts) {
+  const res = await fetch(url, opts);
+  if (res.status === 401) { window.location.href = '/login'; return null; }
+  return res;
 }
 
 // ── ICON SVG SYSTEM ───────────────────────────────────────────
@@ -473,7 +481,7 @@ function openCommandPalette() {
     { title:'Import CSV / OFX file', group:'Action', icon:'upload', action:()=>navigateTo('import') },
     { title:'Toggle dark mode', group:'Action', icon:'moon', action:()=>toggleTheme() },
     { title:'Export transactions to CSV', group:'Action', icon:'download', action:()=>{ window.location.href='/api/export?month='+(currentMonth()||''); } },
-    { title:'Download backup of finance.db', group:'Action', icon:'download', action:()=>{ window.location.href='/api/backup'; } },
+    { title:'Download backup of your data', group:'Action', icon:'download', action:()=>{ window.location.href='/api/backup'; } },
   ];
   const all = [...navCmds, ...actionCmds];
   let active = 0, filtered = all;
@@ -689,6 +697,28 @@ async function renderSettings(c) { c.innerHTML = settingsSkeleton(); try { await
 // INIT
 // ══════════════════════════════════════════════════════════════
 async function init() {
+  // Load current user info
+  const me = await api('/api/me');
+  if (me) {
+    const avatarEl = document.getElementById('user-avatar');
+    const nameEl = document.getElementById('user-display-name');
+    const mailEl = document.getElementById('user-db-info');
+    if (avatarEl) avatarEl.textContent = (me.display_name || 'B')[0].toUpperCase();
+    if (nameEl) nameEl.textContent = me.display_name || 'User';
+    if (mailEl) mailEl.textContent = me.email || '';
+    // Show admin link for admin users
+    if (me.is_admin) {
+      const logoutLink = document.querySelector('.user-row a[href="/logout"]');
+      if (logoutLink) {
+        const adminLink = document.createElement('a');
+        adminLink.href = '/admin/';
+        adminLink.title = 'Admin';
+        adminLink.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
+        adminLink.style.cssText = 'color:var(--ink-3);display:flex;align-items:center;transition:color .15s';
+        logoutLink.parentNode.insertBefore(adminLink, logoutLink);
+      }
+    }
+  }
   // Load categories
   const cats = await api('/api/categories');
   if (cats) {
@@ -730,7 +760,7 @@ function renderOnboarding(c) {
   c.innerHTML = `<div class="page"><div class="onboarding">
     <div class="brand-mark-lg"><svg viewBox="0 0 512 512" width="32" height="32" fill="none"><polygon points="256,80 196,180 316,180" fill="currentColor"/><polygon points="256,140 176,260 336,260" fill="currentColor"/><polygon points="256,210 156,340 356,340" fill="currentColor"/><rect x="240" y="340" width="32" height="52" rx="4" fill="currentColor" opacity="0.7"/></svg></div>
     <h1>Welcome to Boreal.</h1>
-    <p class="lede">A personal finance dashboard that lives on your computer. Drop in a bank export, and you'll see your money in 30 seconds — no signup, no cloud, no tracking.</p>
+    <p class="lede">A personal finance dashboard for Canadians. Drop in a bank export, and you'll see your money in 30 seconds — private, simple, no tracking.</p>
     <div class="onb-cards">
       <div class="onb-card" onclick="navigateTo('import')">
         <div class="ic">${icon('upload',18)}</div>
@@ -748,7 +778,7 @@ function renderOnboarding(c) {
         <p>Add transactions manually, set up accounts and budgets as you go.</p>
       </div>
     </div>
-    <div style="margin-top:32px;font-size:12px;color:var(--ink-3)">Your data stays in <span class="mono">finance.db</span> · 0 external requests</div>
+    <div style="margin-top:32px;font-size:12px;color:var(--ink-3)">Your data is stored securely in your personal database</div>
   </div></div>`;
 }
 
@@ -2306,7 +2336,8 @@ async function _renderImport(c) {
     const fd = new FormData();
     fd.append('file', e.target.files[0]);
     await _ensureCsrf();
-    const res = await fetch('/api/restore', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': _csrfToken } });
+    const res = await authFetch('/api/restore', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': _csrfToken } });
+    if (!res) return;
     const data = await res.json();
     showToast(data.message || 'Restored');
     refreshCurrentView();
@@ -2326,7 +2357,8 @@ async function _renderImport(c) {
     const fd = new FormData();
     fd.append('file', file);
     await _ensureCsrf();
-    const res = await fetch('/api/import-ofx', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': _csrfToken } });
+    const res = await authFetch('/api/import-ofx', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': _csrfToken } });
+    if (!res) return;
     const data = await res.json();
     showToast(data.message || `Imported ${data.imported||0} transactions`);
     refreshCurrentView();
@@ -2337,7 +2369,8 @@ async function _renderImport(c) {
     fd.append('file', file);
     await _ensureCsrf();
 
-    const detectRes = await fetch('/api/detect-csv', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': _csrfToken } });
+    const detectRes = await authFetch('/api/detect-csv', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': _csrfToken } });
+    if (!detectRes) return;
     const detect = await detectRes.json();
 
     const wizard = document.getElementById('csv-wizard');
@@ -2347,7 +2380,8 @@ async function _renderImport(c) {
     const previewFd = new FormData();
     previewFd.append('file', file);
     if (bankName) previewFd.append('bank', bankName);
-    const prevRes = await fetch('/api/preview-parse', { method: 'POST', body: previewFd, headers: { 'X-CSRF-Token': _csrfToken } });
+    const prevRes = await authFetch('/api/preview-parse', { method: 'POST', body: previewFd, headers: { 'X-CSRF-Token': _csrfToken } });
+    if (!prevRes) return;
     const preview = await prevRes.json();
     const rows = preview.transactions || preview.rows || [];
 
@@ -2396,7 +2430,8 @@ async function _renderImport(c) {
       if (acct) importFd.append('account', acct);
 
       await _ensureCsrf();
-      const res = await fetch('/api/import', { method: 'POST', body: importFd, headers: { 'X-CSRF-Token': _csrfToken } });
+      const res = await authFetch('/api/import', { method: 'POST', body: importFd, headers: { 'X-CSRF-Token': _csrfToken } });
+      if (!res) return;
       const result = await res.json();
       showToast(result.message || `Imported ${result.imported||0} transactions`);
       wizard.style.display = 'none';
@@ -2669,7 +2704,7 @@ async function _renderSettings(c) {
     <div class="page-head">
       <div>
         <div class="page-title">Settings</div>
-        <div class="page-sub">Your data lives in <span class="mono" style="font-size:12.5px">finance.db</span> on this machine. Boreal makes no external requests.</div>
+        <div class="page-sub">Your data is stored in your personal database. Boreal makes no external requests.</div>
       </div>
     </div>
 
@@ -2716,7 +2751,7 @@ async function _renderSettings(c) {
           <div class="settings-row">
             <div class="label-block">
               <div class="lbl">Backup database</div>
-              <div class="desc">Download finance.db with a timestamp</div>
+              <div class="desc">Download your database with a timestamp</div>
             </div>
             <button class="btn btn-sm" onclick="window.location.href='/api/backup'">${icon('download',12)} Download</button>
           </div>
@@ -2730,7 +2765,7 @@ async function _renderSettings(c) {
           <div class="settings-row">
             <div class="label-block">
               <div class="lbl" style="color:var(--danger)">Reset everything</div>
-              <div class="desc">Delete finance.db and start fresh</div>
+              <div class="desc">Delete your data and start fresh</div>
             </div>
             <button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger-soft)" id="reset-btn">Reset</button>
           </div>

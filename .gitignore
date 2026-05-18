@@ -11,5 +11,14 @@ venv/
 *.egg-info/
 dist/
 build/
+data/
+_archive/
+critique/
 
 *.backup
+*.spec
+
+# Docs with credentials / internal ops
+AUTH_GUIDE.md
+.instructions.md
+seed_test_account.py

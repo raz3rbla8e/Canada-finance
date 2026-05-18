@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#2a5a3f">
+<title>Admin — Boreal</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect width='24' height='24' rx='6' fill='%232a5a3f'/%3E%3Cpath d='M12 3 L7 10 L9.5 10 L6.5 14 L9 14 L5 19 L19 19 L15 14 L17.5 14 L14.5 10 L17 10 Z' fill='white' opacity='0.95'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg-app:oklch(13% 0.015 240);--bg-surface:oklch(17% 0.02 240);--bg-hover:oklch(21% 0.022 240);--line-1:oklch(24% 0.022 240);--line-2:oklch(28% 0.025 240);--ink-1:oklch(96% 0.005 95);--ink-2:oklch(80% 0.01 240);--ink-3:oklch(68% 0.012 240);--ink-4:oklch(48% 0.012 240);--accent:oklch(72% 0.13 165);--accent-soft:oklch(26% 0.05 165);--accent-ink:oklch(85% 0.13 165);--accent-fg:oklch(15% 0.02 165);--danger:oklch(70% 0.17 28);--warn:oklch(76% 0.14 80);--ok:oklch(72% 0.16 152);--font-sans:"Inter Tight","Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;--font-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;--r-2:10px;--r-3:14px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);background:var(--bg-app);color:var(--ink-1);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh;padding:24px}
+.admin-header{display:flex;align-items:center;justify-content:space-between;max-width:960px;margin:0 auto 28px;gap:12px}
+.admin-header h1{font-size:22px;font-weight:600;letter-spacing:-0.02em;display:flex;align-items:center;gap:10px}
+.admin-header h1 svg{width:28px;height:28px;color:var(--accent)}
+.admin-header .back{color:var(--ink-3);text-decoration:none;font-size:13px;padding:6px 14px;border:1px solid var(--line-2);border-radius:var(--r-2);transition:border-color .15s}
+.admin-header .back:hover{border-color:var(--accent);color:var(--ink-1)}
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;max-width:960px;margin:0 auto 20px}
+.kpi{background:var(--bg-surface);border:1px solid var(--line-1);border-radius:var(--r-3);padding:16px 18px}
+.kpi .label{font-size:11px;font-weight:500;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px}
+.kpi .value{font-size:24px;font-weight:700;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+.kpi .sub{font-size:12px;color:var(--ink-3);margin-top:2px}
+.card{background:var(--bg-surface);border:1px solid var(--line-1);border-radius:var(--r-3);padding:20px;max-width:960px;margin:0 auto 16px}
+.card h2{font-size:15px;font-weight:600;margin-bottom:14px;letter-spacing:-0.01em}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11px;font-weight:500;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;padding:6px 10px;border-bottom:1px solid var(--line-1)}
+td{padding:9px 10px;border-bottom:1px solid var(--line-1);font-size:13px;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+.mono{font-family:var(--font-mono);font-size:12px}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
+.badge-admin{background:var(--accent-soft);color:var(--accent-ink)}
+.badge-user{background:var(--bg-hover);color:var(--ink-3)}
+.badge-ok{background:oklch(26% 0.05 152);color:var(--ok)}
+.badge-warn{background:oklch(26% 0.04 80);color:var(--warn)}
+.btn-sm{padding:4px 10px;border:1px solid var(--line-2);border-radius:6px;background:transparent;color:var(--ink-2);font-family:var(--font-sans);font-size:12px;cursor:pointer;transition:all .15s}
+.btn-sm:hover{border-color:var(--accent);color:var(--ink-1)}
+.avatar{width:28px;height:28px;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
+.user-cell{display:flex;align-items:center;gap:10px}
+.user-cell .name{font-weight:500}
+.user-cell .email{color:var(--ink-3);font-size:12px}
+.sys-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px}
+.sys-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line-1)}
+.sys-row:last-child{border-bottom:none}
+.sys-label{color:var(--ink-3);font-size:13px}
+.sys-val{font-family:var(--font-mono);font-size:12px;color:var(--ink-2)}
+.loading{color:var(--ink-3);text-align:center;padding:40px}
+@media(max-width:720px){.kpi-row{grid-template-columns:repeat(2,1fr)}.sys-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="admin-header">
+  <h1>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 L7 10 L9.5 10 L6.5 14 L9 14 L5 19 L19 19 L15 14 L17.5 14 L14.5 10 L17 10 Z"/></svg>
+    Admin
+  </h1>
+  <a href="/" class="back">&larr; Back to app</a>
+</div>
+
+<div class="kpi-row" id="kpis">
+  <div class="kpi"><div class="label">Users</div><div class="value" id="kpi-users">—</div></div>
+  <div class="kpi"><div class="label">Transactions</div><div class="value" id="kpi-tx">—</div></div>
+  <div class="kpi"><div class="label">Disk used</div><div class="value" id="kpi-disk">—</div><div class="sub" id="kpi-disk-sub"></div></div>
+  <div class="kpi"><div class="label">Uptime</div><div class="value" id="kpi-uptime">—</div><div class="sub" id="kpi-sys"></div></div>
+</div>
+
+<div class="card">
+  <h2>Users</h2>
+  <div id="users-table"><div class="loading">Loading…</div></div>
+</div>
+
+<div class="card">
+  <h2>System</h2>
+  <div class="sys-grid" id="sys-info"><div class="loading">Loading…</div></div>
+</div>
+
+<script>
+function fmtBytes(b){if(!b)return '0 B';const u=['B','KB','MB','GB'];let i=0;while(b>=1024&&i<u.length-1){b/=1024;i++}return b.toFixed(i?1:0)+' '+u[i]}
+function fmtUptime(s){const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);if(d)return d+'d '+h+'h';if(h)return h+'h '+m+'m';return m+'m'}
+function fmtDate(iso){if(!iso)return '—';const d=new Date(iso+'Z');return d.toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'})+' '+d.toLocaleTimeString('en-CA',{hour:'2-digit',minute:'2-digit'})}
+function ago(iso){if(!iso)return 'never';const s=Math.floor((Date.now()-new Date(iso+'Z'))/1000);if(s<60)return 'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago'}
+
+async function load(){
+  const r=await fetch('/admin/api/stats');
+  if(!r.ok){document.body.innerHTML='<div class="loading">Access denied</div>';return}
+  const d=await r.json();
+
+  document.getElementById('kpi-users').textContent=d.user_count;
+  document.getElementById('kpi-tx').textContent=d.total_transactions.toLocaleString();
+  document.getElementById('kpi-disk').textContent=fmtBytes(d.data_dir_bytes);
+  document.getElementById('kpi-disk-sub').textContent=d.user_count+' databases';
+  document.getElementById('kpi-uptime').textContent=fmtUptime(d.uptime_seconds);
+  document.getElementById('kpi-sys').textContent='Python '+d.python_version;
+
+  // Users table
+  let html='<table><tr><th>User</th><th>Role</th><th>Transactions</th><th>DB size</th><th>Last login</th><th>Joined</th><th></th></tr>';
+  for(const u of d.users){
+    const init=(u.display_name||u.email)[0].toUpperCase();
+    const role=u.is_admin?'<span class="badge badge-admin">Admin</span>':'<span class="badge badge-user">User</span>';
+    const verified=u.verified?'':'<span class="badge badge-warn" title="Email not verified">unverified</span>';
+    html+=`<tr>
+      <td><div class="user-cell"><div class="avatar">${init}</div><div><div class="name">${u.display_name} ${verified}</div><div class="email">${u.email}</div></div></div></td>
+      <td>${role}</td>
+      <td>${u.transaction_count.toLocaleString()}</td>
+      <td class="mono">${fmtBytes(u.db_size_bytes)}</td>
+      <td title="${fmtDate(u.last_login)}">${ago(u.last_login)}</td>
+      <td title="${fmtDate(u.created_at)}">${fmtDate(u.created_at)}</td>
+      <td><button class="btn-sm" onclick="toggleAdmin('${u.id}',this)" ${u.is_admin?'':''}>${u.is_admin?'Revoke admin':'Make admin'}</button></td>
+    </tr>`;
+  }
+  html+='</table>';
+  document.getElementById('users-table').innerHTML=html;
+
+  // System info
+  document.getElementById('sys-info').innerHTML=`
+    <div class="sys-row"><span class="sys-label">Platform</span><span class="sys-val">${d.platform}</span></div>
+    <div class="sys-row"><span class="sys-label">Python</span><span class="sys-val">${d.python_version}</span></div>
+    <div class="sys-row"><span class="sys-label">users.db</span><span class="sys-val">${fmtBytes(d.users_db_bytes)}</span></div>
+    <div class="sys-row"><span class="sys-label">Data directory</span><span class="sys-val">${fmtBytes(d.data_dir_bytes)}</span></div>
+    <div class="sys-row"><span class="sys-label">Uptime</span><span class="sys-val">${fmtUptime(d.uptime_seconds)}</span></div>
+    <div class="sys-row"><span class="sys-label">User DBs</span><span class="sys-val">${d.user_count} files</span></div>
+  `;
+}
+
+async function toggleAdmin(id,btn){
+  btn.disabled=true;
+  const r=await fetch('/admin/api/users/'+id+'/toggle-admin',{method:'POST'});
+  if(r.ok){load()}else{const e=await r.json();alert(e.error||'Failed');btn.disabled=false}
+}
+
+load();
+</script>
+</body>
+</html>

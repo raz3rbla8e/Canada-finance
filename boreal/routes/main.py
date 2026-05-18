@@ -3,6 +3,7 @@ import os
 import sqlite3
 
 from flask import Blueprint, render_template, jsonify, current_app
+from flask_login import login_required
 
 from boreal.config import DB_PATH, SAMPLE_DATA_DIR, BANKS_DIR
 
@@ -10,6 +11,7 @@ main_bp = Blueprint("main", __name__)
 
 
 @main_bp.route("/")
+@login_required
 def index():
     return render_template("index.html")
 
@@ -21,9 +23,15 @@ def icon_compare():
 
 @main_bp.route("/api/health")
 def health():
+    from flask_login import current_user
+    from boreal.models.users import get_user_db_path
+    if current_user.is_authenticated:
+        db_exists = os.path.isfile(get_user_db_path(current_user.id))
+    else:
+        db_exists = True  # doesn't matter — user will be redirected to login
     return jsonify({
         "status": "ok",
-        "db_exists": os.path.isfile(DB_PATH),
+        "db_exists": db_exists,
     })
 
 
