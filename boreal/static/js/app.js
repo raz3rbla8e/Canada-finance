@@ -1325,6 +1325,7 @@ window.txBulkAction = async function(action) {
 };
 
 function openTxDrawer(tx, cats, onSave) {
+  // Ensure overlay + drawer root exist
   let overlay = document.getElementById('drawer-overlay');
   if (!overlay) {
     overlay = document.createElement('div');
@@ -1336,203 +1337,347 @@ function openTxDrawer(tx, cats, onSave) {
   if (!drawer) {
     drawer = document.createElement('div');
     drawer.id = 'tx-drawer';
-    drawer.className = 'drawer';
     document.body.appendChild(drawer);
   }
+  drawer.className = 'drawer drawer-edit';
 
+  // ── Static facts ─────────────────────────────────────────
   const amt = tx.amount || 0;
   const isInc = tx.type === 'Income';
-  const expenseCats = (cats||[]).filter(c => c !== 'Income' && c !== 'Paycheque' && c !== 'Salary');
-  const quickCats = (cats||[]).slice(0, 12);
+  const initialCat = tx.category || 'Uncategorized';
+  const initial = ((tx.name || '?').trim()[0] || '?').toUpperCase();
 
-  drawer.innerHTML = `
-    <div class="drawer-head">
-      <div>
-        <div style="font-size:11.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;font-weight:500">${fmtDateLong(tx.date)} · ${esc(tx.account||'')}</div>
-        <div style="font-size:16px;font-weight:500;margin-top:3px">${esc(tx.name)}</div>
-      </div>
-      <button class="btn-icon" onclick="closeTxDrawer()">${icon('x',14)}</button>
-    </div>
-    <div class="drawer-body">
-      <div class="amt-big" style="color:${isInc ? 'var(--pos)' : 'var(--ink-1)'}">${isInc ? '+' : '−'}${fmtCurrency(Math.abs(amt))}</div>
-      <div class="meta">${isInc ? 'Income' : 'Expense'} · ${esc(tx.category||'Uncategorized')}</div>
-
-      <div class="section-h" style="margin-top:24px"><h2 style="font-size:13px">Category</h2></div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px" id="dr-chips">
-        ${quickCats.map(c => `<button class="filter-chip${c===tx.category?' active':''}" data-cat="${esc(c)}" style="${c===tx.category ? 'background:'+catColor(c)+'22;border-color:'+catColor(c)+';color:'+catColor(c)+';font-weight:500' : ''}">${esc(c)}</button>`).join('')}
-        <button class="filter-chip" id="dr-add-cat" style="border-style:dashed;color:var(--ink-3)">${icon('plus',11)} New</button>
-      </div>
-
-      <div class="section-h"><h2 style="font-size:13px">Details</h2></div>
-      <div class="field">
-        <label>Description</label>
-        <input id="dr-name" value="${esc(tx.name)}"/>
-      </div>
-      <div class="field">
-        <label>Notes</label>
-        <input id="dr-notes" value="${esc(tx.notes||'')}"/>
-      </div>
-      <div class="field">
-        <label>Account</label>
-        <select id="dr-account"><option value="${esc(tx.account||'')}">${esc(tx.account||'—')}</option></select>
-      </div>
-
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;margin-top:8px">
-        <div>
-          <div style="font-size:13px;font-weight:500">Hide from dashboard</div>
-          <div style="font-size:11.5px;color:var(--ink-3);margin-top:1px">Removes from totals but keeps the record</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="dr-hidden" ${tx.hidden ? 'checked' : ''}/>
-          <span class="slider"></span>
-        </label>
-      </div>
-
-      <div class="section-h">
-        <h2 style="font-size:13px">Split transaction</h2>
-        <button class="muted-link" id="dr-split-btn">+ Add split</button>
-      </div>
-      <div id="dr-splits"></div>
-
-      <div id="dr-similar"></div>
-    </div>
-    <div class="drawer-foot">
-      <button class="btn" style="color:var(--danger);border-color:transparent" id="dr-del">${icon('trash',13)} Delete</button>
-      <div style="display:flex;gap:8px">
-        <button class="btn" onclick="closeTxDrawer()">Cancel</button>
-        <button class="btn btn-primary" id="dr-save">Save changes</button>
-      </div>
-    </div>`;
-
-  overlay.classList.add('open');
-  drawer.classList.add('open');
-  overlay.onclick = () => closeTxDrawer();
-
-  // Populate account dropdown
-  api('/api/accounts-list').then(accts => {
-    const el = document.getElementById('dr-account');
-    if (el && accts) {
-      el.innerHTML = (accts||[]).map(a => `<option value="${esc(a.name)}" ${a.name===tx.account?'selected':''}>${esc(a.name)}</option>`).join('');
-    }
-  });
-
-  // Category chip selection
-  let selectedCat = tx.category;
-  function bindChipClicks() {
-    document.querySelectorAll('#dr-chips .filter-chip[data-cat]').forEach(chip => {
-      chip.onclick = () => {
-        document.querySelectorAll('#dr-chips .filter-chip').forEach(c => {
-          c.classList.remove('active');
-          c.style.cssText = c.id === 'dr-add-cat' ? 'border-style:dashed;color:var(--ink-3)' : '';
-        });
-        chip.classList.add('active');
-        selectedCat = chip.dataset.cat;
-        const clr = catColor(selectedCat);
-        chip.style.cssText = `background:${clr}22;border-color:${clr};color:${clr};font-weight:500`;
-      };
-    });
+  // Category grouping. The repo's categories are strings; group them
+  // heuristically. Adjust this map if you store group metadata.
+  const ESSENTIAL = new Set([
+    'Groceries', 'Transport', 'Transportation', 'Fuel',
+    'Rent & Housing', 'Rent', 'Utilities', 'Phone & Internet', 'Health',
+    'Healthcare', 'Phone', 'Internet', 'Insurance',
+  ]);
+  const INCOME = new Set(['Income', 'Salary', 'Paycheque', 'Freelance', 'Job', 'Bonus', 'Refund', 'Other Income']);
+  function groupFor(name) {
+    if (ESSENTIAL.has(name)) return 'Essentials';
+    if (INCOME.has(name))    return 'Income';
+    if (name === 'Transfer') return 'Hidden';
+    return 'Lifestyle';
   }
-  bindChipClicks();
+  const visibleCats = (cats || []).filter(c => groupFor(c) !== 'Hidden');
 
-  // Add new category from drawer
-  document.getElementById('dr-add-cat').onclick = async () => {
-    const name = await appPrompt('New category name', { title: 'Add category', placeholder: 'e.g. Groceries' });
-    if (!name || !name.trim()) return;
-    const r = await api('/api/categories', 'POST', { name: name.trim() });
-    if (!r || r.error) { showToast(r?.error || 'Failed to create category'); return; }
-    invalidateApiCache('/api/categories');
-    // Add chip and select it
-    const addBtn = document.getElementById('dr-add-cat');
-    const clr = catColor(name.trim());
-    const newChip = document.createElement('button');
-    newChip.className = 'filter-chip active';
-    newChip.dataset.cat = name.trim();
-    newChip.textContent = name.trim();
-    newChip.style.cssText = `background:${clr}22;border-color:${clr};color:${clr};font-weight:500`;
-    // Deselect all existing
-    document.querySelectorAll('#dr-chips .filter-chip').forEach(c => {
-      c.classList.remove('active');
-      c.style.cssText = c.id === 'dr-add-cat' ? 'border-style:dashed;color:var(--ink-3)' : '';
-    });
-    addBtn.parentNode.insertBefore(newChip, addBtn);
-    selectedCat = name.trim();
-    bindChipClicks();
+  // ── Editable state ───────────────────────────────────────
+  const state = {
+    cat: initialCat,
+    name: tx.name || '',
+    notes: tx.notes || '',
+    account: tx.account || '',
+    date: tx.date || '',
+    hidden: !!tx.hidden,
+    applyToSim: true,
+    showPicker: false,
+    catSearch: '',
+    showDetails: false,
+    showAdvanced: false,
   };
+  let accountsList = [];
+  let similarTxns = [];
 
-  document.getElementById('dr-save').onclick = async () => {
-    const isHidden = document.getElementById('dr-hidden').checked;
-    await api(`/api/update/${tx.id}`, 'PATCH', {
-      category: selectedCat,
-      name: document.getElementById('dr-name').value,
-      notes: document.getElementById('dr-notes').value,
-      account: document.getElementById('dr-account').value,
+  // ── Render ───────────────────────────────────────────────
+  function render() {
+    const catColorVal = catColor(state.cat);
+    const catGroup = groupFor(state.cat);
+    const catChanged = state.cat !== initialCat;
+    const merchantFirst = (state.name || '').split(' ')[0];
+    const simNeedingRecat = similarTxns.filter(t => t.category !== state.cat);
+
+    // Filter + group for picker
+    const filtered = state.catSearch
+      ? visibleCats.filter(c => c.toLowerCase().includes(state.catSearch.toLowerCase()))
+      : visibleCats;
+    const grouped = {};
+    filtered.forEach(c => { const g = groupFor(c); (grouped[g] = grouped[g] || []).push(c); });
+    const groupOrder = ['Essentials', 'Lifestyle', 'Income'];
+
+    drawer.innerHTML = `
+      <div class="td-head">
+        <div class="td-head-glyph" style="background:${catColorVal}1f;color:${catColorVal};border-color:${catColorVal}40">${esc(initial)}</div>
+        <div class="td-head-text">
+          <input class="td-head-name" id="dr-name" value="${esc(state.name)}" spellcheck="false" aria-label="Merchant name"/>
+          <div class="td-head-sub">${esc(fmtDateLong(state.date))}<span class="td-dot">·</span>${esc(state.account || '—')}</div>
+        </div>
+        <button class="icon-btn" onclick="closeTxDrawer()" aria-label="Close">${icon('x', 14)}</button>
+      </div>
+
+      <div class="drawer-body td-body">
+        <div class="td-amt-row">
+          <div class="td-amt" style="color:${isInc ? 'var(--pos)' : 'var(--ink-1)'}">${isInc ? '+' : '−'}${fmtCurrency(Math.abs(amt))}</div>
+          <div class="td-amt-type" style="background:${isInc ? 'var(--pos-soft)' : 'var(--bg-sunken)'};color:${isInc ? 'var(--pos)' : 'var(--ink-2)'}">${isInc ? 'Income' : 'Expense'}</div>
+        </div>
+
+        <div class="td-label">Category</div>
+        ${state.showPicker ? `
+          <div class="td-cat-picker">
+            <div class="td-cat-search">
+              ${icon('search', 14)}
+              <input id="dr-cat-search" value="${esc(state.catSearch)}" placeholder="Search categories…" autofocus/>
+              <button class="icon-btn" id="dr-cat-close">${icon('x', 12)}</button>
+            </div>
+            <div class="td-cat-list">
+              ${groupOrder.map(g => grouped[g] ? `
+                <div class="td-cat-group-label">${g}</div>
+                ${grouped[g].map(c => `
+                  <button class="td-cat-opt${c === state.cat ? ' is-selected' : ''}" data-cat="${esc(c)}">
+                    <span class="td-cat-opt-icon" style="background:${catColor(c)}22;color:${catColor(c)}">${esc((c[0]||'?').toUpperCase())}</span>
+                    <span class="td-cat-opt-name">${esc(c)}</span>
+                    ${c === state.cat ? icon('check', 13) : ''}
+                  </button>
+                `).join('')}
+              ` : '').join('')}
+              ${Object.keys(grouped).length === 0 ? `<div class="td-cat-empty">No categories match "${esc(state.catSearch)}"</div>` : ''}
+            </div>
+          </div>
+        ` : `
+          <button class="td-cat-card" id="dr-cat-open">
+            <span class="td-cat-icon" style="background:${catColorVal}24;color:${catColorVal};border-color:${catColorVal}40">${esc((state.cat[0]||'?').toUpperCase())}</span>
+            <span class="td-cat-name">${esc(state.cat)}</span>
+            <span class="td-cat-group">${catGroup}</span>
+            <span class="td-cat-change">Change ${icon('chev_d', 11)}</span>
+          </button>
+        `}
+
+        ${(catChanged && simNeedingRecat.length > 0) ? `
+          <label class="td-learn">
+            <input type="checkbox" id="dr-apply-sim" ${state.applyToSim ? 'checked' : ''}/>
+            <div class="td-learn-text">
+              <div class="td-learn-title">Apply to ${simNeedingRecat.length} similar transaction${simNeedingRecat.length === 1 ? '' : 's'}</div>
+              <div class="td-learn-sub">Boreal will remember <span class="mono">"${esc(merchantFirst)}"</span> → ${esc(state.cat)}</div>
+            </div>
+          </label>
+        ` : ''}
+
+        <div class="td-label">Notes</div>
+        <textarea class="td-notes" id="dr-notes" placeholder="Add a note (optional)…" rows="2">${esc(state.notes)}</textarea>
+
+        <button class="td-expand" id="dr-toggle-details" aria-expanded="${state.showDetails}">
+          ${icon('chev_d', 11)}
+          <span>Date &amp; account</span>
+          <span class="td-expand-meta">${esc(fmtDate(state.date))} · ${esc(state.account || '—')}</span>
+        </button>
+        ${state.showDetails ? `
+          <div class="td-expand-body">
+            <div class="row-2">
+              <div class="field"><label>Date</label><input type="date" id="dr-date" value="${esc(state.date)}"/></div>
+              <div class="field"><label>Account</label>
+                <select id="dr-account">
+                  ${accountsList.length
+                    ? accountsList.map(a => `<option value="${esc(a.name)}" ${a.name === state.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('')
+                    : `<option value="${esc(state.account)}">${esc(state.account || '—')}</option>`}
+                </select>
+              </div>
+            </div>
+            ${(tx.original_name || tx.raw_description) ? `
+              <div class="td-orig">
+                <span class="td-orig-label">From bank</span>
+                <span class="td-orig-text">${esc(tx.original_name || tx.raw_description)}</span>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
+
+        <button class="td-expand" id="dr-toggle-advanced" aria-expanded="${state.showAdvanced}">
+          ${icon('chev_d', 11)}
+          <span>Advanced</span>
+          <span class="td-expand-meta">${state.hidden ? 'Hidden' : 'Visible'}</span>
+        </button>
+        ${state.showAdvanced ? `
+          <div class="td-expand-body">
+            <div class="td-toggle-row">
+              <div>
+                <div class="td-toggle-lbl">Hide from dashboard</div>
+                <div class="td-toggle-desc">Removes from totals but keeps the record</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="dr-hidden" ${state.hidden ? 'checked' : ''}/>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="td-toggle-row">
+              <div>
+                <div class="td-toggle-lbl">Split transaction</div>
+                <div class="td-toggle-desc">Divide across multiple categories</div>
+              </div>
+              <button class="btn btn-sm" id="dr-split-btn">${icon('plus', 12)} Add split</button>
+            </div>
+          </div>
+        ` : ''}
+
+        ${similarTxns.length > 0 ? `
+          <div class="td-label td-label-row">
+            <span>Similar transactions</span>
+            <span class="td-label-meta">${similarTxns.length} · total ${fmtCurrency(similarTxns.reduce((s, t) => s + Math.abs(t.amount || 0), 0))}</span>
+          </div>
+          <div class="td-sim-list">
+            ${similarTxns.map(t => `
+              <div class="td-sim-row">
+                <span class="td-sim-dot" style="background:${catColor(t.category)}"></span>
+                <div class="td-sim-text">
+                  <div class="td-sim-name">${esc(t.name)}</div>
+                  <div class="td-sim-meta">${esc(fmtDate(t.date))} · ${esc(t.category || 'Uncategorized')}</div>
+                </div>
+                <div class="td-sim-amt mono">${(t.amount || 0) > 0 ? '+' : '−'}${fmtCurrency(Math.abs(t.amount || 0))}</div>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="td-foot">
+        <button class="td-delete" id="dr-del">${icon('trash', 13)} Delete</button>
+        <div class="td-foot-right">
+          <span class="td-kbd-hint"><span class="kbd">⌘S</span> save · <span class="kbd">esc</span> close</span>
+          <button class="btn" onclick="closeTxDrawer()">Cancel</button>
+          <button class="btn btn-primary" id="dr-save">Save changes</button>
+        </div>
+      </div>
+    `;
+
+    wireEvents();
+  }
+
+  function wireEvents() {
+    drawer.querySelector('#dr-name')?.addEventListener('input', e => { state.name = e.target.value; });
+    drawer.querySelector('#dr-notes')?.addEventListener('input', e => { state.notes = e.target.value; });
+    drawer.querySelector('#dr-date')?.addEventListener('input', e => { state.date = e.target.value; });
+    drawer.querySelector('#dr-account')?.addEventListener('change', e => { state.account = e.target.value; });
+    drawer.querySelector('#dr-hidden')?.addEventListener('change', e => { state.hidden = e.target.checked; });
+    drawer.querySelector('#dr-apply-sim')?.addEventListener('change', e => { state.applyToSim = e.target.checked; });
+
+    // Category picker
+    drawer.querySelector('#dr-cat-open')?.addEventListener('click', () => { state.showPicker = true; render(); });
+    drawer.querySelector('#dr-cat-close')?.addEventListener('click', () => { state.showPicker = false; state.catSearch = ''; render(); });
+
+    const searchInput = drawer.querySelector('#dr-cat-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', e => {
+        state.catSearch = e.target.value;
+        const cursor = e.target.selectionStart;
+        render();
+        const fresh = drawer.querySelector('#dr-cat-search');
+        if (fresh) { fresh.focus(); fresh.setSelectionRange(cursor, cursor); }
+      });
+      searchInput.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { state.showPicker = false; state.catSearch = ''; render(); }
+      });
+    }
+    drawer.querySelectorAll('.td-cat-opt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.cat = btn.dataset.cat;
+        state.showPicker = false;
+        state.catSearch = '';
+        render();
+      });
     });
-    if (isHidden !== !!tx.hidden) {
-      await api(`/api/transactions/${tx.id}/${isHidden ? 'hide' : 'unhide'}`, 'PATCH');
+
+    // Expandables
+    drawer.querySelector('#dr-toggle-details')?.addEventListener('click', () => { state.showDetails = !state.showDetails; render(); });
+    drawer.querySelector('#dr-toggle-advanced')?.addEventListener('click', () => { state.showAdvanced = !state.showAdvanced; render(); });
+
+    drawer.querySelector('#dr-save')?.addEventListener('click', save);
+    drawer.querySelector('#dr-del')?.addEventListener('click', del);
+    drawer.querySelector('#dr-split-btn')?.addEventListener('click', split);
+  }
+
+  async function save() {
+    const wasHidden = !!tx.hidden;
+    await api(`/api/update/${tx.id}`, 'PATCH', {
+      category: state.cat,
+      name: state.name,
+      notes: state.notes,
+      account: state.account,
+      date: state.date,
+    });
+    if (state.hidden !== wasHidden) {
+      await api(`/api/transactions/${tx.id}/${state.hidden ? 'hide' : 'unhide'}`, 'PATCH');
+    }
+    // Retroactive learning: apply new category to similar transactions
+    if (state.applyToSim && state.cat !== initialCat) {
+      const ids = similarTxns.filter(t => t.category !== state.cat).map(t => t.id);
+      if (ids.length) {
+        await api('/api/bulk-categorize', 'POST', { ids, category: state.cat });
+      }
     }
     closeTxDrawer();
-    invalidateApiCache();
     await refreshMonths();
     refreshCurrentView();
-  };
+  }
 
-  document.getElementById('dr-del').onclick = async () => {
+  async function del() {
     if (!await appConfirm('Delete this transaction permanently?', { title: 'Delete transaction', danger: true })) return;
     await api(`/api/delete/${tx.id}`, 'DELETE');
     closeTxDrawer();
     await refreshMonths();
     refreshCurrentView();
-  };
+  }
 
-  document.getElementById('dr-split-btn').onclick = async () => {
-    const splitAmt = await appPrompt('Enter amount for the split:', { title: 'Split transaction', defaultVal: (Math.abs(amt)/2).toFixed(2), placeholder: '0.00' });
+  async function split() {
+    const splitAmt = await appPrompt('Enter amount for the split:', {
+      title: 'Split transaction',
+      defaultVal: (Math.abs(amt) / 2).toFixed(2),
+      placeholder: '0.00',
+    });
     if (!splitAmt) return;
     await api(`/api/transactions/${tx.id}/split`, 'POST', { amount: parseFloat(splitAmt) });
     showToast('Transaction split');
     closeTxDrawer();
     refreshCurrentView();
+  }
+
+  // Mount
+  render();
+  overlay.classList.add('open');
+  drawer.classList.add('open');
+  overlay.onclick = () => closeTxDrawer();
+
+  // Keyboard shortcuts (⌘/Ctrl + S to save, Esc to close / dismiss picker)
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      if (state.showPicker) { state.showPicker = false; state.catSearch = ''; render(); }
+      else closeTxDrawer();
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      save();
+    }
   };
+  window.addEventListener('keydown', onKey);
+  drawer._removeKeys = () => window.removeEventListener('keydown', onKey);
 
-  // Load existing splits
-  api(`/api/transactions/${tx.id}/splits`).then(splits => {
-    const el = document.getElementById('dr-splits');
-    if (!el || !splits || !splits.length) return;
-    el.innerHTML = `<div class="card" style="padding:0">${splits.map(s =>
-      `<div style="display:flex;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--line-1);font-size:13px;align-items:center">
-        <div><div style="font-weight:450">${esc(s.name||tx.name)}</div></div>
-        <div class="mono" style="font-variant-numeric:tabular-nums">${fmtCurrency(Math.abs(s.amount))}</div>
-      </div>`
-    ).join('')}</div>`;
+  // Lazy-load accounts (only meaningful when Details is open, but cheap)
+  api('/api/accounts-list').then(accts => {
+    accountsList = accts || [];
+    if (state.showDetails) render();
   });
 
-  // Load similar transactions
-  api(`/api/transactions?month=${tx.date?.slice(0,7)||''}`).then(resp => {
-    const txns = resp?.transactions || resp || [];
-    const firstName = (tx.name||'').split(' ')[0].toLowerCase();
-    const sim = txns.filter(t => t.id !== tx.id && (t.name||'').split(' ')[0].toLowerCase() === firstName).slice(0, 5);
-    if (!sim.length) return;
-    const el = document.getElementById('dr-similar');
-    if (!el) return;
-    el.innerHTML = `
-      <div class="section-h"><h2 style="font-size:13px">Similar transactions</h2><p>${sim.length} found</p></div>
-      <div class="card" style="padding:0">
-        ${sim.map(t => {
-          const tInc = t.type === 'Income';
-          return `<div style="display:flex;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--line-1);font-size:13px;align-items:center">
-            <div>
-              <div style="font-weight:450">${esc(t.name)}</div>
-              <div style="font-size:11px;color:var(--ink-3);margin-top:1px">${fmtDate(t.date)} · ${esc(t.category||'')}</div>
-            </div>
-            <div class="mono" style="font-variant-numeric:tabular-nums">${tInc?'+':'−'}$${Math.abs(t.amount).toFixed(2)}</div>
-          </div>`;
-        }).join('')}
-      </div>`;
-  });
+  // Lazy-load similar transactions (same merchant first token, excluding self)
+  const firstName = (tx.name || '').split(' ')[0].toLowerCase();
+  if (firstName) {
+    api('/api/transactions?limit=200').then(resp => {
+      const txns = resp?.transactions || resp || [];
+      similarTxns = txns
+        .filter(t => t.id !== tx.id && (t.name || '').split(' ')[0].toLowerCase() === firstName)
+        .slice(0, 6);
+      render();
+    });
+  }
 }
 
 window.closeTxDrawer = function() {
-  document.getElementById('drawer-overlay')?.classList.remove('open');
-  document.getElementById('tx-drawer')?.classList.remove('open');
+  const drawer = document.getElementById('tx-drawer');
+  const overlay = document.getElementById('drawer-overlay');
+  if (drawer) {
+    drawer.classList.remove('open');
+    drawer._removeKeys?.();
+    drawer._removeKeys = null;
+  }
+  if (overlay) overlay.classList.remove('open');
 };
 
 // ══════════════════════════════════════════════════════════════
