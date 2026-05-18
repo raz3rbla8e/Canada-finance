@@ -56,34 +56,43 @@ def api_accounts_list():
     accounts = db.execute("SELECT * FROM accounts ORDER BY name").fetchall()
     if not accounts:
         return jsonify([])
-    # Single query to compute income/expenses per account using account_id FK
-    # Include ALL transactions (even hidden) for accurate balances —
-    # hiding is for dashboard/summary display, not accounting
-    totals = db.execute(
-        """SELECT account_id, type, COALESCE(SUM(amount),0) as total
-           FROM transactions
-           WHERE account_id IS NOT NULL
-           GROUP BY account_id, type"""
-    ).fetchall()
-    acct_totals = {}
-    for r in totals:
-        key = r["account_id"]
-        if key not in acct_totals:
-            acct_totals[key] = {"income": 0, "expenses": 0}
-        if r["type"] == "Income":
-            acct_totals[key]["income"] = r["total"]
-        else:
-            acct_totals[key]["expenses"] = r["total"]
+    # Compute income/expenses per account using account_id FK,
+    # respecting balance_date (only count transactions on or after it)
     result = []
     for a in accounts:
-        t = acct_totals.get(a["id"], {"income": 0, "expenses": 0})
-        balance = a["opening_balance"] + t["income"] - t["expenses"]
+        is_investment = a["account_type"] == "investment"
+        if is_investment:
+            # Investment accounts use latest snapshot, not transaction math
+            snap = db.execute(
+                "SELECT balance FROM balance_snapshots WHERE account_id=? ORDER BY snapshot_date DESC LIMIT 1",
+                (a["id"],),
+            ).fetchone()
+            balance = snap["balance"] if snap else a["opening_balance"]
+        else:
+            date_filter = ""
+            params = [a["id"]]
+            if a["balance_date"]:
+                date_filter = " AND date >= ?"
+                params.append(a["balance_date"])
+            row = db.execute(
+                f"""SELECT
+                    COALESCE(SUM(CASE WHEN type='Income' THEN amount ELSE 0 END), 0) as income,
+                    COALESCE(SUM(CASE WHEN type='Expense' THEN amount ELSE 0 END), 0) as expenses
+                FROM transactions
+                WHERE account_id = ?{date_filter}""",
+                params,
+            ).fetchone()
+            balance = a["opening_balance"] + row["income"] - row["expenses"]
+        is_credit = a["account_type"] == "credit"
         result.append({
             "id": a["id"],
             "name": a["name"],
             "account_type": a["account_type"],
             "opening_balance": a["opening_balance"],
+            "balance_date": a["balance_date"],
             "balance": round(balance, 2),
+            "display_balance": round(-balance if is_credit else balance, 2),
+            "is_debt": is_credit and balance < 0,
         })
     return jsonify(result)
 
@@ -122,6 +131,7 @@ def api_accounts_update(aid):
         return jsonify({"error": "Account not found"}), 404
     name = (d.get("name") or acct["name"]).strip()
     account_type = d.get("account_type", acct["account_type"])
+    balance_date = d.get("balance_date", acct["balance_date"])  # NULL = count all
     try:
         opening_balance = float(d.get("opening_balance", acct["opening_balance"]))
     except (ValueError, TypeError):
@@ -129,8 +139,8 @@ def api_accounts_update(aid):
     old_name = acct["name"]
     try:
         db.execute(
-            "UPDATE accounts SET name=?, account_type=?, opening_balance=? WHERE id=?",
-            (name, account_type, opening_balance, aid),
+            "UPDATE accounts SET name=?, account_type=?, opening_balance=?, balance_date=? WHERE id=?",
+            (name, account_type, opening_balance, balance_date, aid),
         )
         if name != old_name:
             # Update denormalized account TEXT on transactions for display
@@ -175,7 +185,7 @@ def api_net_worth():
            GROUP BY account_id, month, type
            ORDER BY month"""
     ).fetchall()
-    # Build cumulative map: {account_id: {month: net_delta}}
+    # Build {account_id: {month: net_delta}}
     monthly_delta = {}
     for r in totals:
         acct = r["account_id"]
@@ -189,18 +199,44 @@ def api_net_worth():
         else:
             monthly_delta[acct][m] -= r["total"]
 
+    # Build balance_date cutoff lookup
+    acct_balance_dates = {a["id"]: a["balance_date"] for a in accounts}
+    investment_ids = {a["id"] for a in accounts if a["account_type"] == "investment"}
+
+    # Load all snapshots for investment accounts
+    inv_snapshots = {}  # {account_id: [(date, balance), ...]}
+    if investment_ids:
+        placeholders = ",".join("?" * len(investment_ids))
+        snap_rows = db.execute(
+            f"SELECT account_id, snapshot_date, balance FROM balance_snapshots WHERE account_id IN ({placeholders}) ORDER BY snapshot_date",
+            list(investment_ids),
+        ).fetchall()
+        for sr in snap_rows:
+            inv_snapshots.setdefault(sr["account_id"], []).append((sr["snapshot_date"], sr["balance"]))
+
     # Compute net worth at each target month
     result = []
     for m in all_months:
+        month_end = m + "-31"  # works for comparison since dates are ISO strings
         total = 0
         for a in accounts:
-            balance = a["opening_balance"]
-            acct_deltas = monthly_delta.get(a["id"], {})
-            # Sum all deltas up to and including this month
-            for dm, delta in acct_deltas.items():
-                if dm <= m:
-                    balance += delta
-            total += balance
+            if a["id"] in investment_ids:
+                # Use latest snapshot <= month-end
+                snaps = inv_snapshots.get(a["id"], [])
+                bal = a["opening_balance"]
+                for sd, sb in snaps:
+                    if sd <= month_end:
+                        bal = sb
+                total += bal
+            else:
+                balance = a["opening_balance"]
+                acct_deltas = monthly_delta.get(a["id"], {})
+                bd = acct_balance_dates.get(a["id"])
+                bd_month = bd[:7] if bd else None
+                for dm, delta in acct_deltas.items():
+                    if dm <= m and (bd_month is None or dm >= bd_month):
+                        balance += delta
+                total += balance
         result.append({"month": m, "net_worth": round(total, 2)})
     return jsonify(result)
 
@@ -426,6 +462,112 @@ def api_transfers_create():
     db.execute("UPDATE transactions SET transfer_id=? WHERE id=?", (in_id, out_id))
     db.commit()
     return jsonify({"ok": True, "from_id": out_id, "to_id": in_id})
+
+
+# ── RECONCILIATION ────────────────────────────────────────────────────────────
+
+@accounts_bp.route("/api/accounts/<int:aid>/reconcile", methods=["POST"])
+def api_reconcile(aid):
+    """Reconcile an account: compare calculated vs actual balance, create adjustment."""
+    d = request.json or {}
+    db = get_db()
+    acct = db.execute("SELECT * FROM accounts WHERE id=?", (aid,)).fetchone()
+    if not acct:
+        return jsonify({"error": "Account not found"}), 404
+    try:
+        actual_balance = float(d.get("actual_balance", 0))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid balance"}), 400
+    recon_date = d.get("date", date.today().isoformat())
+
+    # Calculate current balance
+    date_filter = ""
+    params = [aid]
+    if acct["balance_date"]:
+        date_filter = " AND date >= ?"
+        params.append(acct["balance_date"])
+    row = db.execute(
+        f"""SELECT
+            COALESCE(SUM(CASE WHEN type='Income' THEN amount ELSE 0 END), 0) as income,
+            COALESCE(SUM(CASE WHEN type='Expense' THEN amount ELSE 0 END), 0) as expenses
+        FROM transactions WHERE account_id = ?{date_filter}""",
+        params,
+    ).fetchone()
+    calculated = acct["opening_balance"] + row["income"] - row["expenses"]
+    diff = round(actual_balance - calculated, 2)
+
+    if abs(diff) < 0.01:
+        return jsonify({"ok": True, "adjustment": 0, "message": "Already balanced"})
+
+    # Create hidden adjustment transaction
+    adj_type = "Income" if diff > 0 else "Expense"
+    adj_amount = abs(diff)
+    h = tx_hash(recon_date, "Reconciliation adjustment", adj_amount, acct["name"])
+    try:
+        db.execute(
+            """INSERT INTO transactions
+               (date, type, name, category, amount, account, account_id, notes, source, tx_hash, hidden)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (recon_date, adj_type, "Reconciliation adjustment", "Reconciliation",
+             adj_amount, acct["name"], aid, f"Adjusted by {diff:+.2f}", "reconciliation", h, 1),
+        )
+    except sqlite3.IntegrityError:
+        pass  # Already reconciled at this point
+
+    # Update opening_balance and balance_date to lock in reconciled state
+    db.execute(
+        "UPDATE accounts SET opening_balance=?, balance_date=? WHERE id=?",
+        (actual_balance, recon_date, aid),
+    )
+    db.commit()
+    return jsonify({
+        "ok": True,
+        "calculated": round(calculated, 2),
+        "actual": actual_balance,
+        "adjustment": diff,
+    })
+
+
+# ── INVESTMENT SNAPSHOTS ──────────────────────────────────────────────────────
+
+@accounts_bp.route("/api/accounts/<int:aid>/snapshots")
+def api_snapshots_list(aid):
+    """List balance snapshots for an investment account."""
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM balance_snapshots WHERE account_id=? ORDER BY snapshot_date DESC",
+        (aid,),
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@accounts_bp.route("/api/accounts/<int:aid>/snapshots", methods=["POST"])
+def api_snapshots_add(aid):
+    """Add a balance snapshot for an investment account."""
+    d = request.json or {}
+    db = get_db()
+    acct = db.execute("SELECT * FROM accounts WHERE id=?", (aid,)).fetchone()
+    if not acct:
+        return jsonify({"error": "Account not found"}), 404
+    try:
+        balance = float(d.get("balance", 0))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid balance"}), 400
+    snapshot_date = d.get("date", date.today().isoformat())
+    db.execute(
+        "INSERT INTO balance_snapshots (account_id, balance, snapshot_date) VALUES (?,?,?)",
+        (aid, balance, snapshot_date),
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@accounts_bp.route("/api/snapshots/<int:snap_id>", methods=["DELETE"])
+def api_snapshots_delete(snap_id):
+    db = get_db()
+    db.execute("DELETE FROM balance_snapshots WHERE id=?", (snap_id,))
+    db.commit()
+    return jsonify({"ok": True})
 
 
 # ── UNDO ──────────────────────────────────────────────────────────────────────

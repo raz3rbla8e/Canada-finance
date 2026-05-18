@@ -213,6 +213,25 @@ def _migrate_v9(db):
     """)
 
 
+def _migrate_v10(db):
+    """Add balance_date to accounts for 'balance as of' semantics."""
+    db.execute("ALTER TABLE accounts ADD COLUMN balance_date TEXT DEFAULT NULL")
+
+
+def _migrate_v11(db):
+    """Add balance_snapshots table for investment accounts."""
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS balance_snapshots (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id      INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            balance         REAL NOT NULL,
+            snapshot_date   TEXT NOT NULL,
+            created_at      TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_snapshot_account ON balance_snapshots(account_id, snapshot_date);
+    """)
+
+
 MIGRATIONS = [
     (1, "initial schema", _migrate_v1),
     (2, "split transactions", _migrate_v2),
@@ -223,6 +242,8 @@ MIGRATIONS = [
     (7, "transfer linking", _migrate_v7),
     (8, "undo history", _migrate_v8),
     (9, "account_id FK", _migrate_v9),
+    (10, "balance_date on accounts", _migrate_v10),
+    (11, "balance snapshots", _migrate_v11),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0]

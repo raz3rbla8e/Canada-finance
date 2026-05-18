@@ -2466,8 +2466,8 @@ async function _renderAccounts(c) {
     api('/api/net-worth'),
   ]);
   const list = accounts || [];
-  const totalAssets = list.filter(a => (a.balance||0) >= 0).reduce((s,a) => s + (a.balance||0), 0);
-  const totalDebt = list.filter(a => (a.balance||0) < 0).reduce((s,a) => s + Math.abs(a.balance||0), 0);
+  const totalAssets = list.filter(a => a.account_type !== 'credit').reduce((s,a) => s + Math.max(a.balance||0, 0), 0);
+  const totalDebt = list.filter(a => a.is_debt || (a.account_type === 'credit' && (a.balance||0) < 0)).reduce((s,a) => s + Math.abs(a.balance||0), 0);
   const netWorth = totalAssets - totalDebt;
   const nwData = (nw||[]).map(d => ({m:d.month, v:d.net_worth}));
   const prevNW = nwData.length >= 2 ? nwData[nwData.length-2].v : netWorth;
@@ -2546,8 +2546,8 @@ async function _renderAccounts(c) {
             <div class="progress"><div class="fill" style="width:${pct}%;background:${isDebt ? 'var(--danger)' : ac}"></div></div>
           </div>
           <div style="text-align:right;min-width:110px">
-            <div style="font-weight:600;font-size:15px;font-variant-numeric:tabular-nums;color:${isDebt ? 'var(--danger)' : 'var(--ink-1)'}">${fmtCurrency(a.balance||0)}</div>
-            <div style="font-size:11px;color:var(--ink-3)">${isDebt ? 'owed' : 'balance'}</div>
+            <div style="font-weight:600;font-size:15px;font-variant-numeric:tabular-nums;color:${a.is_debt ? 'var(--danger)' : 'var(--ink-1)'}">${a.is_debt ? '−' : ''}${fmtCurrency(Math.abs(a.display_balance ?? a.balance ?? 0))}</div>
+            <div style="font-size:11px;color:var(--ink-3)">${a.is_debt ? 'owed' : (a.account_type === 'investment' ? 'value' : 'balance')}</div>
           </div>
           <div style="display:flex;gap:4px">
             <button class="icon-btn" onclick="event.stopPropagation();editAccount(${a.id})">${icon('edit',13)}</button>
@@ -2574,6 +2574,8 @@ async function _renderAccounts(c) {
 
 function openAccountModal(existing) {
   const isEdit = !!existing;
+  const isInvestment = existing?.account_type === 'investment';
+  const isCredit = existing?.account_type === 'credit';
   document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="acct-modal-back">
     <div class="modal" onclick="event.stopPropagation()">
       <div class="modal-h"><h3>${isEdit ? 'Edit' : 'New'} account</h3><button class="icon-btn" onclick="closeAccountModal()">${icon('x',14)}</button></div>
@@ -2583,12 +2585,22 @@ function openAccountModal(existing) {
           <div class="field"><label>Type</label><select id="acct-type">
             <option value="chequing" ${(existing?.account_type||'chequing')==='chequing'?'selected':''}>Chequing</option>
             <option value="savings" ${existing?.account_type==='savings'?'selected':''}>Savings</option>
-            <option value="credit" ${existing?.account_type==='credit'?'selected':''}>Credit</option>
+            <option value="credit" ${existing?.account_type==='credit'?'selected':''}>Credit card</option>
             <option value="investment" ${existing?.account_type==='investment'?'selected':''}>Investment</option>
             <option value="other" ${existing?.account_type==='other'?'selected':''}>Other</option>
           </select></div>
-          <div class="field"><label>Opening balance</label><input id="acct-balance" value="${existing?.opening_balance||0}" inputmode="decimal"></div>
+          <div class="field"><label>${isCredit ? 'Starting balance owed' : 'Opening balance'}</label><input id="acct-balance" value="${existing?.opening_balance||0}" inputmode="decimal"></div>
         </div>
+        <div style="display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px">
+          <div class="field"><label>Balance as of <span style="font-weight:400;color:var(--ink-3)">(optional — leave blank to count all transactions)</span></label><input type="date" id="acct-balance-date" value="${esc(existing?.balance_date||'')}"></div>
+        </div>
+        ${isEdit ? `
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--line-1);display:flex;gap:8px;flex-wrap:wrap">
+            ${isInvestment ? `<button class="btn btn-sm" id="acct-snapshot-btn">${icon('bars',12)} Update balance</button>` : ''}
+            <button class="btn btn-sm" id="acct-reconcile-btn">${icon('check',12)} Reconcile</button>
+            <button class="btn btn-sm danger" id="acct-delete-btn" style="margin-left:auto">${icon('trash',12)} Delete</button>
+          </div>
+        ` : ''}
       </div>
       <div class="modal-foot">
         <button class="btn" onclick="closeAccountModal()">Cancel</button>
@@ -2598,11 +2610,61 @@ function openAccountModal(existing) {
   </div>`);
   document.getElementById('acct-modal-back').addEventListener('click', closeAccountModal);
   document.getElementById('acct-save-btn').addEventListener('click', async () => {
-    const data = { name: document.getElementById('acct-name').value, account_type: document.getElementById('acct-type').value, opening_balance: parseFloat(document.getElementById('acct-balance').value) || 0 };
+    const data = {
+      name: document.getElementById('acct-name').value,
+      account_type: document.getElementById('acct-type').value,
+      opening_balance: parseFloat(document.getElementById('acct-balance').value) || 0,
+      balance_date: document.getElementById('acct-balance-date').value || null,
+    };
     if (!data.name) { showToast('Account name is required'); return; }
     if (isEdit) await api(`/api/accounts-list/${existing.id}`, 'PATCH', data);
     else await api('/api/accounts-list', 'POST', data);
     closeAccountModal();
+    invalidateApiCache();
+    refreshCurrentView();
+  });
+  // Reconcile button
+  document.getElementById('acct-reconcile-btn')?.addEventListener('click', async () => {
+    const actual = await appPrompt('What is your actual account balance right now?', {
+      title: `Reconcile ${existing.name}`,
+      defaultVal: (existing.balance || 0).toFixed(2),
+      placeholder: '0.00',
+    });
+    if (!actual) return;
+    const res = await api(`/api/accounts/${existing.id}/reconcile`, 'POST', {
+      actual_balance: parseFloat(actual),
+      date: new Date().toISOString().slice(0, 10),
+    });
+    if (res?.adjustment !== undefined) {
+      if (res.adjustment === 0) showToast('Already balanced!');
+      else showToast(`Adjusted by ${res.adjustment > 0 ? '+' : ''}${res.adjustment.toFixed(2)}`);
+    }
+    closeAccountModal();
+    invalidateApiCache();
+    refreshCurrentView();
+  });
+  // Investment snapshot button
+  document.getElementById('acct-snapshot-btn')?.addEventListener('click', async () => {
+    const bal = await appPrompt('Enter the current market value:', {
+      title: `Update ${existing.name} balance`,
+      placeholder: '0.00',
+    });
+    if (!bal) return;
+    await api(`/api/accounts/${existing.id}/snapshots`, 'POST', {
+      balance: parseFloat(bal),
+      date: new Date().toISOString().slice(0, 10),
+    });
+    showToast('Balance snapshot saved');
+    closeAccountModal();
+    invalidateApiCache();
+    refreshCurrentView();
+  });
+  // Delete button
+  document.getElementById('acct-delete-btn')?.addEventListener('click', async () => {
+    if (!await appConfirm(`Delete "${existing.name}"? This won't remove transactions.`, { title: 'Delete account', danger: true })) return;
+    await api(`/api/accounts-list/${existing.id}`, 'DELETE');
+    closeAccountModal();
+    invalidateApiCache();
     refreshCurrentView();
   });
 }
