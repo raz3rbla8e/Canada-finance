@@ -54,6 +54,30 @@ function appPrompt(msg, { title = 'Input', defaultVal = '', placeholder = '' } =
   });
 }
 
+function appSelect(msg, { title = 'Select', options = [] } = {}) {
+  return new Promise(resolve => {
+    const id = 'app-select-' + Date.now();
+    const opts = options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="${id}">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+        <div class="modal-h"><h3>${esc(title)}</h3></div>
+        <div class="modal-body">
+          <div style="font-size:14px;color:var(--ink-2);margin-bottom:12px">${esc(msg)}</div>
+          <div class="field"><select id="${id}-select" style="width:100%">${opts}</select></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn" id="${id}-cancel">Cancel</button>
+          <button class="btn btn-primary" id="${id}-ok">Apply</button>
+        </div>
+      </div>
+    </div>`);
+    const close = (v) => { document.getElementById(id)?.remove(); resolve(v); };
+    document.getElementById(id).addEventListener('click', () => close(null));
+    document.getElementById(`${id}-cancel`).addEventListener('click', () => close(null));
+    document.getElementById(`${id}-ok`).addEventListener('click', () => close(document.getElementById(`${id}-select`).value));
+  });
+}
+
 // ── CSRF + API ────────────────────────────────────────────────
 let _csrfToken = null;
 async function _ensureCsrf() {
@@ -228,9 +252,17 @@ function acctColor(acct) {
 }
 function catPill(name) {
   const c = catColor(name);
-  const style = `background:color-mix(in oklch, ${c} 14%, oklch(98% 0 0));`
-              + `color:color-mix(in oklch, ${c} 75%, oklch(20% 0 0));`
-              + `border-color:color-mix(in oklch, ${c} 32%, transparent);`;
+  const isDark = document.documentElement.classList.contains('dark');
+  const bg = isDark
+    ? `color-mix(in oklch, ${c} 18%, oklch(25% 0 0))`
+    : `color-mix(in oklch, ${c} 14%, oklch(98% 0 0))`;
+  const fg = isDark
+    ? `color-mix(in oklch, ${c} 60%, oklch(90% 0 0))`
+    : `color-mix(in oklch, ${c} 75%, oklch(20% 0 0))`;
+  const border = isDark
+    ? `color-mix(in oklch, ${c} 40%, transparent)`
+    : `color-mix(in oklch, ${c} 32%, transparent)`;
+  const style = `background:${bg};color:${fg};border-color:${border};`;
   return `<span class="cat-pill" style="${style}"><span class="dot" style="background:${c}"></span>${esc(name)}</span>`;
 }
 function merchantGlyph(name, color) {
@@ -354,7 +386,17 @@ function resetMonth() {
 }
 
 function openMonthPicker() {
-  // Stub: for now, fall through to month stepping. Full calendar can come later.
+  const inp = document.createElement('input');
+  inp.type = 'month';
+  inp.value = currentMonth() || new Date().toISOString().slice(0, 7);
+  inp.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+  document.body.appendChild(inp);
+  inp.addEventListener('change', () => {
+    if (inp.value) { setMonth(inp.value); refreshCurrentView(); }
+    inp.remove();
+  });
+  inp.addEventListener('blur', () => setTimeout(() => inp.remove(), 200));
+  inp.showPicker ? inp.showPicker() : inp.click();
 }
 
 function navigateTo(view) {
@@ -652,10 +694,11 @@ async function submitAdd() {
   const type = document.getElementById('add-type').value;
   const name = document.getElementById('add-name').value.trim();
   const category = document.getElementById('add-cat').value;
-  const amount = parseFloat(document.getElementById('add-amount').value);
+  const rawAmt = document.getElementById('add-amount').value.replace(/[^0-9.\-]/g, '');
+  const amount = parseFloat(rawAmt);
   const account = document.getElementById('add-account').value.trim();
   const notes = document.getElementById('add-notes').value.trim();
-  if (!name || isNaN(amount) || !account) { showToast('Please fill in description, amount, and account'); return; }
+  if (!name || isNaN(amount)) { showToast('Please fill in description and amount'); return; }
   const r = await api('/api/add', 'POST', { date, type, name, category, amount, account, notes });
   if (r) { closeOverlays(); showToast(`Transaction added · ${type==='Income'?'+':'−'}$${amount.toFixed(2)} ${category}`); await refreshMonths(); refreshCurrentView(); }
 }
@@ -1621,7 +1664,6 @@ async function _renderTransactions(c) {
         <span><strong>${filtered.length}</strong> matched</span>
         <span style="color:var(--pos)">${fmtCurrency(inSum)} in</span>
         <span>${fmtCurrency(outSum)} out</span>
-        <button class="save-view" onclick="showToast('View saved (stub)')">${icon('bookmark', 11)} Save as view</button>
       `;
     }
   }
@@ -1738,11 +1780,13 @@ window.txBulkAction = async function(action) {
   } else if (action === 'unhide') {
     await api('/api/bulk-unhide', 'POST', { ids });
   } else if (action === 'categorize') {
-    const cat = await appPrompt('Enter category name:', { title: 'Bulk categorize', placeholder: 'e.g. Groceries' });
+    const allCats = [...STATE.expenseCats, ...STATE.incomeCats].map(c => c.name);
+    const cat = await appSelect('Choose a category:', { title: 'Bulk categorize', options: allCats });
     if (!cat) return;
     await api('/api/bulk-categorize', 'POST', { ids, category: cat });
   }
   txSelected = new Set();
+  document.getElementById('bulk-dock')?.classList.remove('open');
   refreshCurrentView();
 };
 

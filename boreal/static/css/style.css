@@ -174,7 +174,6 @@ button{font-family:inherit;cursor:pointer}input,select,textarea{font-family:inhe
 .tbl .acct-tag{font-size:11px;color:var(--ink-3);padding:2px 7px;border:1px solid var(--line-1);border-radius:5px;background:var(--bg-sunken);white-space:nowrap}
 .cat-pill{display:inline-flex;align-items:center;gap:6px;padding:2px 8px 2px 7px;border-radius:6px;font-size:11.5px;font-weight:500;border:1px solid transparent;background:var(--bg-sunken);color:var(--ink-2);border-color:var(--line-1)}
 .cat-pill .dot{width:6px;height:6px;border-radius:2px;flex-shrink:0}
-html.dark .cat-pill{background:var(--bg-sunken);color:var(--ink-2);border-color:var(--line-1)}
 
 /* PROGRESS */
 .progress{height:6px;background:var(--bg-sunken);border-radius:999px;overflow:hidden}
@@ -855,6 +854,20 @@ tr.selected{background:var(--accent-soft)}
 .bulk-dock .pchip.danger { color: oklch(72% 0.13 28); }
 .bulk-dock .pchip.danger:hover { background: oklch(72% 0.13 28 / 0.18); }
 .bulk-dock .pchip.close { padding: 6px 9px; }
+html.dark .bulk-dock {
+  background: oklch(22% 0.02 240);
+  color: oklch(92% 0.005 95);
+  border: 1px solid oklch(32% 0.025 240);
+}
+html.dark .bulk-dock .pchip {
+  background: oklch(30% 0.025 240);
+  color: oklch(92% 0.005 95);
+}
+html.dark .bulk-dock .pchip:hover { background: oklch(36% 0.03 240); }
+html.dark .bulk-dock .num-badge { background: oklch(30% 0.025 240); }
+html.dark .bulk-dock .sep { background: oklch(32% 0.025 240); }
+html.dark .bulk-dock .pchip.danger { color: oklch(70% 0.17 28); }
+html.dark .bulk-dock .pchip.danger:hover { background: oklch(30% 0.07 28); }
 body:has(.bulk-dock.open) .undo-toast { bottom: 88px; }
 
 /* ============================================================
