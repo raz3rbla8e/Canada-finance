@@ -200,3 +200,29 @@ def set_admin(user_id, is_admin=True):
     db = get_users_db()
     db.execute("UPDATE users SET is_admin = ? WHERE id = ?", (int(is_admin), user_id))
     db.commit()
+
+
+def update_display_name(user_id, new_name):
+    """Update a user's display name."""
+    new_name = new_name.strip()
+    if not new_name:
+        raise ValueError("Display name cannot be empty")
+    if len(new_name) > 50:
+        raise ValueError("Display name must be 50 characters or fewer")
+    db = get_users_db()
+    db.execute("UPDATE users SET display_name = ? WHERE id = ?", (new_name, user_id))
+    db.commit()
+
+
+def delete_user(user_id):
+    """Delete a user account and their personal database file."""
+    if not _VALID_USER_ID.match(str(user_id)):
+        raise ValueError("Invalid user ID")
+    db_path = get_user_db_path(user_id)
+    # Remove user row from users.db
+    db = get_users_db()
+    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    db.commit()
+    # Remove user's personal database file
+    if os.path.exists(db_path):
+        os.remove(db_path)

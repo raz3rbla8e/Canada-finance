@@ -29,7 +29,8 @@ def api_import():
     learned = load_learned_dict(db)
     configs = load_bank_configs()
     results = []
-    for f in request.files.getlist("files"):
+    files = request.files.getlist("file") or request.files.getlist("files")
+    for f in files:
         raw = f.read()
         try:
             text = raw.decode("utf-8-sig")
@@ -130,8 +131,38 @@ def api_save_bank_config():
 
 @import_export_bp.route("/api/preview-parse", methods=["POST"])
 def api_preview_parse():
-    """Preview parsing with a user-defined config (before saving)."""
+    """Preview parsing — accepts a file upload (with optional bank) or JSON (raw_text + mapping)."""
+    # ── Mode 1: file upload with bank name (from wizard detect flow) ──
+    f = request.files.get("file")
+    if f:
+        raw = f.read()
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            try:
+                text = raw.decode("latin-1")
+            except UnicodeDecodeError:
+                return jsonify({"error": "Unsupported file encoding"}), 400
+        bank = request.form.get("bank", "")
+        configs = load_bank_configs()
+        first_line = text.splitlines()[0] if text.strip() else ""
+        config, bank_name = detect_bank_config(first_line, configs)
+        if bank and not config:
+            # Try matching by bank name from form field
+            for name, cfg in configs.items():
+                if cfg.get("name", name) == bank or name == bank:
+                    config, bank_name = cfg, name
+                    break
+        if not config:
+            return jsonify({"error": "Could not detect bank format", "transactions": [], "total": 0}), 400
+        learned = load_learned_dict(get_db())
+        txns = parse_with_config(text, config, learned)
+        return jsonify({"transactions": txns[:50], "total": len(txns)})
+
+    # ── Mode 2: JSON with raw_text + mapping (from unknown-bank wizard) ──
     d = request.json
+    if not d:
+        return jsonify({"error": "No file or data provided"}), 400
     text = d.get("raw_text", "")
     mapping = d.get("mapping", {})
     if not text or not mapping:
@@ -152,7 +183,7 @@ def api_preview_parse():
         config["columns"]["debit"] = mapping.get("debit_column", "")
         config["columns"]["credit"] = mapping.get("credit_column", "")
     txns = parse_with_config(text, config, {})
-    return jsonify({"transactions": txns[:10], "total": len(txns)})
+    return jsonify({"transactions": txns[:50], "total": len(txns)})
 
 
 @import_export_bp.route("/api/export")

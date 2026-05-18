@@ -9,7 +9,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 
 from boreal.models.users import (
     create_user, verify_password, get_user_by_email, mark_verified, update_password, user_count,
-    get_user_db_path, set_admin,
+    get_user_db_path, set_admin, update_display_name, delete_user,
 )
 from boreal.models.database import init_user_db
 from boreal.services.email import (
@@ -173,4 +173,73 @@ def api_me():
         "display_name": current_user.display_name,
         "verified": current_user.verified,
         "is_admin": current_user.is_admin,
+        "created_at": current_user.created_at,
     })
+
+
+@auth_bp.route("/api/me", methods=["PATCH"])
+@login_required
+def api_me_update():
+    d = request.json
+    if not d:
+        return jsonify({"error": "Request body required"}), 400
+
+    display_name = d.get("display_name")
+    if display_name is not None:
+        try:
+            update_display_name(current_user.id, display_name)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
+    return jsonify({"ok": True})
+
+
+@auth_bp.route("/api/me/password", methods=["POST"])
+@login_required
+def api_me_password():
+    d = request.json
+    if not d:
+        return jsonify({"error": "Request body required"}), 400
+
+    current_pw = d.get("current_password", "")
+    new_pw = d.get("new_password", "")
+    confirm_pw = d.get("confirm_password", "")
+
+    if not current_pw or not new_pw:
+        return jsonify({"error": "All fields are required"}), 400
+    if new_pw != confirm_pw:
+        return jsonify({"error": "New passwords do not match"}), 400
+    if len(new_pw) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+
+    # Verify current password
+    user = verify_password(current_user.email, current_pw)
+    if not user:
+        return jsonify({"error": "Current password is incorrect"}), 403
+
+    try:
+        update_password(current_user.id, new_pw)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    return jsonify({"ok": True})
+
+
+@auth_bp.route("/api/me", methods=["DELETE"])
+@login_required
+def api_me_delete():
+    d = request.json or {}
+    password = d.get("password", "")
+
+    if not password:
+        return jsonify({"error": "Password is required to delete your account"}), 400
+
+    # Verify password before deletion
+    user = verify_password(current_user.email, password)
+    if not user:
+        return jsonify({"error": "Incorrect password"}), 403
+
+    user_id = current_user.id
+    logout_user()
+    delete_user(user_id)
+    return jsonify({"ok": True})

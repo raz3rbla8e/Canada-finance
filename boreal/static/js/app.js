@@ -322,7 +322,7 @@ function navigateTo(view) {
     btn.classList.toggle('active', btn.dataset.view === view);
   });
   // Update topbar crumb
-  const labels = { dashboard:'Dashboard', transactions:'Transactions', budgets:'Budgets', accounts:'Accounts', year:'Year review', import:'Import', schedules:'Scheduled', rules:'Rules', settings:'Settings' };
+  const labels = { dashboard:'Dashboard', transactions:'Transactions', budgets:'Budgets', accounts:'Accounts', year:'Year review', import:'Import', schedules:'Scheduled', rules:'Rules', settings:'Settings', account:'Account' };
   document.getElementById('topbar-crumb').textContent = labels[view] || view;
   // Hide month picker on views that don't consume the month
   setMonthPickerVisibility(view);
@@ -355,6 +355,7 @@ function renderView(view) {
     case 'schedules': renderSchedules(c); break;
     case 'rules': renderRules(c); break;
     case 'settings': renderSettings(c); break;
+    case 'account': renderMyAccount(c); break;
     default: renderDashboard(c);
   }
 }
@@ -724,6 +725,7 @@ async function renderImport(c) { c.innerHTML = importSkeleton(); try { await _re
 async function renderSchedules(c) { c.innerHTML = schedulesSkeleton(); try { await _renderSchedules(c); } catch(e) { console.error('Schedules error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
 async function renderRules(c) { c.innerHTML = rulesSkeleton(); try { await _renderRules(c); } catch(e) { console.error('Rules error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
 async function renderSettings(c) { c.innerHTML = settingsSkeleton(); try { await _renderSettings(c); } catch(e) { console.error('Settings error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
+async function renderMyAccount(c) { c.innerHTML = settingsSkeleton(); try { await _renderMyAccount(c); } catch(e) { console.error('Account error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
 
 // ══════════════════════════════════════════════════════════════
 // INIT
@@ -2379,10 +2381,15 @@ async function _renderImport(c) {
 
   async function handleFiles(files) {
     for (const file of files) {
-      if (file.name.endsWith('.ofx') || file.name.endsWith('.qfx')) {
-        await importOFX(file);
-      } else {
-        await startCSVWizard(file);
+      try {
+        if (file.name.endsWith('.ofx') || file.name.endsWith('.qfx')) {
+          await importOFX(file);
+        } else {
+          await startCSVWizard(file);
+        }
+      } catch(e) {
+        console.error('Import error:', e);
+        showToast(`Error processing ${file.name}: ${e.message}`);
       }
     }
   }
@@ -2404,7 +2411,8 @@ async function _renderImport(c) {
     await _ensureCsrf();
 
     const detectRes = await authFetch('/api/detect-csv', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': _csrfToken } });
-    if (!detectRes) return;
+    if (!detectRes) { showToast('Failed to analyze CSV'); return; }
+    if (!detectRes.ok) { const err = await detectRes.json().catch(() => ({})); showToast(err.error || 'Failed to analyze CSV'); return; }
     const detect = await detectRes.json();
 
     const wizard = document.getElementById('csv-wizard');
@@ -2415,7 +2423,8 @@ async function _renderImport(c) {
     previewFd.append('file', file);
     if (bankName) previewFd.append('bank', bankName);
     const prevRes = await authFetch('/api/preview-parse', { method: 'POST', body: previewFd, headers: { 'X-CSRF-Token': _csrfToken } });
-    if (!prevRes) return;
+    if (!prevRes) { wizard.style.display='none'; showToast('Failed to preview CSV'); return; }
+    if (!prevRes.ok) { const err = await prevRes.json().catch(() => ({})); wizard.style.display='none'; showToast(err.error || 'Failed to preview CSV'); return; }
     const preview = await prevRes.json();
     const rows = preview.transactions || preview.rows || [];
 
@@ -2465,9 +2474,19 @@ async function _renderImport(c) {
 
       await _ensureCsrf();
       const res = await authFetch('/api/import', { method: 'POST', body: importFd, headers: { 'X-CSRF-Token': _csrfToken } });
-      if (!res) return;
+      if (!res) { showToast('Import failed'); return; }
+      if (!res.ok) { const err = await res.json().catch(() => ({})); showToast(err.error || 'Import failed'); return; }
       const result = await res.json();
-      showToast(result.message || `Imported ${result.imported||0} transactions`);
+      // result is an array of per-file results
+      const total = Array.isArray(result) ? result.reduce((s, r) => s + (r.added || 0), 0) : (result.imported || 0);
+      const dupes = Array.isArray(result) ? result.reduce((s, r) => s + (r.dupes || 0), 0) : 0;
+      const errors = Array.isArray(result) ? result.filter(r => r.error) : [];
+      if (errors.length) {
+        showToast(`Import had errors: ${errors.map(e => e.error).join(', ')}`);
+      } else {
+        showToast(`Imported ${total} transaction${total!==1?'s':''}${dupes ? ` (${dupes} duplicate${dupes!==1?'s':''} skipped)` : ''}`);
+      }
+      invalidateApiCache();
       wizard.style.display = 'none';
       wizard.innerHTML = '';
       navigateTo('transactions');
@@ -2718,6 +2737,144 @@ window.createRuleFromSuggestion = async function(pattern, category) {
   showToast('Rule created');
   refreshCurrentView();
 };
+
+// ══════════════════════════════════════════════════════════════
+// MY ACCOUNT VIEW
+// ══════════════════════════════════════════════════════════════
+async function _renderMyAccount(c) {
+  const me = await api('/api/me');
+  if (!me) return;
+  const joined = me.created_at ? fmtDateLong(me.created_at.split('T')[0]) : '—';
+  const initial = (me.display_name || 'U')[0].toUpperCase();
+
+  c.innerHTML = `<div class="page" style="max-width:640px">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Account</div>
+        <div class="page-sub">Manage your profile and account settings</div>
+      </div>
+    </div>
+
+    <!-- PROFILE CARD -->
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
+        <div style="width:56px;height:56px;border-radius:16px;background:var(--aurora);color:white;display:grid;place-items:center;font-size:22px;font-weight:600">${esc(initial)}</div>
+        <div>
+          <div style="font-weight:600;font-size:17px;color:var(--ink-1)" id="acct-name-display">${esc(me.display_name)}</div>
+          <div style="font-size:13px;color:var(--ink-3)">${esc(me.email)}</div>
+          <div style="font-size:12px;color:var(--ink-4);margin-top:2px">Joined ${esc(joined)}${me.verified ? ' · <span style="color:var(--pos)">Verified</span>' : ' · <span style="color:var(--warn)">Unverified</span>'}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DISPLAY NAME -->
+    <div class="section-h" style="margin-top:0"><h2>Profile</h2></div>
+    <div class="settings-group" style="margin-bottom:24px">
+      <div class="settings-row">
+        <div class="label-block">
+          <div class="lbl">Display name</div>
+          <div class="desc">Shown in the sidebar and your profile</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="acct-display-name" value="${esc(me.display_name)}" style="padding:6px 10px;border:1px solid var(--line-2);border-radius:8px;font-size:13px;width:180px;background:var(--bg-surface);color:var(--ink-1)">
+          <button class="btn btn-sm btn-primary" id="acct-save-name">Save</button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="label-block">
+          <div class="lbl">Email</div>
+          <div class="desc">Used for login and recovery</div>
+        </div>
+        <span style="font-size:13px;color:var(--ink-2)" class="mono">${esc(me.email)}</span>
+      </div>
+    </div>
+
+    <!-- CHANGE PASSWORD -->
+    <div class="section-h"><h2>Security</h2></div>
+    <div class="settings-group" style="margin-bottom:24px">
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:12px">
+        <div class="label-block">
+          <div class="lbl">Change password</div>
+          <div class="desc">Must be at least 8 characters</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <input type="password" id="acct-current-pw" placeholder="Current password" style="padding:6px 10px;border:1px solid var(--line-2);border-radius:8px;font-size:13px;background:var(--bg-surface);color:var(--ink-1)">
+          <input type="password" id="acct-new-pw" placeholder="New password" style="padding:6px 10px;border:1px solid var(--line-2);border-radius:8px;font-size:13px;background:var(--bg-surface);color:var(--ink-1)">
+          <input type="password" id="acct-confirm-pw" placeholder="Confirm new" style="padding:6px 10px;border:1px solid var(--line-2);border-radius:8px;font-size:13px;background:var(--bg-surface);color:var(--ink-1)">
+        </div>
+        <div style="display:flex;justify-content:flex-end"><button class="btn btn-sm btn-primary" id="acct-save-pw">Update password</button></div>
+      </div>
+    </div>
+
+    <!-- DANGER ZONE -->
+    <div class="section-h"><h2 style="color:var(--danger)">Danger zone</h2></div>
+    <div class="settings-group">
+      <div class="settings-row">
+        <div class="label-block">
+          <div class="lbl" style="color:var(--danger)">Delete account</div>
+          <div class="desc">Permanently delete your account and all associated data. This cannot be undone.</div>
+        </div>
+        <button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" id="acct-delete-btn">${icon('trash',12)} Delete account</button>
+      </div>
+    </div>
+  </div>`;
+
+  // ── Save display name ──
+  document.getElementById('acct-save-name')?.addEventListener('click', async () => {
+    const name = document.getElementById('acct-display-name').value.trim();
+    if (!name) { showToast('Name cannot be empty'); return; }
+    const r = await api('/api/me', 'PATCH', { display_name: name });
+    if (r && r.ok) {
+      showToast('Display name updated');
+      invalidateApiCache('/api/me');
+      // Update sidebar immediately
+      const avatarEl = document.getElementById('user-avatar');
+      const nameEl = document.getElementById('user-display-name');
+      if (avatarEl) avatarEl.textContent = name[0].toUpperCase();
+      if (nameEl) nameEl.textContent = name;
+      const acctDisp = document.getElementById('acct-name-display');
+      if (acctDisp) acctDisp.textContent = name;
+    } else {
+      showToast(r?.error || 'Failed to update name');
+    }
+  });
+
+  // ── Change password ──
+  document.getElementById('acct-save-pw')?.addEventListener('click', async () => {
+    const cur = document.getElementById('acct-current-pw').value;
+    const np = document.getElementById('acct-new-pw').value;
+    const cp = document.getElementById('acct-confirm-pw').value;
+    if (!cur || !np || !cp) { showToast('All password fields are required'); return; }
+    if (np !== cp) { showToast('New passwords do not match'); return; }
+    if (np.length < 8) { showToast('Password must be at least 8 characters'); return; }
+    const r = await api('/api/me/password', 'POST', { current_password: cur, new_password: np, confirm_password: cp });
+    if (r && r.ok) {
+      showToast('Password updated');
+      document.getElementById('acct-current-pw').value = '';
+      document.getElementById('acct-new-pw').value = '';
+      document.getElementById('acct-confirm-pw').value = '';
+    } else {
+      showToast(r?.error || 'Failed to update password');
+    }
+  });
+
+  // ── Delete account ──
+  document.getElementById('acct-delete-btn')?.addEventListener('click', async () => {
+    const ok = await appConfirm(
+      'This will permanently delete your account and all your financial data. This action cannot be undone.',
+      { title: 'Delete your account?', danger: true }
+    );
+    if (!ok) return;
+    const pw = await appPrompt('Enter your password to confirm deletion', { title: 'Confirm password', placeholder: 'Password' });
+    if (!pw) return;
+    const r = await api('/api/me', 'DELETE', { password: pw });
+    if (r && r.ok) {
+      window.location.href = '/login';
+    } else {
+      showToast(r?.error || 'Failed to delete account');
+    }
+  });
+}
 
 // ══════════════════════════════════════════════════════════════
 // SETTINGS VIEW
