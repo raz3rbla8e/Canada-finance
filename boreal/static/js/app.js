@@ -370,6 +370,7 @@ function applyTheme(theme) {
     document.getElementById('theme-label').textContent = 'Dark mode';
     document.getElementById('theme-icon').innerHTML = ICONS.moon;
   }
+  try { localStorage.setItem('boreal-theme', theme); } catch(e) {}
 }
 function toggleTheme() {
   const isDark = document.documentElement.classList.contains('dark');
