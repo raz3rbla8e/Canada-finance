@@ -76,6 +76,13 @@ tr:last-child td{border-bottom:none}
   <div class="sys-grid" id="sys-info"><div class="loading">Loading…</div></div>
 </div>
 
+<div class="card">
+  <h2>Data Management</h2>
+  <p style="color:var(--ink-3);font-size:13px;margin-bottom:14px">Wipe and re-seed your account with demo data (115 transactions, budgets, goals, schedules, rules, and more).</p>
+  <button class="btn-sm" id="btn-seed" onclick="seedDemo()" style="padding:8px 18px;font-size:13px">🌱 Re-seed my demo data</button>
+  <span id="seed-status" style="margin-left:12px;font-size:13px;color:var(--ink-3)"></span>
+</div>
+
 <script>
 function fmtBytes(b){if(!b)return '0 B';const u=['B','KB','MB','GB'];let i=0;while(b>=1024&&i<u.length-1){b/=1024;i++}return b.toFixed(i?1:0)+' '+u[i]}
 function fmtUptime(s){const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);if(d)return d+'d '+h+'h';if(h)return h+'h '+m+'m';return m+'m'}
@@ -128,6 +135,22 @@ async function toggleAdmin(id,btn){
   btn.disabled=true;
   const r=await fetch('/admin/api/users/'+id+'/toggle-admin',{method:'POST'});
   if(r.ok){load()}else{const e=await r.json();alert(e.error||'Failed');btn.disabled=false}
+}
+
+async function seedDemo(){
+  const btn=document.getElementById('btn-seed');
+  const status=document.getElementById('seed-status');
+  if(!confirm('This will wipe all your current data and replace it with demo data. Continue?'))return;
+  btn.disabled=true;
+  status.textContent='Seeding…';
+  try{
+    const csrf=await fetch('/api/csrf-token').then(r=>r.json());
+    const r=await fetch('/admin/api/seed-demo',{method:'POST',headers:{'X-CSRF-Token':csrf.csrf_token}});
+    const d=await r.json();
+    if(r.ok){status.textContent='✓ Seeded '+d.total_added+' transactions from '+d.files.length+' files';load()}
+    else{status.textContent='✗ '+(d.error||'Failed');status.style.color='var(--danger)'}
+  }catch(e){status.textContent='✗ '+e.message;status.style.color='var(--danger)'}
+  btn.disabled=false;
 }
 
 load();
