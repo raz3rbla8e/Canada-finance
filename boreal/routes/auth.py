@@ -200,6 +200,10 @@ def api_me_update():
 @auth_bp.route("/api/me/password", methods=["POST"])
 @login_required
 def api_me_password():
+    from boreal.config import PROTECTED_ACCOUNTS
+    if current_user.email.lower() in PROTECTED_ACCOUNTS:
+        return jsonify({"error": "Password changes are disabled for this account"}), 403
+
     d = request.json
     if not d:
         return jsonify({"error": "Request body required"}), 400
@@ -231,6 +235,10 @@ def api_me_password():
 @auth_bp.route("/api/me", methods=["DELETE"])
 @login_required
 def api_me_delete():
+    from boreal.config import PROTECTED_ACCOUNTS
+    if current_user.email.lower() in PROTECTED_ACCOUNTS:
+        return jsonify({"error": "This account cannot be deleted"}), 403
+
     d = request.json or {}
     password = d.get("password", "")
 
