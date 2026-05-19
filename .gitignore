@@ -11,6 +11,7 @@ venv/
 *.egg-info/
 dist/
 build/
+canada_finance/
 data/
 _archive/
 critique/

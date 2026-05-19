@@ -1,60 +1,89 @@
-# � Boreal
+# Boreal
 
-A free, private, self-hosted personal finance dashboard for Canadians. Runs locally on your laptop — your bank data never leaves your computer.
+**Free, private, self-hosted personal finance dashboard for Canadians.**
+
+Track your spending, budget by category, monitor net worth, and manage multiple bank accounts — all from a single app that runs on your own machine. Your bank data never leaves your computer.
+
+**Live demo:** [boreal.up.railway.app](https://boreal.up.railway.app)
+
+---
 
 ## Features
 
-### Core
-- **Import bank CSVs** — drag and drop, auto-detects your bank format
-- **Import OFX/QFX files** — import directly from OFX/QFX bank downloads (common format from RBC, TD, etc.)
-- **Unknown CSV wizard** — if your bank isn't recognized, a step-by-step wizard maps columns and saves the config for future imports
-- **Auto-categorization** — 300+ merchant rules built in, gets smarter as you use it
-- **Monthly dashboard** — income, expenses, net saved, savings rate
-- **Month-over-month comparison** — see if you're spending more or less than last month
-- **Year in review** — full annual breakdown with monthly bars and top 5 categories
-- **Dark/light mode** — toggle in the sidebar
-- **PWA support** — install as a standalone app on desktop or mobile (works offline for cached pages)
+### Import & Detection
+- **Drag-and-drop CSV import** — auto-detects 11 Canadian bank formats
+- **OFX/QFX import** — works with any bank that offers Quicken/Money downloads
+- **Unknown CSV wizard** — step-by-step column mapping for unrecognized formats; saves a YAML config for future imports
+- **Re-import safe** — SHA-256 deduplication means you can import the same file multiple times without double-counting
+- **Round-trip export** — export CSV from Boreal and re-import it (or share it); categories and accounts are preserved
 
-### Budgeting & Tracking
-- **Budget targets** — set spending limits per category with visual progress bars and alerts
-- **Monthly averages** — see your average spend per category over the last 6 months
-- **Recurring/subscription detection** — automatically identifies merchants that charge you every month, flags price changes
-- **Savings goals** — set targets (e.g. "Vacation Fund $3,000"), contribute manually, track progress on the dashboard
-- **Category groups** — organize categories into logical groups (Essentials, Lifestyle) for grouped spending breakdowns
+### Auto-Categorization
+- **300+ built-in merchant rules** — groceries, fuel, subscriptions, dining, and more
+- **Edit & learn** — fix a category once and the app remembers that merchant forever
+- **Retro-fix** — changing a category automatically re-categorizes matching uncategorized transactions
+- **Custom categories** — add, rename, or delete categories with emoji icons
+- **Category groups** — organize into logical groups (Essentials, Lifestyle, Income) for grouped spending views
+
+### Dashboard & Reporting
+- **Monthly dashboard** — income, expenses, net saved, savings rate, month-over-month comparison
+- **Smart insights** — savings rate highlights, overspending warnings, budget alerts, spending spike detection
 - **Spending trends** — 6-month bar chart showing your spending trajectory
+- **Year in review** — annual breakdown with monthly bars and top 5 spending categories
+- **Recurring/subscription detection** — auto-flags merchants that charge monthly; warns on price changes
+
+### Budgets & Goals
+- **Budget targets** — set spending limits per category with visual progress bars (green → amber → red)
+- **Monthly averages** — rolling 6-month average spend per category
+- **Savings goals** — named targets (e.g. "Vacation Fund $3,000") with manual contributions and progress tracking
 
 ### Accounts & Net Worth
-- **Account balances** — register your bank accounts (chequing, savings, credit card, investment) with opening balances; the dashboard shows live computed balances based on all imported transactions
-- **Net worth chart** — a line chart on the dashboard tracking your total net worth (sum of all account balances) over time, month by month
-- **Transfers between accounts** — move money between accounts (e.g. chequing → savings); creates linked hidden transactions so balances stay accurate without polluting your spending data
+- **Account registration** — chequing, savings, credit card, investment with opening balances
+- **Live balances** — computed from opening balance + all imported transactions
+- **Net worth chart** — line chart tracking total net worth month by month
+- **Inter-account transfers** — move money between accounts without polluting spending data
 
 ### Scheduled Transactions
-- **Recurring schedules** — set up transactions that repeat on a schedule (weekly, biweekly, monthly, yearly) with a name, category, amount, and account
-- **Auto-post on due date** — when you open the app, due scheduled transactions are automatically posted as real transactions and the next due date advances
-- **Pause/resume** — disable a schedule temporarily without deleting it (e.g. pausing a gym membership over summer)
+- **Recurring schedules** — weekly, biweekly, monthly, or yearly with name, category, amount, and account
+- **Auto-post on due date** — due schedules are posted automatically when you open the app
+- **Pause/resume** — disable temporarily without deleting (e.g. gym over summer)
 
-### Transactions
-- **Account filter** — filter transactions by bank account (TD, Tangerine, etc.)
-- **Open search** — search "costco" and get both Costco Gas and Wholesale across all months
-- **Bulk actions** — select multiple transactions and delete, categorize, or hide them all at once
-- **Edit & learn** — fix a category once, it remembers forever (learned merchants)
-- **Retro-fix** — when you fix a category, the app automatically re-categorizes similar UNCATEGORIZED transactions
-- **Manual entries** — add cash, e-transfers, or any transaction not in a CSV
-- **Undo** — accidentally delete a transaction? Click the undo button to restore it instantly (supports delete, edit, and bulk delete)
-- **Transaction splitting** — split a single transaction into multiple categories
+### Transaction Management
+- **Search** — full-text across name, category, account, notes, date
+- **Account filter** — filter by bank account
+- **Bulk actions** — select multiple transactions and delete, categorize, or hide at once
+- **Manual entries** — cash, e-transfers, or anything not in a CSV
+- **Transaction splitting** — split one transaction across multiple categories
+- **Undo** — restore deleted or edited transactions instantly (last 50 actions)
 
-### Import & Export
-- **Import rules** — create rules to auto-hide, label, or force-show transactions at import time
-- **Rule templates** — one-click presets (Default, Freelancer, Student, Self-Employed, Carpool)
-- **Hide/unhide transactions** — hide internal transfers or noise; view and restore hidden items
-- **Custom categories** — add, rename, or delete categories with emoji icons
-- **Export CSV** — export any month or all time (re-importable — full round trip)
-- **Export PDF** — generate a formatted PDF report of any month's transactions
-- **Backup/restore** — download your entire database as a backup, restore from a backup file
+### Import Rules
+- **Rule engine** — auto-hide, label, or force-show transactions at import time based on conditions
+- **Rule templates** — one-click presets: Default, Freelancer, Student, Self-Employed, Carpool
+- **Test before saving** — preview rule matches against existing data
 
-### Privacy & Cost
+### Export & Backup
+- **Export CSV** — any month or all time (re-importable)
+- **Export PDF** — formatted monthly report
+- **Backup/restore** — download or restore full database
+
+### Multi-User & Auth
+- **User accounts** — email signup with optional email verification
+- **Per-user databases** — each user gets an isolated SQLite database
+- **Admin panel** — user management, system stats, per-user DB sizes, demo data seeding
+- **Demo mode** — read-only sandbox that resets hourly; no login required
+- **Password reset** — secure token-based recovery flow
+
+### UI & Experience
+- **Dark/light theme** — toggle in the sidebar, persisted
+- **PWA support** — install as a standalone app on desktop or mobile; offline-capable
+- **Responsive design** — works on phone, tablet, and desktop
+- **Keyboard shortcuts** — Ctrl+S to save, Esc to close drawers
+- **Live nav counts** — transaction, schedule, and rule counts in the sidebar
+
+### Privacy
 - **Zero cost** — no subscriptions, no cloud, no ads, no tracking
-- **Fully local** — all data stays on your machine in a single SQLite file
+- **Fully local** — data stays on your machine in SQLite
+- **CSRF protection** — on all mutating endpoints
+- **Rate limiting** — brute-force protection on auth endpoints
 
 ---
 
@@ -83,17 +112,6 @@ A free, private, self-hosted personal finance dashboard for Canadians. Runs loca
 
 ## Setup
 
-### Easiest: double-click to launch
-
-1. Install [Python 3.9+](https://www.python.org/downloads/) (check "Add Python to PATH" during install)
-2. Download this repo (green **Code** button → **Download ZIP**), unzip it
-3. **Windows:** double-click `start.bat`
-4. **Mac/Linux:** open a terminal in the folder, run `chmod +x start.sh && ./start.sh`
-
-The app installs dependencies automatically on first launch and opens your browser.
-
-### Manual setup
-
 ```bash
 git clone https://github.com/raz3rbla8e/Boreal
 cd Boreal
@@ -102,37 +120,37 @@ python app.py
 # Open http://localhost:5000
 ```
 
-### Standalone `.exe` (no Python needed)
+Requires [Python 3.9+](https://www.python.org/downloads/).
 
-Download `Boreal.exe` from the [Releases](https://github.com/raz3rbla8e/Boreal/releases) page — just run it.
+### Production (Railway / Gunicorn)
 
-To build the `.exe` yourself:
-```bash
-pip install pyinstaller
-pyinstaller boreal.spec
-# Output: dist/Boreal.exe
+The included `Procfile` runs Gunicorn:
+
+```
+web: gunicorn -w 2 -b 0.0.0.0:$PORT app:app
 ```
 
-### Docker
+### Environment variables
+
+All optional — see `.env.example`:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SECRET_KEY` | auto-generated | Session secret |
+| `DB_PATH` | `finance.db` | Legacy single-user DB path |
+| `DATA_DIR` | `data/` | Per-user database directory |
+| `DEMO_MODE` | `false` | Enable read-only demo sandbox |
+| `PROTECTED_ACCOUNTS` | *(empty)* | Comma-separated emails that can't change password or be deleted |
+| `ADMIN_RECOVER_KEY` | *(empty)* | One-time admin recovery key |
+| `MAIL_SERVER`, `MAIL_USERNAME`, etc. | *(empty)* | SMTP config for email verification and password reset |
+
+### CLI commands
 
 ```bash
-docker build -t boreal .
-docker run -p 5000:8080 -v finance_data:/app boreal
+python app.py                          # Start the server
+python app.py migrate --assign <email> # Migrate legacy finance.db to per-user storage
+python app.py make-admin <email>       # Grant admin role to a user
 ```
-
-### Running tests
-
-```bash
-pip install -e ".[dev]"
-pytest
-```
-
-**499 tests** across 14 test files covering all endpoints, bank detection, security, new features, and edge cases.
-
-**Environment variables** (optional — see `.env.example`):
-- `SECRET_KEY` — custom session secret (auto-generated if not set)
-- `DB_PATH` — custom database file path (defaults to `finance.db`)
-
 ---
 
 ## Usage
@@ -296,13 +314,15 @@ The undo history keeps the last 50 actions and each undo is consumed after use (
 
 ## Data & Privacy
 
-- All data is stored in `finance.db` — a local SQLite file on your machine
+- **Multi-user:** Each user's data is stored in `data/<user_id>.db` — an isolated SQLite file
+- **Single-user:** Legacy mode uses `finance.db` in the project root
 - Nothing is sent to any server, ever
-- The only external request is loading Google Fonts and Chart.js from CDNs (for the UI)
+- The only external requests are loading Google Fonts and Chart.js from CDNs (for the UI)
 - Session tokens use SHA-256 and are auto-generated per install
 - CSRF protection on all mutating API endpoints
-- To back up your data: use the in-app backup, or copy `finance.db` somewhere safe
-- To start fresh: delete `finance.db` and restart the app
+- Rate limiting on authentication endpoints
+- To back up your data: use the in-app backup, or copy your `.db` file somewhere safe
+- To start fresh: delete your database and restart the app
 
 ---
 
@@ -310,18 +330,14 @@ The undo history keeps the last 50 actions and each undo is consumed after use (
 
 ```
 Boreal/
-├── app.py                          ← Entry point
-├── pyproject.toml                  ← Package config and dependencies
+├── app.py                          ← Entry point + CLI commands
 ├── requirements.txt                ← Pip dependencies
-├── start.bat                       ← Windows launcher (auto-installs deps)
-├── start.sh                        ← Mac/Linux launcher
-├── boreal.spec                     ← PyInstaller build config
-├── Dockerfile                      ← Docker container config
+├── Procfile                        ← Gunicorn config for Railway/Heroku
 ├── .env.example                    ← Environment variable reference
 ├── banks/                          ← YAML bank configs (auto-detect CSV formats)
 │   ├── amex.yaml
 │   ├── bmo_chequing.yaml
-│   ├── boreal_export.yaml           ← Recognizes re-imported exports
+│   ├── boreal_export.yaml          ← Recognizes re-imported exports
 │   ├── cibc_chequing.yaml
 │   ├── national_bank.yaml
 │   ├── rbc_chequing.yaml
@@ -336,51 +352,39 @@ Boreal/
 │   ├── student.yaml
 │   ├── self_employed.yaml
 │   └── carpool_commuter.yaml
+├── sample_data/                    ← Example CSVs for testing
 ├── boreal/                         ← Application package
 │   ├── __init__.py                 ← Flask app factory, CSRF middleware
 │   ├── __main__.py                 ← python -m boreal
-│   ├── config.py                   ← Paths and config constants
+│   ├── config.py                   ← Paths, env vars, feature flags
 │   ├── models/
-│   │   └── database.py             ← SQLite schema, init, tx_hash, migrations
+│   │   ├── database.py             ← SQLite schema, migrations (v1–v11), tx_hash
+│   │   └── users.py               ← User model, auth, admin roles
 │   ├── routes/
-│   │   ├── __init__.py             ← Blueprint registration
-│   │   ├── main.py                 ← Homepage, health check
-│   │   ├── transactions.py         ← CRUD, search, pagination, bulk actions, undo
+│   │   ├── main.py                 ← Homepage, health check, admin recovery
+│   │   ├── auth.py                 ← Login, signup, email verification, password reset
+│   │   ├── admin.py                ← Admin panel, user management, demo seeding
+│   │   ├── transactions.py         ← CRUD, search, pagination, bulk actions, splits
 │   │   ├── import_export.py        ← CSV/OFX import, export, bank wizard, backup/restore
-│   │   ├── summary.py              ← Dashboard, year review, averages, recurring detection
-│   │   ├── settings.py             ← Budgets, categories, learned merchants
+│   │   ├── summary.py             ← Dashboard, year review, averages, recurring detection
+│   │   ├── settings.py             ← Budgets, categories, learned merchants, goals, groups
 │   │   ├── rules.py                ← Import rules CRUD, templates, test/apply
-│   │   └── accounts.py             ← Accounts, net worth, scheduled transactions, transfers, undo
+│   │   └── accounts.py             ← Accounts, net worth, schedules, transfers, undo
 │   ├── services/
-│   │   ├── categorization.py       ← 300+ keyword → category mapping
+│   │   ├── categorization.py       ← 300+ keyword → category rules
 │   │   ├── csv_parser.py           ← YAML-driven CSV parsing engine
+│   │   ├── email.py                ← Email verification and password reset emails
 │   │   ├── helpers.py              ← Date parsing, number parsing
-│   │   └── rules_engine.py         ← Rule evaluation and transaction saving
-│   ├── templates/
-│   │   └── index.html              ← Single-page HTML shell
+│   │   └── rules_engine.py         ← Rule evaluation and transaction processing
+│   ├── templates/                  ← HTML templates (SPA shell + auth pages)
 │   └── static/
-│       ├── css/style.css           ← Full app styling (dark/light themes)
-│       ├── js/app.js               ← Frontend logic (~2000 lines, vanilla JS)
-│       ├── manifest.json           ← PWA manifest for installability
+│       ├── css/style.css           ← Full styling (dark/light themes, CSS variables)
+│       ├── js/app.js               ← Frontend logic (vanilla JS SPA)
+│       ├── manifest.json           ← PWA manifest
 │       ├── sw.js                   ← Service worker for offline caching
-│       └── icons/                  ← PWA icons (192px, 512px)
-├── tests/                          ← 499 tests across 14 files
-│   ├── conftest.py                 ← Fixtures, helpers, sample CSV data
-│   ├── test_bank_detection.py      ← Bank YAML detection (10 banks + cross-check)
-│   ├── test_categories.py          ← Category CRUD and cascading
-│   ├── test_demo.py                ← Demo mode and reset
-│   ├── test_import_export.py       ← Import, export, round-trip, backup/restore
-│   ├── test_migrations.py          ← Database migration system (v1–v8)
-│   ├── test_mobile.py              ← Mobile responsiveness
-│   ├── test_new_features_v2.py     ← Accounts, net worth, schedules, transfers, undo, OFX, PWA
-│   ├── test_new_features.py        ← Progressive features
-│   ├── test_progressive_disclosure.py ← Progressive disclosure tests
-│   ├── test_rules.py               ← Import rules CRUD and evaluation
-│   ├── test_security.py            ← CSRF, path traversal, input validation
-│   ├── test_settings.py            ← Budgets, learned merchants, goals, groups
-│   ├── test_summary.py             ← Summary, year, averages, recurring
-│   └── test_transactions.py        ← CRUD, search, bulk actions, account filter
-└── finance.db                      ← Your data (auto-created, gitignored)
+│       └── icons/                  ← PWA icons + branding SVGs
+├── data/                           ← Per-user SQLite databases (gitignored)
+└── _archive/                       ← Old versions, dev docs, legacy configs (gitignored)
 ```
 
 ---
@@ -483,28 +487,27 @@ See existing configs in `banks/` for examples of single-amount vs. debit/credit,
 
 ## Tech Stack
 
-- **Backend:** Python 3.9+ / Flask 3.0+
-- **Database:** SQLite (zero config, single file, 8 migration versions)
-- **Frontend:** Vanilla HTML/CSS/JS — no build step, no npm, no framework
-- **Charts:** Chart.js 4.4.0 (loaded from CDN) — doughnut, bar, and line charts
-- **PDF:** fpdf2 for PDF report generation
-- **Bank configs:** YAML files — easy to add/modify
-- **PWA:** Service worker + manifest for installability and offline support
-- **Security:** CSRF protection, SHA-256 hashing, path traversal guards, input validation
-- **Tests:** pytest — 499 tests, 14 files, covers every endpoint and feature
-- **Total install size:** ~2 MB
+| Layer | Technology |
+|-------|-----------|
+| **Backend** | Python 3.9+ / Flask 3.0+ |
+| **Database** | SQLite — per-user isolated databases + shared users.db |
+| **Auth** | Flask-Login + Bcrypt |
+| **Email** | Flask-Mail (optional — for verification and password reset) |
+| **Rate limiting** | Flask-Limiter |
+| **Compression** | Flask-Compress (gzip/brotli) |
+| **Frontend** | Vanilla HTML/CSS/JS — no build step, no npm, no framework |
+| **Charts** | Chart.js 4.x (CDN) — doughnut, bar, and line charts |
+| **PDF** | fpdf2 |
+| **Bank configs** | YAML (easy to add new banks) |
+| **PWA** | Service worker + manifest for installability and offline support |
+| **Security** | CSRF tokens, SHA-256 hashing, rate limiting, path traversal guards |
+| **Deployment** | Gunicorn (Railway, Heroku, any Linux host) |
 
 ---
 
 ## Contributing
 
 Issues and PRs welcome. Please don't commit any real transaction data.
-
-To run tests:
-```bash
-pip install -e ".[dev]"
-pytest -v
-```
 
 ---
 
