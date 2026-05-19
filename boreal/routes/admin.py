@@ -11,9 +11,9 @@ from flask_login import current_user, login_required
 
 from boreal.models.users import (
     list_all_users, user_count, get_user_db_path, set_admin,
-    get_user_by_id, DATA_DIR, USERS_DB_PATH,
+    get_user_by_id, delete_user, DATA_DIR, USERS_DB_PATH,
 )
-from boreal.config import PROJECT_ROOT, SAMPLE_DATA_DIR, BANKS_DIR
+from boreal.config import PROJECT_ROOT, SAMPLE_DATA_DIR, BANKS_DIR, PROTECTED_ACCOUNTS
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -108,6 +108,22 @@ def toggle_admin(user_id):
     new_status = not user.is_admin
     set_admin(user_id, new_status)
     return jsonify({"ok": True, "is_admin": new_status})
+
+
+@admin_bp.route("/api/users/<user_id>/delete", methods=["POST"])
+def api_delete_user(user_id):
+    """Delete a user account (row + DB file). Guarded against self, admins, and protected accounts."""
+    if user_id == current_user.id:
+        return jsonify({"error": "Cannot delete your own account"}), 400
+    user = get_user_by_id(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    if user.is_admin:
+        return jsonify({"error": "Cannot delete an admin — revoke admin first"}), 400
+    if user.email.lower() in PROTECTED_ACCOUNTS:
+        return jsonify({"error": "This account is protected and cannot be deleted"}), 403
+    delete_user(user_id)
+    return jsonify({"ok": True})
 
 
 @admin_bp.route("/api/seed-demo", methods=["POST"])

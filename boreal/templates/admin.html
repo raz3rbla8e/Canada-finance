@@ -114,7 +114,10 @@ async function load(){
       <td class="mono">${fmtBytes(u.db_size_bytes)}</td>
       <td title="${fmtDate(u.last_login)}">${ago(u.last_login)}</td>
       <td title="${fmtDate(u.created_at)}">${fmtDate(u.created_at)}</td>
-      <td><button class="btn-sm" onclick="toggleAdmin('${u.id}',this)" ${u.is_admin?'':''}>${u.is_admin?'Revoke admin':'Make admin'}</button></td>
+      <td>
+        <button class="btn-sm" onclick="toggleAdmin('${u.id}',this)">${u.is_admin?'Revoke admin':'Make admin'}</button>
+        ${u.id!==ME ? '<button class="btn-sm btn-danger" onclick="deleteUser(\''+u.id+'\',\''+u.email+'\',this)" style="margin-left:6px">Delete</button>' : ''}
+      </td>
     </tr>`;
   }
   html+='</table>';
@@ -129,6 +132,16 @@ async function load(){
     <div class="sys-row"><span class="sys-label">Uptime</span><span class="sys-val">${fmtUptime(d.uptime_seconds)}</span></div>
     <div class="sys-row"><span class="sys-label">User DBs</span><span class="sys-val">${d.user_count} files</span></div>
   `;
+}
+
+const ME='{{ current_user.id }}';
+
+async function deleteUser(id,email,btn){
+  if(!confirm('Permanently delete account "'+email+'"? This will remove their user record and database. This cannot be undone.'))return;
+  btn.disabled=true;
+  const csrf=await fetch('/api/csrf-token').then(r=>r.json());
+  const r=await fetch('/admin/api/users/'+id+'/delete',{method:'POST',headers:{'X-CSRF-Token':csrf.csrf_token}});
+  if(r.ok){load()}else{const e=await r.json();alert(e.error||'Failed');btn.disabled=false}
 }
 
 async function toggleAdmin(id,btn){
