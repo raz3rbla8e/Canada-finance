@@ -379,10 +379,26 @@ function updateTopbar(view) {
   if (reset) reset.classList.toggle('hidden', currentMonth() === today);
 }
 
+function setMonth(month) {
+  const idx = STATE.months.indexOf(month);
+  if (idx !== -1) {
+    STATE.monthIdx = idx;
+  } else {
+    // Month not in data — insert it in the correct position (DESC order)
+    STATE.months.push(month);
+    STATE.months.sort((a, b) => b.localeCompare(a));
+    STATE.monthIdx = STATE.months.indexOf(month);
+  }
+  updateMonthLabel();
+  const reset = document.getElementById('month-reset');
+  const today = new Date().toISOString().slice(0, 7);
+  if (reset) reset.classList.toggle('hidden', month === today);
+}
+
 function resetMonth() {
   const today = new Date().toISOString().slice(0, 7);
   setMonth(today);
-  document.getElementById('month-reset')?.classList.add('hidden');
+  refreshCurrentView();
 }
 
 function openMonthPicker() {
