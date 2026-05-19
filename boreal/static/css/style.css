@@ -946,6 +946,15 @@ body:has(.bulk-dock.open) .undo-toast { bottom: 88px; }
 .month-reset.hidden { display: none; }
 .topbar.no-month .month-chip, .topbar.no-month .month-reset { display: none; }
 
+/* Month picker modal */
+.mp-btn {
+  padding: 10px 0; border: 1px solid var(--line-1); border-radius: 8px;
+  background: var(--bg-surface); color: var(--ink-2); font-family: inherit;
+  font-size: 13px; font-weight: 500; cursor: pointer; transition: all .12s;
+}
+.mp-btn:hover { background: var(--bg-hover); color: var(--ink-1); border-color: var(--accent); }
+.mp-sel { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent); }
+
 /* ============================================================
    CASE 03 — Dashboard tiered hierarchy
    ============================================================ */

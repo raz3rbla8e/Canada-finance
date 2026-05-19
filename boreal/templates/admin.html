@@ -48,6 +48,17 @@ tr:last-child td{border-bottom:none}
 .sys-row:last-child{border-bottom:none}
 .sys-label{color:var(--ink-3);font-size:13px}
 .sys-val{font-family:var(--font-mono);font-size:12px;color:var(--ink-2)}
+.modal-back{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9000}
+.modal{background:var(--bg-surface);border:1px solid var(--line-1);border-radius:var(--r-3);width:90%;overflow:hidden}
+.modal-h{padding:16px 20px 0;font-size:15px}
+.modal-body{padding:14px 20px}
+.modal-foot{padding:10px 20px 16px;display:flex;gap:8px;justify-content:flex-end}
+.modal-foot .btn{padding:7px 16px;border-radius:8px;font-size:13px;font-family:var(--font-sans);cursor:pointer;border:1px solid var(--line-2);background:transparent;color:var(--ink-2)}
+.modal-foot .btn:hover{border-color:var(--accent);color:var(--ink-1)}
+.modal-foot .btn-primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.modal-foot .btn-primary:hover{opacity:.9}
+.modal-foot .btn-dg{background:#e74c3c;color:#fff;border-color:#e74c3c}
+.modal-foot .btn-dg:hover{opacity:.9}
 .loading{color:var(--ink-3);text-align:center;padding:40px}
 @media(max-width:720px){.kpi-row{grid-template-columns:repeat(2,1fr)}.sys-grid{grid-template-columns:1fr}}
 </style>
@@ -86,6 +97,26 @@ tr:last-child td{border-bottom:none}
 </div>
 
 <script>
+function esc(s){if(s==null)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+function appConfirm(msg,{title='Confirm',danger=false}={}){
+  return new Promise(resolve=>{
+    const id='ac-'+Date.now();
+    document.body.insertAdjacentHTML('beforeend',`<div class="modal-back" id="${id}">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+        <div class="modal-h"><h3>${esc(title)}</h3></div>
+        <div class="modal-body" style="font-size:14px;color:var(--ink-2)">${esc(msg)}</div>
+        <div class="modal-foot">
+          <button class="btn" id="${id}-no">Cancel</button>
+          <button class="btn ${danger?'btn-dg':'btn-primary'}" id="${id}-yes">${danger?'Delete':'Confirm'}</button>
+        </div>
+      </div>
+    </div>`);
+    const close=v=>{document.getElementById(id)?.remove();resolve(v)};
+    document.getElementById(id).addEventListener('click',()=>close(false));
+    document.getElementById(`${id}-no`).addEventListener('click',()=>close(false));
+    document.getElementById(`${id}-yes`).addEventListener('click',()=>close(true));
+  });
+}
 function fmtBytes(b){if(!b)return '0 B';const u=['B','KB','MB','GB'];let i=0;while(b>=1024&&i<u.length-1){b/=1024;i++}return b.toFixed(i?1:0)+' '+u[i]}
 function fmtUptime(s){const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);if(d)return d+'d '+h+'h';if(h)return h+'h '+m+'m';return m+'m'}
 function fmtDate(iso){if(!iso)return '—';const d=new Date(iso+'Z');return d.toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'})+' '+d.toLocaleTimeString('en-CA',{hour:'2-digit',minute:'2-digit'})}
@@ -139,7 +170,7 @@ async function load(){
 const ME='{{ current_user.id }}';
 
 async function deleteUser(id,email,btn){
-  if(!confirm('Permanently delete account "'+email+'"? This will remove their user record and database. This cannot be undone.'))return;
+  if(!await appConfirm('Permanently delete account "'+email+'"? This will remove their user record and database. This cannot be undone.',{title:'Delete user',danger:true}))return;
   btn.disabled=true;
   const csrf=await fetch('/api/csrf-token').then(r=>r.json());
   const r=await fetch('/admin/api/users/'+id+'/delete',{method:'POST',headers:{'X-CSRF-Token':csrf.csrf_token}});
@@ -155,7 +186,7 @@ async function toggleAdmin(id,btn){
 async function seedDemo(){
   const btn=document.getElementById('btn-seed');
   const status=document.getElementById('seed-status');
-  if(!confirm('This will wipe all your current data and replace it with demo data. Continue?'))return;
+  if(!await appConfirm('This will wipe all your current data and replace it with demo data. Continue?',{title:'Re-seed demo data'}))return;
   btn.disabled=true;
   status.textContent='Seeding…';
   try{

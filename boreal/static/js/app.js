@@ -402,17 +402,51 @@ function resetMonth() {
 }
 
 function openMonthPicker() {
-  const inp = document.createElement('input');
-  inp.type = 'month';
-  inp.value = currentMonth() || new Date().toISOString().slice(0, 7);
-  inp.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
-  document.body.appendChild(inp);
-  inp.addEventListener('change', () => {
-    if (inp.value) { setMonth(inp.value); refreshCurrentView(); }
-    inp.remove();
-  });
-  inp.addEventListener('blur', () => setTimeout(() => inp.remove(), 200));
-  inp.showPicker ? inp.showPicker() : inp.click();
+  const cur = currentMonth() || new Date().toISOString().slice(0, 7);
+  const [curY, curM] = cur.split('-').map(Number);
+  let pickY = curY, pickM = curM;
+  const MNAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const id = 'month-modal-' + Date.now();
+  function render() {
+    const grid = MNAMES.map((m, i) => {
+      const val = `${pickY}-${String(i+1).padStart(2,'0')}`;
+      const sel = (i+1 === curM && pickY === curY) ? ' mp-sel' : '';
+      return `<button class="mp-btn${sel}" data-v="${val}">${m}</button>`;
+    }).join('');
+    return `<div class="modal-back" id="${id}">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:320px">
+        <div class="modal-h"><h3>Go to month</h3></div>
+        <div class="modal-body">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <button class="btn" id="${id}-py">&lsaquo;</button>
+            <span style="font-weight:600;font-size:15px" id="${id}-yr">${pickY}</span>
+            <button class="btn" id="${id}-ny">&rsaquo;</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px" id="${id}-grid">${grid}</div>
+        </div>
+      </div>
+    </div>`;
+  }
+  document.body.insertAdjacentHTML('beforeend', render());
+  function attach() {
+    document.getElementById(id).addEventListener('click', (e) => { if (e.target.id === id) document.getElementById(id)?.remove(); });
+    document.getElementById(`${id}-py`).addEventListener('click', () => { pickY--; update(); });
+    document.getElementById(`${id}-ny`).addEventListener('click', () => { pickY++; update(); });
+    document.getElementById(`${id}-grid`).addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-v]');
+      if (btn) { setMonth(btn.dataset.v); refreshCurrentView(); document.getElementById(id)?.remove(); }
+    });
+  }
+  function update() {
+    document.getElementById(`${id}-yr`).textContent = pickY;
+    const grid = MNAMES.map((m, i) => {
+      const val = `${pickY}-${String(i+1).padStart(2,'0')}`;
+      const sel = (i+1 === curM && pickY === curY) ? ' mp-sel' : '';
+      return `<button class="mp-btn${sel}" data-v="${val}">${m}</button>`;
+    }).join('');
+    document.getElementById(`${id}-grid`).innerHTML = grid;
+  }
+  attach();
 }
 
 function navigateTo(view) {
@@ -485,6 +519,9 @@ function stepMonth(delta) {
   if (newIdx >= 0 && newIdx < STATE.months.length) {
     STATE.monthIdx = newIdx;
     updateMonthLabel();
+    const reset = document.getElementById('month-reset');
+    const today = new Date().toISOString().slice(0, 7);
+    if (reset) reset.classList.toggle('hidden', currentMonth() === today);
     refreshCurrentView();
   }
 }
