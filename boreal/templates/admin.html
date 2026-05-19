@@ -118,7 +118,7 @@ async function load(){
       <td title="${fmtDate(u.created_at)}">${fmtDate(u.created_at)}</td>
       <td>
         <button class="btn-sm" onclick="toggleAdmin('${u.id}',this)">${u.is_admin?'Revoke admin':'Make admin'}</button>
-        ${u.id!==ME ? '<button class="btn-sm btn-danger" onclick="deleteUser(\''+u.id+'\',\''+u.email+'\',this)" style="margin-left:6px">Delete</button>' : ''}
+        ${u.id!==ME && !u.is_admin ? '<button class="btn-sm btn-danger" onclick="deleteUser(\''+u.id+'\',\''+u.email+'\',this)" style="margin-left:6px">Delete</button>' : ''}
       </td>
     </tr>`;
   }
