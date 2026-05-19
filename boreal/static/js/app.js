@@ -374,30 +374,39 @@ function updateTopbar(view) {
   if (crumb) crumb.textContent = VIEW_LABELS[view] || view;
   if (iconHost) iconHost.innerHTML = SECTION_ICONS[view] || '';
   topbar?.classList.toggle('no-month', !MONTH_SCOPED_VIEWS.has(view));
-  const reset = document.getElementById('month-reset');
-  const today = new Date().toISOString().slice(0, 7);
-  if (reset) reset.classList.toggle('hidden', currentMonth() === today);
+  updateMonthArrows();
 }
 
 function setMonth(month) {
   const idx = STATE.months.indexOf(month);
   if (idx !== -1) {
     STATE.monthIdx = idx;
-  } else {
-    // Month not in data — insert it in the correct position (DESC order)
-    STATE.months.push(month);
-    STATE.months.sort((a, b) => b.localeCompare(a));
-    STATE.monthIdx = STATE.months.indexOf(month);
+  } else if (STATE.months.length) {
+    // Month not in data — go to nearest available month instead of creating phantom
+    let best = 0;
+    for (let i = 0; i < STATE.months.length; i++) {
+      if (STATE.months[i] <= month) { best = i; break; }
+    }
+    STATE.monthIdx = best;
   }
   updateMonthLabel();
-  const reset = document.getElementById('month-reset');
-  const today = new Date().toISOString().slice(0, 7);
-  if (reset) reset.classList.toggle('hidden', month === today);
+  updateMonthArrows();
 }
 
 function resetMonth() {
   const today = new Date().toISOString().slice(0, 7);
-  setMonth(today);
+  const idx = STATE.months.indexOf(today);
+  if (idx !== -1) {
+    // Current month has data — go there
+    STATE.monthIdx = idx;
+  } else if (STATE.months.length) {
+    // No data for current month — go to newest available
+    STATE.monthIdx = 0;
+  }
+  updateMonthLabel();
+  updateMonthArrows();
+  const reset = document.getElementById('month-reset');
+  if (reset) reset.classList.add('hidden');
   refreshCurrentView();
 }
 
@@ -496,11 +505,23 @@ function refreshCurrentView() { invalidateApiCache(); renderView(STATE.view); }
 
 async function refreshMonths() {
   const months = await api('/api/months');
+  const prev = currentMonth();
   if (months && months.length) {
     STATE.months = months;
-    if (STATE.monthIdx >= months.length) STATE.monthIdx = 0;
-    updateMonthLabel();
+    // Preserve the month the user was viewing
+    if (prev) {
+      const idx = months.indexOf(prev);
+      STATE.monthIdx = idx !== -1 ? idx : 0;
+    } else {
+      STATE.monthIdx = 0;
+    }
+  } else if (months) {
+    // API returned empty array — no data at all
+    STATE.months = [];
+    STATE.monthIdx = 0;
   }
+  updateMonthLabel();
+  updateMonthArrows();
 }
 
 // ── MONTH PICKER ──────────────────────────────────────────────
@@ -519,11 +540,21 @@ function stepMonth(delta) {
   if (newIdx >= 0 && newIdx < STATE.months.length) {
     STATE.monthIdx = newIdx;
     updateMonthLabel();
-    const reset = document.getElementById('month-reset');
-    const today = new Date().toISOString().slice(0, 7);
-    if (reset) reset.classList.toggle('hidden', currentMonth() === today);
+    updateMonthArrows();
     refreshCurrentView();
   }
+}
+
+function updateMonthArrows() {
+  const prev = document.getElementById('month-prev');
+  const next = document.getElementById('month-next');
+  if (prev) prev.disabled = STATE.months.length === 0 || STATE.monthIdx >= STATE.months.length - 1;
+  if (next) next.disabled = STATE.months.length === 0 || STATE.monthIdx <= 0;
+  // Update "This month" button visibility
+  const reset = document.getElementById('month-reset');
+  const cur = currentMonth();
+  const today = new Date().toISOString().slice(0, 7);
+  if (reset) reset.classList.toggle('hidden', !cur || !STATE.months.length || cur === today);
 }
 
 // ── THEME ─────────────────────────────────────────────────────
@@ -910,6 +941,7 @@ async function init() {
     STATE.months = months;
     STATE.monthIdx = 0;
     updateMonthLabel();
+    updateMonthArrows();
   }
   // Check demo
   STATE.isDemo = !!demo;
@@ -1844,6 +1876,7 @@ window.txBulkAction = async function(action) {
   }
   txSelected = new Set();
   document.getElementById('bulk-dock')?.classList.remove('open');
+  await refreshMonths();
   refreshCurrentView();
 };
 
@@ -3192,6 +3225,7 @@ async function _renderImport(c) {
     if (!res) return;
     const data = await res.json();
     showToast(data.message || `Imported ${data.imported||0} transactions`);
+    await refreshMonths();
     refreshCurrentView();
   }
 
@@ -3291,6 +3325,7 @@ async function _renderImport(c) {
         await showTransferReview(transferPairs);
       }
 
+      await refreshMonths();
       navigateTo('transactions');
     });
   }

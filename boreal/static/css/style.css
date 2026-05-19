@@ -936,6 +936,7 @@ body:has(.bulk-dock.open) .undo-toast { bottom: 88px; }
   font-family: inherit; font-size: 12.5px;
 }
 .month-chip .val:hover { background: var(--bg-hover); }
+.month-chip button:disabled { opacity: 0.25; cursor: default; pointer-events: none; }
 .month-reset {
   height: 28px; font-size: 12px;
   background: var(--bg-surface); border: 1px solid var(--line-1);

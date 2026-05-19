@@ -1,4 +1,4 @@
-const CACHE_NAME = 'boreal-v2';
+const CACHE_NAME = 'boreal-v4';
 const STATIC_ASSETS = [
   '/',
   '/static/css/style.css',
@@ -22,16 +22,26 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Network-first for API calls, cache-first for static assets
-  if (event.request.url.includes('/api/')) {
-    event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
-  } else {
-    // Strip query params for cache matching (cache-bust params like ?v=xxx)
-    const url = new URL(event.request.url);
-    url.search = '';
-    const cleanRequest = new Request(url.toString(), event.request);
-    event.respondWith(
-      caches.match(cleanRequest).then(cached => cached || fetch(event.request))
-    );
-  }
+  // Network-first for everything: use network, update cache, fall back to cache offline
+  event.respondWith(
+    fetch(event.request)
+      .then(response => {
+        // Cache a copy of successful GET responses
+        if (event.request.method === 'GET' && response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            const url = new URL(event.request.url);
+            url.search = '';
+            cache.put(new Request(url.toString()), clone);
+          });
+        }
+        return response;
+      })
+      .catch(() => {
+        // Offline: try cache without query params
+        const url = new URL(event.request.url);
+        url.search = '';
+        return caches.match(new Request(url.toString()));
+      })
+  );
 });

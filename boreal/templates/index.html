@@ -107,9 +107,9 @@
         <span id="topbar-crumb">Dashboard</span>
       </div>
       <div class="month-chip">
-        <button onclick="stepMonth(-1)" aria-label="Previous month"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg></button>
+        <button id="month-prev" onclick="stepMonth(-1)" aria-label="Previous month"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg></button>
         <button class="val" id="month-label" onclick="openMonthPicker()"></button>
-        <button onclick="stepMonth(1)" aria-label="Next month"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6l6 6-6 6"/></svg></button>
+        <button id="month-next" onclick="stepMonth(1)" aria-label="Next month"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6l6 6-6 6"/></svg></button>
       </div>
       <button class="month-reset hidden" id="month-reset" onclick="resetMonth()">This month</button>
       <div class="topbar-spacer"></div>
