@@ -68,7 +68,7 @@ def api_demo_reset():
 
 
 def _seed_demo_data(wipe=True):
-    """Seed (or re-seed) the database with comprehensive demo data."""
+    """Seed (or re-seed) the database with comprehensive demo data showcasing every feature."""
     from datetime import date, timedelta
     from boreal.models.database import get_db
     from boreal.services.categorization import load_learned_dict
@@ -99,11 +99,13 @@ def _seed_demo_data(wipe=True):
             added, dupes, *_ = save_transactions(txns)
             total_added += added
 
-    # ── 2. Accounts (3 types) ──────────────────────────────────────────────────
+    # ── 2. Accounts (4 types for Net Worth chart) ──────────────────────────────
     demo_accounts = [
-        ("RBC Chequing", "chequing", 5000),
+        ("RBC Chequing", "chequing", 4250),
+        ("Tangerine Chequing", "chequing", 2800),
         ("TD Savings", "savings", 12000),
         ("Tangerine Credit Card", "credit", 0),
+        ("Wealthsimple TFSA", "investment", 8500),
     ]
     for name, acct_type, balance in demo_accounts:
         try:
@@ -114,31 +116,49 @@ def _seed_demo_data(wipe=True):
         except sqlite3.IntegrityError:
             pass
 
-    # ── 3. Savings goals (with progress) ───────────────────────────────────────
+    # Back-fill account_id on transactions so balances compute correctly
+    db.execute("""
+        UPDATE transactions SET account_id = (
+            SELECT id FROM accounts WHERE accounts.name = transactions.account
+        ) WHERE account_id IS NULL AND account IS NOT NULL AND account != ''
+    """)
+    db.commit()
+
+    # ── 3. Savings goals (varied progress levels) ──────────────────────────────
     demo_goals = [
-        ("Vacation Fund", 3000, 1250, "✈️"),
+        ("Vacation Fund", 3000, 1850, "✈️"),
         ("Emergency Fund", 10000, 4200, "🛡️"),
-        ("New Laptop", 2000, 800, "💻"),
+        ("New Laptop", 2000, 1600, "💻"),
+        ("Wedding", 15000, 3200, "💍"),
+        ("Car Down Payment", 8000, 950, "🚗"),
     ]
-    for name, target, current, icon in demo_goals:
+    for name, target, current, icon_emoji in demo_goals:
         try:
             db.execute(
                 "INSERT INTO savings_goals (name, target_amount, current_amount, icon) VALUES (?,?,?,?)",
-                (name, target, current, icon),
+                (name, target, current, icon_emoji),
             )
         except sqlite3.IntegrityError:
             pass
 
-    # ── 4. Scheduled transactions (multiple frequencies + accounts) ────────────
+    # ── 4. Scheduled transactions (all 4 frequencies + multiple accounts) ──────
     today = date.today()
     next_month = today.replace(day=1) + timedelta(days=32)
     next_month = next_month.replace(day=1)
+    next_week = today + timedelta(days=7)
     demo_schedules = [
         ("Netflix", "Expense", "Subscriptions", 17.99, "RBC Chequing", "monthly", next_month.isoformat()),
-        ("Spotify", "Expense", "Subscriptions", 11.99, "RBC Chequing", "monthly", next_month.isoformat()),
-        ("Rent", "Expense", "Rent", 1800.00, "RBC Chequing", "monthly", next_month.isoformat()),
-        ("Paycheque", "Income", "Job", 3200.00, "RBC Chequing", "biweekly", (today + timedelta(days=7)).isoformat()),
-        ("Gym Membership", "Expense", "Healthcare", 49.99, "TD Savings", "monthly", next_month.isoformat()),
+        ("Spotify Premium", "Expense", "Subscriptions", 11.99, "RBC Chequing", "monthly", next_month.isoformat()),
+        ("Claude Pro", "Expense", "Subscriptions", 26.00, "Tangerine Credit Card", "monthly", next_month.isoformat()),
+        ("Rent", "Expense", "Rent", 2200.00, "RBC Chequing", "monthly", next_month.isoformat()),
+        ("Paycheque — ACME Corp", "Income", "Job", 3250.00, "Tangerine Chequing", "biweekly", next_week.isoformat()),
+        ("Gym Membership", "Expense", "Healthcare", 55.00, "RBC Chequing", "monthly", next_month.isoformat()),
+        ("Rogers Wireless", "Expense", "Phone", 85.00, "RBC Chequing", "monthly", next_month.isoformat()),
+        ("Enbridge Gas", "Expense", "Utilities", 120.00, "RBC Chequing", "monthly", next_month.isoformat()),
+        ("Car Insurance", "Expense", "Insurance", 165.00, "RBC Chequing", "monthly", next_month.isoformat()),
+        ("TFSA Contribution", "Expense", "Savings Transfer", 250.00, "TD Savings", "biweekly", next_week.isoformat()),
+        ("Side Hustle — Freelance", "Income", "Freelance", 800.00, "Tangerine Chequing", "monthly", next_month.isoformat()),
+        ("RRSP Contribution", "Expense", "Savings Transfer", 500.00, "TD Savings", "yearly", (today.replace(month=2, day=15) + timedelta(days=365)).isoformat()),
     ]
     for name, tx_type, cat, amount, acct, freq, due in demo_schedules:
         db.execute(
@@ -146,14 +166,19 @@ def _seed_demo_data(wipe=True):
             (name, tx_type, cat, amount, acct, freq, due),
         )
 
-    # ── 5. Budgets ─────────────────────────────────────────────────────────────
+    # ── 5. Budgets (aligned with actual transaction categories) ────────────────
     demo_budgets = [
-        ("Eating Out", 150),
-        ("Groceries", 400),
-        ("Entertainment", 100),
-        ("Subscriptions", 60),
-        ("Fuel", 120),
-        ("Clothing", 80),
+        ("Eating Out", 200),
+        ("Groceries", 500),
+        ("Entertainment", 120),
+        ("Subscriptions", 80),
+        ("Fuel", 150),
+        ("Clothing", 100),
+        ("Shopping", 200),
+        ("Transport", 180),
+        ("Pharmacy", 50),
+        ("Home", 100),
+        ("Healthcare", 75),
     ]
     for cat, limit_val in demo_budgets:
         db.execute(
@@ -161,40 +186,96 @@ def _seed_demo_data(wipe=True):
             (cat, limit_val),
         )
 
-    # ── 6. Import rules (auto-hide + categorize) ──────────────────────────────
-    # Rule 1: Auto-hide credit card payments (inter-account transfers)
-    db.execute(
-        "INSERT INTO import_rules (name, action, enabled, priority) VALUES (?,?,1,1)",
-        ("Auto-hide: CC Payment transfers", "hide"),
-    )
-    rule_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-    db.execute(
-        "INSERT INTO rule_conditions (rule_id, field, operator, value) VALUES (?,?,?,?)",
-        (rule_id, "description", "contains", "INTERAC e-Transfer TO VISA"),
-    )
-    # Rule 2: Label large purchases
-    db.execute(
-        "INSERT INTO import_rules (name, action, enabled, priority) VALUES (?,?,1,2)",
-        ("Label: Large purchases over $500", "label"),
-    )
-    rule_id2 = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-    db.execute(
-        "INSERT INTO rule_conditions (rule_id, field, operator, value) VALUES (?,?,?,?)",
-        (rule_id2, "amount", "greater_than", "500"),
-    )
+    # ── 6. Import rules (showcase multiple rule types) ─────────────────────────
+    rules = [
+        ("Auto-hide: CC Payment transfers", "hide", 1, [
+            ("description", "contains", "PAYMENT - THANK YOU"),
+        ]),
+        ("Auto-hide: e-Transfer to self", "hide", 2, [
+            ("description", "contains", "INTERAC e-Transfer TO VISA"),
+        ]),
+        ("Label: Large purchases over $500", "label", 3, [
+            ("amount", "greater_than", "500"),
+        ]),
+        ("Categorize: Tim Hortons → Eating Out", "label", 4, [
+            ("description", "contains", "TIM HORTONS"),
+        ]),
+        ("Pass: keep payroll visible", "pass", 5, [
+            ("description", "contains", "PAYROLL"),
+        ]),
+    ]
+    for name, action, priority, conditions in rules:
+        action_value = ""
+        if name.startswith("Label: Large"):
+            import json
+            action_value = json.dumps({"category": "Shopping"})
+        elif name.startswith("Categorize: Tim"):
+            import json
+            action_value = json.dumps({"category": "Eating Out"})
+        db.execute(
+            "INSERT INTO import_rules (name, action, action_value, enabled, priority) VALUES (?,?,?,1,?)",
+            (name, action, action_value, priority),
+        )
+        rule_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        for field, operator, value in conditions:
+            db.execute(
+                "INSERT INTO rule_conditions (rule_id, field, operator, value) VALUES (?,?,?,?)",
+                (rule_id, field, operator, value),
+            )
 
-    # ── 7. Learned merchants ──────────────────────────────────────────────────
+    # ── 7. Learned merchants (comprehensive) ──────────────────────────────────
     demo_learned = [
-        ("TIM HORTONS", "Eating Out"),
-        ("COSTCO WHOLESALE", "Groceries"),
-        ("SHELL", "Fuel"),
-        ("AMAZON.CA", "Shopping"),
-        ("CANADIAN TIRE", "Home"),
+        ("tim hortons", "Eating Out"),
+        ("costco wholesale", "Groceries"),
+        ("shell", "Fuel"),
+        ("amazon.ca", "Shopping"),
+        ("canadian tire", "Home"),
+        ("shoppers drug mart", "Pharmacy"),
+        ("netflix.com", "Subscriptions"),
+        ("spotify premium", "Subscriptions"),
+        ("uber eats", "Eating Out"),
+        ("loblaws", "Groceries"),
+        ("no frills", "Groceries"),
+        ("petro-canada", "Fuel"),
+        ("presto transit", "Transport"),
+        ("cineplex", "Entertainment"),
+        ("lcbo", "Entertainment"),
+        ("goodlife fitness", "Healthcare"),
+        ("rogers wireless", "Phone"),
+        ("enbridge gas", "Utilities"),
+        ("dollarama", "Shopping"),
     ]
     for keyword, cat in demo_learned:
         db.execute(
             "INSERT OR REPLACE INTO learned_merchants (keyword, category) VALUES (?,?)",
             (keyword, cat),
+        )
+
+    # ── 8. Category groups (showcase grouping feature) ─────────────────────────
+    # Ensure groups exist
+    db.execute("INSERT OR IGNORE INTO category_groups (name, sort_order) VALUES ('Essentials', 0)")
+    db.execute("INSERT OR IGNORE INTO category_groups (name, sort_order) VALUES ('Lifestyle', 1)")
+    db.execute("INSERT OR IGNORE INTO category_groups (name, sort_order) VALUES ('Savings & Debt', 2)")
+    # Assign categories to groups
+    essentials = ('Rent', 'Groceries', 'Utilities', 'Insurance', 'Phone', 'Internet',
+                  'Healthcare', 'Pharmacy', 'Fuel', 'Transport')
+    for cat in essentials:
+        db.execute("UPDATE categories SET group_id=(SELECT id FROM category_groups WHERE name='Essentials') WHERE name=? AND type='Expense'", (cat,))
+    savings = ('Savings Transfer',)
+    for cat in savings:
+        db.execute("UPDATE categories SET group_id=(SELECT id FROM category_groups WHERE name='Savings & Debt') WHERE name=?", (cat,))
+    db.execute("UPDATE categories SET group_id=(SELECT id FROM category_groups WHERE name='Lifestyle') WHERE type='Expense' AND group_id IS NULL")
+
+    # ── 9. Settings (preferred currency, dashboard layout) ─────────────────────
+    demo_settings = [
+        ("currency", "CAD"),
+        ("date_format", "YYYY-MM-DD"),
+        ("dashboard_layout", "default"),
+    ]
+    for key, val in demo_settings:
+        db.execute(
+            "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, val),
         )
 
     db.commit()
