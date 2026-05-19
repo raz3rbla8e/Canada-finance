@@ -20,5 +20,6 @@ critique/
 
 # Docs with credentials / internal ops
 AUTH_GUIDE.md
+TEST-ACCOUNTS.md
 .instructions.md
 seed_test_account.py
