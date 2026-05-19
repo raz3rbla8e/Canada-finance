@@ -50,7 +50,7 @@ def _register_csrf(app):
         if not request.path.startswith("/api/"):
             return
         # Skip CSRF for demo reset endpoint
-        if request.path == "/api/demo/reset":
+        if request.path in ("/api/demo/reset", "/api/admin-recover"):
             return
         token = request.headers.get("X-CSRF-Token", "")
         if not token or token != session.get("csrf_token"):

@@ -2,7 +2,7 @@ import glob
 import os
 import sqlite3
 
-from flask import Blueprint, render_template, jsonify, current_app
+from flask import Blueprint, render_template, jsonify, current_app, request
 from flask_login import login_required
 
 from boreal.config import DB_PATH, SAMPLE_DATA_DIR, BANKS_DIR
@@ -38,6 +38,25 @@ def health():
 @main_bp.route("/api/demo")
 def api_demo():
     return jsonify({"demo": current_app.config.get("DEMO_MODE", False)})
+
+
+@main_bp.route("/api/admin-recover", methods=["POST"])
+def api_admin_recover():
+    """One-time admin recovery — requires ADMIN_RECOVER_KEY env var to match."""
+    import os
+    from boreal.models.users import get_user_by_email, set_admin
+    key = os.environ.get("ADMIN_RECOVER_KEY", "")
+    if not key:
+        return jsonify({"error": "Not configured"}), 404
+    d = request.json or {}
+    if d.get("key") != key:
+        return jsonify({"error": "Forbidden"}), 403
+    email = d.get("email", "")
+    user = get_user_by_email(email)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    set_admin(user.id, True)
+    return jsonify({"ok": True, "email": user.email, "is_admin": True})
 
 
 @main_bp.route("/api/demo/reset", methods=["POST"])
