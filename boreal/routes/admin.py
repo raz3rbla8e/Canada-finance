@@ -112,37 +112,8 @@ def toggle_admin(user_id):
 
 @admin_bp.route("/api/seed-demo", methods=["POST"])
 def seed_demo():
-    """Import all sample CSVs into the current admin user's database."""
-    from boreal.models.database import get_db
-    from boreal.services.categorization import load_learned_dict
-    from boreal.services.csv_parser import load_bank_configs, detect_bank_config, parse_with_config
-    from boreal.services.rules_engine import save_transactions
+    """Wipe and re-seed current user's database with comprehensive demo data."""
+    from boreal.routes.main import _seed_demo_data
 
-    if not os.path.isdir(SAMPLE_DATA_DIR):
-        return jsonify({"error": "No sample_data directory found"}), 404
-
-    csvs = sorted(f for f in os.listdir(SAMPLE_DATA_DIR) if f.endswith(".csv"))
-    if not csvs:
-        return jsonify({"error": "No CSV files in sample_data/"}), 404
-
-    db = get_db()
-    learned = load_learned_dict(db)
-    configs = load_bank_configs()
-    results = []
-    total_added = 0
-
-    for fname in csvs:
-        path = os.path.join(SAMPLE_DATA_DIR, fname)
-        with open(path, "r", encoding="utf-8-sig") as f:
-            text = f.read()
-        first_line = text.splitlines()[0] if text.strip() else ""
-        config, bank_name = detect_bank_config(first_line, configs)
-        if config:
-            txns = parse_with_config(text, config, learned)
-            added, dupes, *_ = save_transactions(txns)
-            total_added += added
-            results.append({"file": fname, "bank": config.get("name", bank_name), "added": added, "dupes": dupes})
-        else:
-            results.append({"file": fname, "bank": "unknown", "added": 0, "dupes": 0})
-
-    return jsonify({"total_added": total_added, "files": results})
+    total_added = _seed_demo_data(wipe=True)
+    return jsonify({"total_added": total_added, "files": []})

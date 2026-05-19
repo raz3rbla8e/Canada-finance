@@ -147,7 +147,7 @@ async function seedDemo(){
     const csrf=await fetch('/api/csrf-token').then(r=>r.json());
     const r=await fetch('/admin/api/seed-demo',{method:'POST',headers:{'X-CSRF-Token':csrf.csrf_token}});
     const d=await r.json();
-    if(r.ok){status.textContent='✓ Seeded '+d.total_added+' transactions from '+d.files.length+' files';load()}
+    if(r.ok){status.textContent='✓ Seeded '+d.total_added+' transactions + budgets, goals, schedules, rules & more';load()}
     else{status.textContent='✗ '+(d.error||'Failed');status.style.color='var(--danger)'}
   }catch(e){status.textContent='✗ '+e.message;status.style.color='var(--danger)'}
   btn.disabled=false;
