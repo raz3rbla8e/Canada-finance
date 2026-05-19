@@ -2536,7 +2536,7 @@ async function _renderAccounts(c) {
         const pct = (Math.abs(a.balance||0) / maxBalance) * 100;
         const ac = acctColor(a);
         const isDebt = (a.balance||0) < 0;
-        return `<div style="display:grid;grid-template-columns:auto 1fr auto auto auto;gap:16px;padding:16px 20px;align-items:center;${i < list.length-1 ? 'border-bottom:1px solid var(--line-1)' : ''};cursor:pointer" onclick="viewAccount(${a.id})">
+        return `<div style="display:grid;grid-template-columns:auto 1fr auto auto auto;gap:16px;padding:16px 20px;align-items:center;${i < list.length-1 ? 'border-bottom:1px solid var(--line-1)' : ''};cursor:pointer" onclick="editAccount(${a.id})">
           <div class="acct-glyph" style="width:40px;height:40px;background:${ac}15;color:${ac};border-color:${ac}30;font-size:15px;font-weight:600">${esc((a.name||'?')[0])}</div>
           <div>
             <div style="font-weight:500;font-size:14.5px">${esc(a.name)}</div>
@@ -2550,7 +2550,7 @@ async function _renderAccounts(c) {
             <div style="font-size:11px;color:var(--ink-3)">${a.is_debt ? 'owed' : (a.account_type === 'investment' ? 'value' : 'balance')}</div>
           </div>
           <div style="display:flex;gap:4px">
-            <button class="icon-btn" onclick="event.stopPropagation();viewAccount(${a.id})">${icon('edit',13)}</button>
+            <button class="icon-btn" onclick="event.stopPropagation();editAccount(${a.id})">${icon('edit',13)}</button>
           </div>
         </div>`;
       }).join('') : '<div style="padding:20px;text-align:center;color:var(--ink-3)">No accounts yet</div>'}
@@ -2672,7 +2672,7 @@ function openAccountModal(existing) {
 window.closeAccountModal = function() { document.getElementById('acct-modal-back')?.remove(); };
 
 function acctRow(a) {
-  return `<div class="acct-row" style="cursor:pointer" onclick="viewAccount(${a.id})">
+  return `<div class="acct-row" style="cursor:pointer" onclick="editAccount(${a.id})">
     <div class="left">
       <div class="acct-glyph" style="background:${acctColor(a)}18;color:${acctColor(a)};border-color:${acctColor(a)}40">${esc((a.name||'?')[0])}</div>
       <div><div class="name">${esc(a.name)}</div><div class="type">${esc(a.account_type||'')}</div></div>
@@ -2687,116 +2687,6 @@ window.editAccount = async function(id) {
   const accounts = await api('/api/accounts-list');
   const a = (accounts||[]).find(x => x.id === id);
   if (a) openAccountModal(a);
-};
-
-window.viewAccount = async function(id) {
-  const accounts = await api('/api/accounts-list');
-  const a = (accounts||[]).find(x => x.id === id);
-  if (!a) return;
-
-  // Fetch ALL transactions for this account (no month filter, include hidden)
-  const res = await api(`/api/transactions?month=&search=&hidden=all&account=${a.id}&limit=500`);
-  const txns = res?.transactions || res || [];
-
-  // Compute running balance from oldest to newest
-  const sorted = [...txns].sort((a,b) => a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id);
-  let running = a.opening_balance || 0;
-  const balDate = a.balance_date || '';
-  const withBalance = sorted.map(t => {
-    if (balDate && t.date < balDate) return null; // skip transactions before balance_date
-    if (t.type === 'Income') running += t.amount;
-    else running -= t.amount;
-    return { ...t, running: Math.round(running * 100) / 100 };
-  }).filter(Boolean);
-  // Reverse so newest is on top
-  withBalance.reverse();
-
-  const isCredit = a.account_type === 'credit';
-  const displayBal = isCredit ? -a.balance : a.balance;
-  const balLabel = isCredit ? 'owed' : (a.account_type === 'investment' ? 'value' : 'balance');
-  const totalIn = txns.filter(t => t.type === 'Income').reduce((s,t) => s + t.amount, 0);
-  const totalOut = txns.filter(t => t.type === 'Expense').reduce((s,t) => s + t.amount, 0);
-
-  const ac = acctColor(a);
-
-  // Remove any existing detail drawer
-  document.getElementById('acct-detail-back')?.remove();
-
-  document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="acct-detail-back" style="z-index:900">
-    <div class="drawer-wide" onclick="event.stopPropagation()" style="max-width:720px;height:100vh;display:flex;flex-direction:column">
-      <div class="drawer-head" style="padding:20px 24px;border-bottom:1px solid var(--line-1)">
-        <div style="display:flex;align-items:center;gap:14px;flex:1">
-          <div class="acct-glyph" style="width:44px;height:44px;background:${ac}15;color:${ac};border-color:${ac}30;font-size:17px;font-weight:600">${esc((a.name||'?')[0])}</div>
-          <div>
-            <div style="font-weight:600;font-size:17px">${esc(a.name)}</div>
-            <div style="font-size:12px;color:var(--ink-3);margin-top:2px">${esc(a.account_type)} · ${withBalance.length} transactions</div>
-          </div>
-        </div>
-        <div style="text-align:right;margin-right:16px">
-          <div style="font-weight:600;font-size:20px;font-variant-numeric:tabular-nums;color:${a.is_debt ? 'var(--danger)' : 'var(--ink-1)'}">${a.is_debt ? '−' : ''}${fmtCurrency(Math.abs(displayBal))}</div>
-          <div style="font-size:12px;color:var(--ink-3)">${balLabel}</div>
-        </div>
-        <div style="display:flex;gap:6px">
-          <button class="icon-btn" id="acct-detail-edit" title="Edit account">${icon('edit',14)}</button>
-          <button class="icon-btn" onclick="document.getElementById('acct-detail-back')?.remove()" title="Close">${icon('x',14)}</button>
-        </div>
-      </div>
-
-      <div style="padding:12px 24px;display:flex;gap:16px;border-bottom:1px solid var(--line-1)">
-        <div style="flex:1;text-align:center;padding:10px;border-radius:8px;background:var(--bg-2)">
-          <div style="font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Total in</div>
-          <div style="font-weight:600;font-size:16px;color:var(--pos);font-variant-numeric:tabular-nums">+${fmtCurrency(totalIn)}</div>
-        </div>
-        <div style="flex:1;text-align:center;padding:10px;border-radius:8px;background:var(--bg-2)">
-          <div style="font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Total out</div>
-          <div style="font-weight:600;font-size:16px;font-variant-numeric:tabular-nums">−${fmtCurrency(totalOut)}</div>
-        </div>
-        <div style="flex:1;text-align:center;padding:10px;border-radius:8px;background:var(--bg-2)">
-          <div style="font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Opening</div>
-          <div style="font-weight:600;font-size:16px;font-variant-numeric:tabular-nums">${fmtCurrency(a.opening_balance || 0, true)}</div>
-        </div>
-      </div>
-
-      <div style="flex:1;overflow-y:auto;padding:0">
-        <table class="tx-table" style="width:100%">
-          <thead><tr>
-            <th style="padding-left:24px">Date</th>
-            <th>Description</th>
-            <th>Category</th>
-            <th style="text-align:right">Amount</th>
-            <th style="text-align:right;padding-right:24px">Balance</th>
-          </tr></thead>
-          <tbody>
-            ${withBalance.length ? withBalance.map(t => {
-              const isInc = t.type === 'Income';
-              const isHidden = t.hidden === 1;
-              return `<tr style="cursor:pointer;${isHidden ? 'opacity:0.5;' : ''}" onclick="document.getElementById('acct-detail-back')?.remove();openDrawer(${t.id})">
-                <td style="padding-left:24px;white-space:nowrap">${fmtDate(t.date)}</td>
-                <td>
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <span style="font-weight:500;font-size:13px">${esc(t.name)}</span>
-                    ${isHidden ? '<span style="font-size:10px;background:var(--bg-3);padding:1px 5px;border-radius:4px;color:var(--ink-3)">hidden</span>' : ''}
-                    ${t.category === 'Transfer' ? '<span style="font-size:10px;background:var(--accent-bg);padding:1px 5px;border-radius:4px;color:var(--accent)">transfer</span>' : ''}
-                  </div>
-                </td>
-                <td>${t.category ? catPill(t.category) : '<span style="color:var(--ink-3)">—</span>'}</td>
-                <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;color:${isInc ? 'var(--pos)' : 'var(--ink-1)'}">${isInc ? '+' : '−'}${fmtCurrency(t.amount)}</td>
-                <td style="text-align:right;padding-right:24px;font-variant-numeric:tabular-nums;color:${t.running < 0 ? 'var(--danger)' : 'var(--ink-2)'}">${fmtCurrency(t.running, true)}</td>
-              </tr>`;
-            }).join('') : '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--ink-3)">No transactions in this account</td></tr>'}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>`);
-
-  document.getElementById('acct-detail-back').addEventListener('click', e => {
-    if (e.target.id === 'acct-detail-back') e.target.remove();
-  });
-  document.getElementById('acct-detail-edit')?.addEventListener('click', () => {
-    document.getElementById('acct-detail-back')?.remove();
-    openAccountModal(a);
-  });
 };
 
 // ══════════════════════════════════════════════════════════════
