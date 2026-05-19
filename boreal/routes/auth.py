@@ -41,8 +41,11 @@ def login():
                 db_path = get_user_db_path(user.id)
                 if not os.path.exists(db_path):
                     init_user_db(db_path)
-                next_page = request.args.get("next")
-                return redirect(next_page or url_for("main.index"))
+                next_page = request.args.get("next", "")
+                # Prevent open redirect — only allow relative paths
+                if not next_page or next_page.startswith("//") or "://" in next_page:
+                    next_page = url_for("main.index")
+                return redirect(next_page)
             else:
                 error = "Invalid email or password."
 

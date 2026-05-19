@@ -20,4 +20,9 @@ def register_blueprints(app):
     app.register_blueprint(rules_bp)
     app.register_blueprint(accounts_bp)
 
-    # Rate limits applied per-view in auth.py via @app.limiter decorators
+    # Apply stricter rate limits to auth endpoints (brute-force protection)
+    limiter = getattr(app, "limiter", None)
+    if limiter:
+        limiter.limit("5/minute")(app.view_functions["auth.login"])
+        limiter.limit("5/minute")(app.view_functions["auth.signup"])
+        limiter.limit("5/minute")(app.view_functions["auth.forgot_password"])

@@ -209,9 +209,10 @@ def create_app():
     app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-    if os.environ.get("SECURE_COOKIES", "").lower() == "true":
-        app.config["REMEMBER_COOKIE_SECURE"] = True
-        app.config["SESSION_COOKIE_SECURE"] = True
+    # Default secure cookies to True unless explicitly disabled (safe for HTTPS production)
+    secure = os.environ.get("SECURE_COOKIES", "true").lower() != "false"
+    app.config["REMEMBER_COOKIE_SECURE"] = secure
+    app.config["SESSION_COOKIE_SECURE"] = secure
 
     # ── Flask-Mail ────────────────────────────────────────────────────────────
     app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "")

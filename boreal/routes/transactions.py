@@ -7,6 +7,22 @@ from boreal.routes.accounts import save_undo
 
 transactions_bp = Blueprint("transactions", __name__)
 
+MAX_BULK_IDS = 5000
+
+
+def _validate_bulk_ids(ids):
+    """Validate and sanitise a list of IDs from user input. Returns (clean_ids, error_response)."""
+    if not ids or not isinstance(ids, list):
+        return None, (jsonify({"error": "No IDs provided"}), 400)
+    if len(ids) > MAX_BULK_IDS:
+        return None, (jsonify({"error": f"Too many IDs (max {MAX_BULK_IDS})"}), 400)
+    try:
+        clean = [int(i) for i in ids]
+    except (ValueError, TypeError):
+        return None, (jsonify({"error": "All IDs must be integers"}), 400)
+    return clean, None
+
+
 
 @transactions_bp.route("/api/transactions")
 def api_transactions():
@@ -193,9 +209,9 @@ def api_accounts():
 @transactions_bp.route("/api/bulk-delete", methods=["POST"])
 def api_bulk_delete():
     d = request.json or {}
-    ids = d.get("ids", [])
-    if not ids or not isinstance(ids, list):
-        return jsonify({"error": "No IDs provided"}), 400
+    ids, err = _validate_bulk_ids(d.get("ids", []))
+    if err:
+        return err
     db = get_db()
     placeholders = ",".join("?" * len(ids))
     rows = db.execute(f"SELECT * FROM transactions WHERE id IN ({placeholders})", ids).fetchall()
@@ -209,9 +225,11 @@ def api_bulk_delete():
 @transactions_bp.route("/api/bulk-categorize", methods=["POST"])
 def api_bulk_categorize():
     d = request.json or {}
-    ids = d.get("ids", [])
     category = d.get("category", "").strip()
-    if not ids or not isinstance(ids, list) or not category:
+    ids, err = _validate_bulk_ids(d.get("ids", []))
+    if err:
+        return err
+    if not category:
         return jsonify({"error": "IDs and category required"}), 400
     db = get_db()
     db.row_factory = sqlite3.Row
@@ -253,9 +271,9 @@ def api_bulk_categorize():
 @transactions_bp.route("/api/bulk-hide", methods=["POST"])
 def api_bulk_hide():
     d = request.json or {}
-    ids = d.get("ids", [])
-    if not ids or not isinstance(ids, list):
-        return jsonify({"error": "No IDs provided"}), 400
+    ids, err = _validate_bulk_ids(d.get("ids", []))
+    if err:
+        return err
     db = get_db()
     placeholders = ",".join("?" * len(ids))
     db.execute(
@@ -269,9 +287,9 @@ def api_bulk_hide():
 def api_bulk_transfer():
     """Mark selected transactions as transfers (hidden + category=Transfer)."""
     d = request.json or {}
-    ids = d.get("ids", [])
-    if not ids or not isinstance(ids, list):
-        return jsonify({"error": "No IDs provided"}), 400
+    ids, err = _validate_bulk_ids(d.get("ids", []))
+    if err:
+        return err
     db = get_db()
     placeholders = ",".join("?" * len(ids))
     db.execute(
@@ -284,9 +302,9 @@ def api_bulk_transfer():
 @transactions_bp.route("/api/bulk-unhide", methods=["POST"])
 def api_bulk_unhide():
     d = request.json or {}
-    ids = d.get("ids", [])
-    if not ids or not isinstance(ids, list):
-        return jsonify({"error": "No IDs provided"}), 400
+    ids, err = _validate_bulk_ids(d.get("ids", []))
+    if err:
+        return err
     db = get_db()
     placeholders = ",".join("?" * len(ids))
     db.execute(
@@ -300,9 +318,9 @@ def api_bulk_unhide():
 def api_suggest_hide_rules():
     """Given transaction IDs, return unique descriptions grouped for rule creation."""
     d = request.json or {}
-    ids = d.get("ids", [])
-    if not ids or not isinstance(ids, list):
-        return jsonify({"error": "No IDs provided"}), 400
+    ids, err = _validate_bulk_ids(d.get("ids", []))
+    if err:
+        return err
     db = get_db()
     placeholders = ",".join("?" * len(ids))
     rows = db.execute(

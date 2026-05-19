@@ -172,7 +172,10 @@ def api_detect_csv():
 
 @import_export_bp.route("/api/save-bank-config", methods=["POST"])
 def api_save_bank_config():
-    """Save a user-defined bank config from the unknown CSV wizard."""
+    """Save a user-defined bank config from the unknown CSV wizard (admin only)."""
+    from flask_login import current_user
+    if not current_user.is_authenticated or not current_user.is_admin:
+        return jsonify({"error": "Admin access required"}), 403
     d = request.json
     bank_name = d.get("bank_name", "").strip()
     if not bank_name:
@@ -294,9 +297,11 @@ def api_export():
                 for v in r
             ) + "\n"
 
-    filename = f"transactions_{month or 'all'}.csv"
+    # Sanitize month for filename — allow only YYYY-MM patterns
+    safe_month = re.sub(r"[^0-9\-]", "", month) if month else "all"
+    filename = f"transactions_{safe_month}.csv"
     return Response(generate(), mimetype="text/csv",
-                    headers={"Content-Disposition": f"attachment; filename={filename}"})
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @import_export_bp.route("/api/backup")
