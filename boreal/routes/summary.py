@@ -222,6 +222,8 @@ def api_recurring():
         WHERE hidden=0 AND type='Expense'
         GROUP BY LOWER(TRIM(name))
         HAVING months_seen >= ?
+               AND MIN(amount) > 0
+               AND MAX(amount) <= MIN(amount) * 2.0
         ORDER BY months_seen DESC, avg_amount DESC
     """, (min_months,)).fetchall()
     recurring = []
@@ -292,10 +294,15 @@ def api_trends():
 @summary_bp.route("/api/alerts")
 def api_alerts():
     """Real-time alerts: budget overages, due schedules, uncategorized, price changes."""
+    import json as _json
     db = get_db()
     today = date.today()
     month = today.strftime("%Y-%m")
     alerts = []
+
+    # Load dismissed alert IDs
+    row = db.execute("SELECT value FROM settings WHERE key='dismissed_alerts'").fetchone()
+    dismissed = set(_json.loads(row["value"]) if row else [])
 
     # 1. Budget overages this month
     budgets = db.execute(
@@ -312,6 +319,7 @@ def api_alerts():
     for b in budgets:
         over = b["spent"] - b["monthly_limit"]
         alerts.append({
+            "id": f"budget:{month}:{b['category']}",
             "type": "budget",
             "icon": "alert",
             "tone": "warn",
@@ -328,6 +336,7 @@ def api_alerts():
     for s in due:
         is_overdue = s["next_due"] <= today.isoformat()
         alerts.append({
+            "id": f"schedule:{s['name']}:{s['next_due']}",
             "type": "schedule",
             "icon": "calendar" if not is_overdue else "alert",
             "tone": "warn" if is_overdue else "accent",
@@ -341,6 +350,7 @@ def api_alerts():
     ).fetchone()["c"]
     if uncat > 0:
         alerts.append({
+            "id": f"uncategorized:{month}",
             "type": "uncategorized",
             "icon": "tag",
             "tone": "accent",
@@ -362,6 +372,7 @@ def api_alerts():
     ).fetchall()
     for p in price_changes:
         alerts.append({
+            "id": f"price:{p['name'].lower().strip()}",
             "type": "price_change",
             "icon": "trending",
             "tone": "accent",
@@ -369,7 +380,36 @@ def api_alerts():
             "detail": f"${p['min_amount']:,.2f} → ${p['max_amount']:,.2f}",
         })
 
+    # Filter out dismissed alerts
+    alerts = [a for a in alerts if a["id"] not in dismissed]
+
     return jsonify({"alerts": alerts, "count": len(alerts)})
+
+
+@summary_bp.route("/api/alerts/dismiss", methods=["POST"])
+def api_dismiss_alert():
+    """Dismiss one or all alerts so they don't reappear."""
+    import json as _json
+    data = request.get_json(force=True) or {}
+    alert_id = data.get("id", "")
+    clear_all = data.get("all", False)
+    db = get_db()
+    row = db.execute("SELECT value FROM settings WHERE key='dismissed_alerts'").fetchone()
+    dismissed = _json.loads(row["value"]) if row else []
+    if clear_all:
+        # Caller passes current alert IDs to dismiss them all
+        ids = data.get("ids", [])
+        for aid in ids:
+            if aid not in dismissed:
+                dismissed.append(aid)
+    elif alert_id and alert_id not in dismissed:
+        dismissed.append(alert_id)
+    if row:
+        db.execute("UPDATE settings SET value=? WHERE key='dismissed_alerts'", (_json.dumps(dismissed),))
+    else:
+        db.execute("INSERT INTO settings (key, value) VALUES ('dismissed_alerts', ?)", (_json.dumps(dismissed),))
+    db.commit()
+    return jsonify({"ok": True})
 
 
 @summary_bp.route("/api/forecast")

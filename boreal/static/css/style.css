@@ -118,13 +118,18 @@ button{font-family:inherit;cursor:pointer}input,select,textarea{font-family:inhe
 .notif-badge.hidden{display:none}
 .notif-dropdown{position:absolute;top:calc(100% + 8px);right:0;width:340px;max-height:400px;overflow-y:auto;background:var(--bg-surface);border:1px solid var(--line-1);border-radius:12px;box-shadow:0 8px 24px oklch(0% 0 0 / 0.12);z-index:200;padding:8px 0}
 .notif-dropdown.hidden{display:none}
-.notif-dropdown .notif-header{padding:10px 16px;font-size:13px;font-weight:600;color:var(--ink-1);border-bottom:1px solid var(--line-1)}
+.notif-dropdown .notif-header{padding:10px 16px;font-size:13px;font-weight:600;color:var(--ink-1);border-bottom:1px solid var(--line-1);display:flex;align-items:center;justify-content:space-between}
 .notif-dropdown .notif-item{display:flex;gap:10px;align-items:flex-start;padding:10px 16px;transition:background .15s}
 .notif-dropdown .notif-item:hover{background:var(--bg-hover)}
 .notif-dropdown .notif-item .icon-circle{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;flex-shrink:0}
 .notif-dropdown .notif-ttl{font-size:13px;font-weight:500;color:var(--ink-1)}
 .notif-dropdown .notif-dt{font-size:12px;color:var(--ink-3);margin-top:2px}
 .notif-dropdown .notif-empty{padding:24px 16px;text-align:center;font-size:13px;color:var(--ink-3)}
+.notif-clear-all{background:none;border:none;color:var(--ink-3);font-size:11.5px;font-family:var(--font-sans);cursor:pointer;padding:2px 4px;border-radius:4px;transition:color .15s}
+.notif-clear-all:hover{color:var(--accent-ink)}
+.notif-dismiss{background:none;border:none;color:var(--ink-4);font-size:16px;cursor:pointer;padding:2px 6px;border-radius:4px;line-height:1;flex-shrink:0;opacity:0;transition:opacity .15s,color .15s}
+.notif-item:hover .notif-dismiss{opacity:1}
+.notif-dismiss:hover{color:var(--ink-1)}
 
 /* PAGE */
 .page{padding:28px 32px 80px;max-width:1320px}

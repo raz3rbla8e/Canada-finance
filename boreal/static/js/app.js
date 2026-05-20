@@ -328,10 +328,29 @@ async function toggleAlerts() {
     return;
   }
   const toneMap = { warn:['var(--warn-soft)','var(--warn)'], accent:['var(--accent-soft)','var(--accent)'], pos:['var(--pos-soft)','var(--pos)'] };
-  dd.innerHTML = `<div class="notif-header">Notifications · ${data.count}</div>` + data.alerts.map(a => {
+  dd.innerHTML = `<div class="notif-header"><span>Notifications · ${data.count}</span><button class="notif-clear-all" onclick="clearAllAlerts(event)">Clear all</button></div>` + data.alerts.map(a => {
     const [bg,fg] = toneMap[a.tone] || toneMap.accent;
-    return `<div class="notif-item"><div class="icon-circle" style="background:${bg};color:${fg}">${icon(a.icon||'alert',13)}</div><div><div class="notif-ttl">${esc(a.title)}</div><div class="notif-dt">${esc(a.detail)}</div></div></div>`;
+    return `<div class="notif-item" data-alert-id="${esc(a.id)}"><div class="icon-circle" style="background:${bg};color:${fg}">${icon(a.icon||'alert',13)}</div><div style="flex:1;min-width:0"><div class="notif-ttl">${esc(a.title)}</div><div class="notif-dt">${esc(a.detail)}</div></div><button class="notif-dismiss" onclick="dismissAlert(event,'${esc(a.id)}')" title="Dismiss">&times;</button></div>`;
   }).join('');
+}
+async function dismissAlert(e, id) {
+  e.stopPropagation();
+  const item = e.target.closest('.notif-item');
+  if (item) { item.style.opacity = '0'; item.style.transition = 'opacity .15s'; }
+  await api('/api/alerts/dismiss', 'POST', { id });
+  setTimeout(() => { toggleAlerts(); _alertsOpen = false; toggleAlerts(); refreshAlertsBadge(); }, 160);
+}
+async function clearAllAlerts(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('notif-dropdown');
+  const ids = [...(dd?.querySelectorAll('.notif-item[data-alert-id]') || [])].map(el => el.dataset.alertId);
+  if (!ids.length) return;
+  await api('/api/alerts/dismiss', 'POST', { all: true, ids });
+  _alertsOpen = false;
+  toggleAlerts();
+  _alertsOpen = true;
+  toggleAlerts();
+  refreshAlertsBadge();
 }
 async function refreshAlertsBadge() {
   const data = await api('/api/alerts');
@@ -1887,7 +1906,7 @@ window.txBulkAction = async function(action) {
   refreshCurrentView();
 };
 
-function openTxDrawer(tx, cats, onSave) {
+async function openTxDrawer(tx, cats, onSave) {
   // Ensure overlay + drawer root exist
   let overlay = document.getElementById('drawer-overlay');
   if (!overlay) {
@@ -1910,20 +1929,27 @@ function openTxDrawer(tx, cats, onSave) {
   const initialCat = tx.category || 'Uncategorized';
   const initial = ((tx.name || '?').trim()[0] || '?').toUpperCase();
 
-  // Category grouping. The repo's categories are strings; group them
-  // heuristically. Adjust this map if you store group metadata.
-  const ESSENTIAL = new Set([
-    'Groceries', 'Transport', 'Transportation', 'Fuel',
-    'Rent & Housing', 'Rent', 'Utilities', 'Phone & Internet', 'Health',
-    'Healthcare', 'Phone', 'Internet', 'Insurance',
-  ]);
-  const INCOME = new Set(['Income', 'Salary', 'Paycheque', 'Freelance', 'Job', 'Bonus', 'Refund', 'Other Income']);
+  // Category grouping — fetch from DB groups instead of hardcoding
+  let _catGroups = [];
+  const _catGroupMap = {};
+  try {
+    _catGroups = await api('/api/category-groups') || [];
+    const allCats = await api('/api/categories') || [];
+    for (const c of allCats) {
+      const g = _catGroups.find(g => g.id != null && g.categories?.some(gc => gc.name === c.name));
+      _catGroupMap[c.name] = g ? g.name : (c.type === 'Income' ? 'Income' : 'Other');
+    }
+  } catch(e) { /* fallback below */ }
+  const INCOME_CATS = new Set(['Income', 'Salary', 'Paycheque', 'Freelance', 'Job', 'Bonus', 'Refund', 'Other Income']);
   function groupFor(name) {
-    if (ESSENTIAL.has(name)) return 'Essentials';
-    if (INCOME.has(name))    return 'Income';
+    if (_catGroupMap[name]) return _catGroupMap[name];
+    if (INCOME_CATS.has(name)) return 'Income';
     if (name === 'Transfer') return 'Hidden';
-    return 'Lifestyle';
+    return 'Other';
   }
+  const groupOrder = _catGroups.filter(g => g.id != null).map(g => g.name);
+  if (!groupOrder.includes('Income')) groupOrder.push('Income');
+  if (!groupOrder.includes('Other')) groupOrder.push('Other');
   const visibleCats = (cats || []).filter(c => groupFor(c) !== 'Hidden');
 
   // ── Editable state ───────────────────────────────────────
@@ -1957,7 +1983,6 @@ function openTxDrawer(tx, cats, onSave) {
       : visibleCats;
     const grouped = {};
     filtered.forEach(c => { const g = groupFor(c); (grouped[g] = grouped[g] || []).push(c); });
-    const groupOrder = ['Essentials', 'Lifestyle', 'Income'];
 
     drawer.innerHTML = `
       <div class="td-head">
@@ -3834,16 +3859,18 @@ async function _renderMyAccount(c) {
 // SETTINGS VIEW
 // ══════════════════════════════════════════════════════════════
 async function _renderSettings(c) {
-  const [settings, cats, learned, txRes] = await Promise.all([
+  const [settings, cats, learned, txRes, groups] = await Promise.all([
     api('/api/settings'),
     api('/api/categories'),
     api('/api/learned'),
     api('/api/transactions?limit=1'),
+    api('/api/category-groups'),
   ]);
   const s = settings || {};
   const catList = cats || [];
   const learnedList = learned || [];
   const txCount = txRes?.total || 0;
+  const groupList = groups || [];
 
   c.innerHTML = `<div class="page">
     <div class="page-head">
@@ -3919,7 +3946,22 @@ async function _renderSettings(c) {
 
       <!-- RIGHT COLUMN -->
       <div>
-        <div class="section-h" style="margin-top:0"><h2>Learned merchants</h2><p>${learnedList.length} merchants</p></div>
+        <div class="section-h" style="margin-top:0"><h2>Category groups</h2><p>${groupList.length} groups</p></div>
+        <div class="card" style="padding:14px;margin-bottom:20px">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            ${groupList.map(g => `<div class="settings-group-row" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-1)">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:500">${esc(g.name)}</div>
+                <div style="font-size:11.5px;color:var(--ink-3)">${(g.categories||[]).map(c=>esc(c.name)).join(', ') || 'No categories'}</div>
+              </div>
+              ${g.id != null ? `<button class="btn btn-sm btn-ghost" onclick="renameGroup(${g.id},'${esc(g.name)}')" title="Rename">${icon('edit',12)}</button>
+              <button class="btn btn-sm btn-ghost" onclick="deleteGroup(${g.id},'${esc(g.name)}')" title="Delete">${icon('trash',12)}</button>` : ''}
+            </div>`).join('')}
+          </div>
+          <button class="btn btn-sm" style="border-style:dashed;margin-top:10px" id="add-group-btn">${icon('plus',12)} Add group</button>
+        </div>
+
+        <div class="section-h"><h2>Learned merchants</h2><p>${learnedList.length} merchants</p></div>
         <div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">
           ${learnedList.length ? `<table class="tbl">
             <thead><tr><th>Keyword</th><th>Category</th><th></th></tr></thead>
@@ -4017,9 +4059,63 @@ async function _renderSettings(c) {
     showToast('Data reset');
     location.reload();
   });
+
+  document.getElementById('add-group-btn')?.addEventListener('click', () => {
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="cat-modal-back">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-h"><h3>Add group</h3><button class="icon-btn" onclick="closeCatModal()">${icon('x',14)}</button></div>
+        <div class="modal-body">
+          <div class="field"><label>Group name</label><input id="group-new-name" placeholder="e.g. Essentials"></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn" onclick="closeCatModal()">Cancel</button>
+          <button class="btn btn-primary" id="group-save-btn">Add</button>
+        </div>
+      </div>
+    </div>`);
+    document.getElementById('cat-modal-back').addEventListener('click', closeCatModal);
+    document.getElementById('group-save-btn').addEventListener('click', async () => {
+      const name = document.getElementById('group-new-name').value.trim();
+      if (!name) { showToast('Name is required'); return; }
+      const r = await api('/api/category-groups', 'POST', { name });
+      if (r?.error) { showToast(r.error); return; }
+      closeCatModal();
+      refreshCurrentView();
+    });
+  });
 }
 
 window.closeCatModal = function() { document.getElementById('cat-modal-back')?.remove(); };
+
+window.renameGroup = function(id, currentName) {
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="cat-modal-back">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-h"><h3>Rename group</h3><button class="icon-btn" onclick="closeCatModal()">${icon('x',14)}</button></div>
+      <div class="modal-body">
+        <div class="field"><label>Group name</label><input id="group-rename-input" value="${esc(currentName)}"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeCatModal()">Cancel</button>
+        <button class="btn btn-primary" id="group-rename-save">Save</button>
+      </div>
+    </div>
+  </div>`);
+  document.getElementById('cat-modal-back').addEventListener('click', closeCatModal);
+  document.getElementById('group-rename-save').addEventListener('click', async () => {
+    const name = document.getElementById('group-rename-input').value.trim();
+    if (!name) { showToast('Name is required'); return; }
+    const r = await api(`/api/category-groups/${id}`, 'PATCH', { name });
+    if (r?.error) { showToast(r.error); return; }
+    closeCatModal();
+    refreshCurrentView();
+  });
+};
+
+window.deleteGroup = async function(id, name) {
+  if (!await appConfirm(`Delete group "${name}"? Categories in this group will become ungrouped.`, { title: 'Delete group', danger: true })) return;
+  await api(`/api/category-groups/${id}`, 'DELETE');
+  refreshCurrentView();
+};
 
 window.deleteCategory = async function(id, name) {
   if (!await appConfirm(`Delete category "${name}"? Transactions using it will become Uncategorized.`, { title: 'Delete category', danger: true })) return;
@@ -4028,6 +4124,10 @@ window.deleteCategory = async function(id, name) {
 };
 
 window.editCategory = async function(id, name, catIcon) {
+  const groups = await api('/api/category-groups') || [];
+  const cats = await api('/api/categories') || [];
+  const cat = cats.find(c => c.id === id);
+  const currentGroupId = cat?.group_id ?? '';
   document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="cat-modal-back">
     <div class="modal" onclick="event.stopPropagation()">
       <div class="modal-h"><h3>Edit category</h3><button class="icon-btn" onclick="closeCatModal()">${icon('x',14)}</button></div>
@@ -4035,6 +4135,13 @@ window.editCategory = async function(id, name, catIcon) {
         <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px">
           <div class="field"><label>Name</label><input id="cat-edit-name" value="${name}"></div>
           <div class="field"><label>Icon</label><input id="cat-edit-icon" value="${catIcon}"></div>
+        </div>
+        <div class="field" style="margin-top:12px">
+          <label>Group</label>
+          <select id="cat-edit-group" class="btn btn-sm" style="padding:6px 10px;width:100%">
+            <option value="">Ungrouped</option>
+            ${groups.filter(g => g.id != null).map(g => `<option value="${g.id}" ${g.id == currentGroupId ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
+          </select>
         </div>
       </div>
       <div class="modal-foot">
@@ -4047,8 +4154,10 @@ window.editCategory = async function(id, name, catIcon) {
   document.getElementById('cat-edit-save').addEventListener('click', async () => {
     const newName = document.getElementById('cat-edit-name').value.trim();
     const newIcon = document.getElementById('cat-edit-icon').value.trim();
+    const groupVal = document.getElementById('cat-edit-group').value;
+    const newGroupId = groupVal === '' ? null : parseInt(groupVal);
     if (!newName) { showToast('Name is required'); return; }
-    await api(`/api/categories/${id}`, 'PATCH', { name: newName, icon: newIcon });
+    await api(`/api/categories/${id}`, 'PATCH', { name: newName, icon: newIcon, group_id: newGroupId });
     closeCatModal();
     refreshCurrentView();
   });
