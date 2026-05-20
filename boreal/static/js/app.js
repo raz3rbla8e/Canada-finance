@@ -1115,7 +1115,8 @@ function renderBudgetV2(b) {
   const monthStr = b.month || currentMonth() || now.toISOString().slice(0, 7);
   const [y, m] = monthStr.split('-').map(Number);
   const daysInMonth = new Date(y, m, 0).getDate();
-  const todayInMonth = (monthStr === now.toISOString().slice(0, 7)) ? now.getDate() : daysInMonth;
+  const isCurrentMonth = (monthStr === now.toISOString().slice(0, 7));
+  const todayInMonth = isCurrentMonth ? now.getDate() : daysInMonth;
   const pacePct = (todayInMonth / daysInMonth) * 100;
   const expectedSpend = (b.limit || 0) * (pacePct / 100);
   const overUnder = (b.spent || 0) - expectedSpend;
@@ -1123,6 +1124,12 @@ function renderBudgetV2(b) {
 
   let statusCls = 'ok', statusText = '\u2713 On pace';
   if (b.spent > b.limit) { statusCls = 'crit'; statusText = `\u2191 Over by ${fmtCurrency(b.spent - b.limit, true)}`; }
+  else if (!isCurrentMonth) {
+    // Past month — no projection needed, just show final status
+    const remaining = b.limit - (b.spent || 0);
+    statusCls = 'ok';
+    statusText = `\u2713 Under budget by ${fmtCurrency(remaining, true)}`;
+  }
   else if (overUnder > b.limit * 0.05) {
     statusCls = 'over';
     statusText = `\u2191 Over pace by ${fmtCurrency(overUnder, true)} \u2014 likely ${fmtCurrency(projectedTotal, true)} by month-end`;
