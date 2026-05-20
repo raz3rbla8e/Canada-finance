@@ -1405,7 +1405,7 @@ async function _renderDashboard(c) {
             </div>
           </div>`;
         }).join('') || '<div style="color:var(--ink-3);font-size:13px">No recurring transactions detected yet</div>'}
-        ${recList.length > 5 ? `<button class="muted-link" style="display:block;width:100%;text-align:center;padding:10px 0;margin-top:4px;font-size:13px" onclick="navigateTo('recurring')">View all ${recList.length} →</button>` : ''}
+        ${recList.length > 5 ? `<button class="muted-link" style="display:block;width:100%;text-align:center;padding:10px 0;margin-top:4px;font-size:13px" onclick="navigateTo('schedules');setTimeout(()=>{const el=document.getElementById('detected-recurring');if(el)el.scrollIntoView({behavior:'smooth',block:'start'})},400)">View all ${recList.length} →</button>` : ''}
       </div>
       <div class="card">
         <div class="card-h"><h3>Savings goals</h3><button class="muted-link" onclick="navigateTo('budgets')">+ New</button></div>
@@ -3015,7 +3015,7 @@ async function _renderSchedules(c) {
       }).join('')}
     </div>` : ''}
 
-    ${rItems.length ? `<div class="section-h"><h2>Detected recurring</h2><p>${rItems.length} auto-detected · ${fmtCurrency(rItems.reduce((s,r) => s + (r.avg_amount||0), 0))}/mo</p></div>
+    ${rItems.length ? `<div class="section-h" id="detected-recurring"><h2>Detected recurring</h2><p>${rItems.length} auto-detected · ${fmtCurrency(rItems.reduce((s,r) => s + (r.avg_amount||0), 0))}/mo</p></div>
     <div class="card" style="padding:0">
       ${rItems.map(r => {
         const history = (r.history && r.history.length)
