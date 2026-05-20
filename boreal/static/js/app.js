@@ -513,7 +513,6 @@ function renderView(view) {
     case 'year': renderYear(c); break;
     case 'import': renderImport(c); break;
     case 'schedules': renderSchedules(c); break;
-    case 'recurring': renderRecurringPage(c); break;
     case 'rules': renderRules(c); break;
     case 'settings': renderSettings(c); break;
     case 'account': renderMyAccount(c); break;
@@ -910,55 +909,6 @@ async function renderAccounts(c) { c.innerHTML = accountsSkeleton(); try { await
 async function renderYear(c) { c.innerHTML = yearSkeleton(); try { await _renderYear(c); } catch(e) { console.error('Year error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
 async function renderImport(c) { c.innerHTML = importSkeleton(); try { await _renderImport(c); } catch(e) { console.error('Import error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
 async function renderSchedules(c) { c.innerHTML = schedulesSkeleton(); try { await _renderSchedules(c); } catch(e) { console.error('Schedules error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
-async function renderRecurringPage(c) {
-  c.innerHTML = `<div class="page"><div class="page-head"><div><div class="page-title">Recurring & subscriptions</div><div class="page-sub">Loading…</div></div></div></div>`;
-  try {
-    const data = await api('/api/recurring');
-    const recList = data?.recurring || (Array.isArray(data) ? data : []);
-    const totalMonthly = data?.total_monthly_committed || 0;
-    c.innerHTML = `<div class="page">
-      <div class="page-head">
-        <div><div class="page-title">Recurring & subscriptions</div>
-        <div class="page-sub">${recList.length} detected · ${fmtCurrency(totalMonthly)}/mo committed</div></div>
-      </div>
-      <div class="card" style="padding:0">
-        ${recList.map(r => {
-          const history = (r.history && r.history.length)
-            ? r.history.slice(-6)
-            : new Array(6).fill(0).map((_, i) => ({ amount: (i < 3 && r.price_changed) ? (r.avg_amount * 0.92) : r.avg_amount }));
-          const minH = Math.min(...history.map(h => h.amount));
-          const maxH = Math.max(...history.map(h => h.amount));
-          const range = maxH - minH || 1;
-          const lastAmt = history[history.length - 1].amount;
-          const oldAmt = history[0].amount;
-          const delta = lastAmt - oldAmt;
-          const catC = catColor(r.category || 'Uncategorized');
-          return `<div class="recur-v2" style="padding:12px 16px;border-bottom:1px solid var(--line-1)">
-            ${merchantGlyph(r.name, catC)}
-            <div>
-              <div class="nm-row"><span class="nm">${esc(r.name)}</span><span class="freq-tag">${esc(r.frequency || 'Monthly')}</span></div>
-              <div class="next">${r.next_date ? `Next ${fmtDate(r.next_date)} \u00b7 ` : ''}${history.length} mo history</div>
-            </div>
-            <div class="trail">
-              ${history.map((h, i) => {
-                const isLast = i === history.length - 1;
-                const heightPct = 30 + ((h.amount - minH) / range) * 50;
-                const cls = isLast ? 'now-bar' : (h.amount > oldAmt * 1.02 ? 'up' : '');
-                return `<span class="${cls}" style="height:${heightPct.toFixed(0)}%"></span>`;
-              }).join('')}
-            </div>
-            <div class="amt-block">
-              <div class="amt">${fmtCurrency(lastAmt)}</div>
-              <div class="amt-delta ${Math.abs(delta) < 0.5 ? 'muted' : ''}">
-                ${Math.abs(delta) < 0.5 ? 'no change' : `${delta > 0 ? '\u2191' : '\u2193'} ${fmtCurrency(Math.abs(delta), true)} since start`}
-              </div>
-            </div>
-          </div>`;
-        }).join('') || '<div style="color:var(--ink-3);font-size:13px;padding:20px">No recurring transactions detected yet</div>'}
-      </div>
-    </div>`;
-  } catch(e) { console.error('Recurring error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; }
-}
 async function renderRules(c) { c.innerHTML = rulesSkeleton(); try { await _renderRules(c); } catch(e) { console.error('Rules error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
 async function renderSettings(c) { c.innerHTML = settingsSkeleton(); try { await _renderSettings(c); } catch(e) { console.error('Settings error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
 async function renderMyAccount(c) { c.innerHTML = settingsSkeleton(); try { await _renderMyAccount(c); } catch(e) { console.error('Account error:', e); c.innerHTML = `<div class="page"><div class="page-title">Error</div><pre style="color:var(--danger);font-size:12px">${esc(e.message)}</pre></div>`; } }
@@ -3065,23 +3015,41 @@ async function _renderSchedules(c) {
       }).join('')}
     </div>` : ''}
 
-    ${rItems.length ? `<div class="section-h"><h2>Detected recurring</h2><p>Auto-detected from your transactions</p></div>
-    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
-      ${rItems.map(r => `<div class="schedule-card">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div style="display:flex;gap:12px;align-items:center">
-            ${merchantGlyph(r.name)}
-            <div>
-              <div style="font-size:14px;font-weight:500">${esc(r.name)}</div>
-              <div style="font-size:11.5px;color:var(--ink-3);margin-top:2px">${esc(r.frequency||'Monthly')} · seen ${r.months_seen||0} months</div>
+    ${rItems.length ? `<div class="section-h"><h2>Detected recurring</h2><p>${rItems.length} auto-detected · ${fmtCurrency(rItems.reduce((s,r) => s + (r.avg_amount||0), 0))}/mo</p></div>
+    <div class="card" style="padding:0">
+      ${rItems.map(r => {
+        const history = (r.history && r.history.length)
+          ? r.history.slice(-6)
+          : new Array(6).fill(0).map((_, i) => ({ amount: (i < 3 && r.price_changed) ? (r.avg_amount * 0.92) : r.avg_amount }));
+        const minH = Math.min(...history.map(h => h.amount));
+        const maxH = Math.max(...history.map(h => h.amount));
+        const range = maxH - minH || 1;
+        const lastAmt = history[history.length - 1].amount;
+        const oldAmt = history[0].amount;
+        const delta = lastAmt - oldAmt;
+        const catC = catColor(r.category || 'Uncategorized');
+        return `<div class="recur-v2" style="padding:12px 16px;border-bottom:1px solid var(--line-1)">
+          ${merchantGlyph(r.name, catC)}
+          <div>
+            <div class="nm-row"><span class="nm">${esc(r.name)}</span><span class="freq-tag">${esc(r.frequency || 'Monthly')}</span></div>
+            <div class="next">${r.next_date ? `Next ${fmtDate(r.next_date)} \u00b7 ` : ''}${history.length} mo history</div>
+          </div>
+          <div class="trail">
+            ${history.map((h, i) => {
+              const isLast = i === history.length - 1;
+              const heightPct = 30 + ((h.amount - minH) / range) * 50;
+              const cls = isLast ? 'now-bar' : (h.amount > oldAmt * 1.02 ? 'up' : '');
+              return `<span class="${cls}" style="height:${heightPct.toFixed(0)}%"></span>`;
+            }).join('')}
+          </div>
+          <div class="amt-block">
+            <div class="amt">${fmtCurrency(lastAmt)}</div>
+            <div class="amt-delta ${Math.abs(delta) < 0.5 ? 'muted' : ''}">
+              ${Math.abs(delta) < 0.5 ? 'no change' : `${delta > 0 ? '\u2191' : '\u2193'} ${fmtCurrency(Math.abs(delta), true)} since start`}
             </div>
           </div>
-          <div style="text-align:right">
-            <div style="font-size:15px;font-weight:500;font-variant-numeric:tabular-nums">${fmtCurrency(r.avg_amount||0)}</div>
-            <div style="font-size:11.5px;color:var(--ink-3);margin-top:2px">/mo avg</div>
-          </div>
-        </div>
-      </div>`).join('')}
+        </div>`;
+      }).join('')}
     </div>` : ''}
 
     ${!sList.length && !rItems.length ? '<div style="color:var(--ink-3);font-size:13px;padding:20px 0">No scheduled or recurring transactions yet. Add one to get started!</div>' : ''}
