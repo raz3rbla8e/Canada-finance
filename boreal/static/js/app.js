@@ -3948,17 +3948,31 @@ async function _renderSettings(c) {
       <div>
         <div class="section-h" style="margin-top:0"><h2>Category groups</h2><p>${groupList.length} groups</p></div>
         <div class="card" style="padding:14px;margin-bottom:20px">
-          <div style="display:flex;flex-direction:column;gap:10px">
-            ${groupList.map(g => `<div class="settings-group-row" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-1)">
-              <div style="flex:1;min-width:0">
-                <div style="font-size:13px;font-weight:500">${esc(g.name)}</div>
-                <div style="font-size:11.5px;color:var(--ink-3)">${(g.categories||[]).map(c=>esc(c.name)).join(', ') || 'No categories'}</div>
-              </div>
-              ${g.id != null ? `<button class="btn btn-sm btn-ghost" onclick="renameGroup(${g.id},'${esc(g.name)}')" title="Rename">${icon('edit',12)}</button>
-              <button class="btn btn-sm btn-ghost" onclick="deleteGroup(${g.id},'${esc(g.name)}')" title="Delete">${icon('trash',12)}</button>` : ''}
-            </div>`).join('')}
+          <div style="display:flex;flex-direction:column;gap:14px">
+            ${groupList.map(g => {
+              const cats = g.categories || [];
+              const otherGroups = groupList.filter(og => og.id != null && og.id !== g.id);
+              return `<div class="cat-group-block">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                  <div style="font-size:13px;font-weight:600">${esc(g.name)}${g.id == null ? '' : ` <span style="color:var(--ink-4);font-weight:400;font-size:11.5px">${cats.length}</span>`}</div>
+                  <div style="display:flex;gap:4px">
+                    ${g.id != null ? `<button class="btn btn-sm btn-ghost" onclick="renameGroup(${g.id},'${esc(g.name)}')" title="Rename">${icon('edit',12)}</button>
+                    <button class="btn btn-sm btn-ghost" onclick="deleteGroup(${g.id},'${esc(g.name)}')" title="Delete">${icon('trash',12)}</button>` : ''}
+                  </div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  ${cats.length ? cats.map(c => {
+                    const cc = catColor(c.name);
+                    return `<div class="cat-group-chip" style="background:${cc}12;border-color:${cc}30" data-cat-id="${c.id}" data-cat-name="${esc(c.name)}" data-current-group="${g.id ?? ''}" onclick="moveCatToGroup(${c.id},'${esc(c.name)}',${g.id ?? 'null'})">
+                      <span>${esc(c.name)}</span>
+                      <span class="cat-group-chip-arrow">${icon('chev_d',10)}</span>
+                    </div>`;
+                  }).join('') : '<div style="font-size:12px;color:var(--ink-4);padding:4px 0">No categories</div>'}
+                </div>
+              </div>`;
+            }).join('')}
           </div>
-          <button class="btn btn-sm" style="border-style:dashed;margin-top:10px" id="add-group-btn">${icon('plus',12)} Add group</button>
+          <button class="btn btn-sm" style="border-style:dashed;margin-top:14px" id="add-group-btn">${icon('plus',12)} Add group</button>
         </div>
 
         <div class="section-h"><h2>Learned merchants</h2><p>${learnedList.length} merchants</p></div>
@@ -4115,6 +4129,37 @@ window.deleteGroup = async function(id, name) {
   if (!await appConfirm(`Delete group "${name}"? Categories in this group will become ungrouped.`, { title: 'Delete group', danger: true })) return;
   await api(`/api/category-groups/${id}`, 'DELETE');
   refreshCurrentView();
+};
+
+window.moveCatToGroup = async function(catId, catName, currentGroupId) {
+  const groups = await api('/api/category-groups') || [];
+  const realGroups = groups.filter(g => g.id != null);
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="cat-modal-back">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:320px">
+      <div class="modal-h"><h3>Move "${esc(catName)}"</h3><button class="icon-btn" onclick="closeCatModal()">${icon('x',14)}</button></div>
+      <div class="modal-body" style="padding:8px 20px 14px">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          ${realGroups.map(g => `<button class="cat-move-opt${g.id == currentGroupId ? ' is-current' : ''}" data-gid="${g.id}">
+            ${esc(g.name)}${g.id == currentGroupId ? ' <span style="color:var(--ink-4);font-size:11px">· current</span>' : ''}
+          </button>`).join('')}
+          <button class="cat-move-opt${currentGroupId == null ? ' is-current' : ''}" data-gid="">
+            Ungrouped${currentGroupId == null ? ' <span style="color:var(--ink-4);font-size:11px">· current</span>' : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>`);
+  document.getElementById('cat-modal-back').addEventListener('click', closeCatModal);
+  document.querySelectorAll('.cat-move-opt').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const gid = btn.dataset.gid;
+      const newGroupId = gid === '' ? null : parseInt(gid);
+      if (newGroupId == currentGroupId) { closeCatModal(); return; }
+      await api(`/api/categories/${catId}`, 'PATCH', { group_id: newGroupId });
+      closeCatModal();
+      refreshCurrentView();
+    });
+  });
 };
 
 window.deleteCategory = async function(id, name) {

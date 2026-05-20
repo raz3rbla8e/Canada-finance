@@ -131,6 +131,17 @@ button{font-family:inherit;cursor:pointer}input,select,textarea{font-family:inhe
 .notif-item:hover .notif-dismiss{opacity:1}
 .notif-dismiss:hover{color:var(--ink-1)}
 
+/* CATEGORY GROUP CHIPS */
+.cat-group-block{padding-bottom:12px;border-bottom:1px solid var(--line-1)}
+.cat-group-block:last-child{border-bottom:none;padding-bottom:0}
+.cat-group-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px 3px 9px;border-radius:7px;border:1px solid;font-size:12px;cursor:pointer;transition:all .15s}
+.cat-group-chip:hover{filter:brightness(1.2);border-color:var(--accent) !important}
+.cat-group-chip-arrow{opacity:.4;display:inline-flex;transition:opacity .15s}
+.cat-group-chip:hover .cat-group-chip-arrow{opacity:.8}
+.cat-move-opt{display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;color:var(--ink-1);font-family:var(--font-sans);font-size:13px;cursor:pointer;border-radius:6px;transition:background .12s}
+.cat-move-opt:hover{background:var(--bg-hover)}
+.cat-move-opt.is-current{color:var(--accent-ink);font-weight:500}
+
 /* PAGE */
 .page{padding:28px 32px 80px;max-width:1320px}
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:24px}
