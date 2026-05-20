@@ -238,7 +238,7 @@ button{font-family:inherit;cursor:pointer}input,select,textarea{font-family:inhe
 
 /* CHART */
 .chart-wrap{height:220px;position:relative}.chart-wrap svg{width:100%;height:100%;display:block}
-.bars{display:flex;gap:8px;align-items:flex-end;height:160px;padding:8px 0}
+.bars{display:flex;gap:8px;height:160px;padding:16px 0 0;overflow:hidden}
 .bar-pos{background:var(--pos);border-radius:4px 4px 0 0;min-height:2px}
 .bar-neg{background:var(--ink-2);opacity:0.85;border-radius:4px 4px 0 0;min-height:2px}
 .bar-label{font-size:10.5px;text-align:center;color:var(--ink-3);margin-top:6px}

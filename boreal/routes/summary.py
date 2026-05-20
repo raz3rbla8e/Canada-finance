@@ -220,10 +220,13 @@ def api_recurring():
                MIN(date) as first_seen
         FROM transactions
         WHERE hidden=0 AND type='Expense'
+              AND LOWER(name) NOT LIKE '%%interac%%'
+              AND LOWER(name) NOT LIKE '%%e-transfer%%'
+              AND LOWER(category) NOT IN ('groceries', 'dining & coffee', 'eating out')
         GROUP BY LOWER(TRIM(name))
         HAVING months_seen >= ?
                AND MIN(amount) > 0
-               AND MAX(amount) <= MIN(amount) * 2.0
+               AND MAX(amount) <= MIN(amount) * 1.5
         ORDER BY months_seen DESC, avg_amount DESC
     """, (min_months,)).fetchall()
     recurring = []
