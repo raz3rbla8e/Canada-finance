@@ -379,10 +379,10 @@ async function openUncategorizedReview() {
   document.getElementById('notif-dropdown')?.classList.add('hidden');
 
   const [data, cats] = await Promise.all([
-    api('/api/transactions?category=UNCATEGORIZED&hidden=0'),
+    api('/api/transactions/uncategorized-suggestions'),
     api('/api/categories'),
   ]);
-  let txns = (data.transactions || data || []).filter(t => t.category === 'UNCATEGORIZED' || t.category === '');
+  let txns = (data || []).filter(t => t.category === 'UNCATEGORIZED' || t.category === '');
   if (!txns.length) { showToast('No uncategorized transactions!'); return; }
   const allCats = (cats || []).map(c => c.name || c);
   let idx = 0;
@@ -402,8 +402,16 @@ async function openUncategorizedReview() {
     const amt = tx.amount || 0;
     const cc = isInc ? 'var(--pos)' : 'var(--ink-1)';
     const remaining = txns.length - idx;
+    const suggested = tx.suggested_category || null;
+    const confidence = tx.confidence || 'low';
     const filteredCats = allCats.filter(c => isInc ? ['Income','Salary','Paycheque','Freelance','Job','Bonus','Refund','Other Income'].includes(c) || c === 'Transfer' : !['Income','Salary','Paycheque','Freelance','Job','Bonus','Refund','Other Income'].includes(c));
-    const topCats = filteredCats.slice(0, 20);
+    // Put suggested category first if it exists
+    let topCats = filteredCats.slice(0, 20);
+    if (suggested && !topCats.includes(suggested)) {
+      topCats = [suggested, ...topCats.slice(0, 19)];
+    } else if (suggested) {
+      topCats = [suggested, ...topCats.filter(c => c !== suggested)];
+    }
 
     let existing = document.getElementById('review-modal');
     if (!existing) {
@@ -411,6 +419,11 @@ async function openUncategorizedReview() {
       existing = document.getElementById('review-modal');
       existing.addEventListener('click', () => closeReview());
     }
+    const suggestBanner = suggested ? `
+      <div style="background:var(--accent-bg,#e8f0fe);border:1px solid var(--accent,#4285f4)30;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:13px;color:var(--accent,#4285f4)">💡 Suggested: <strong>${esc(suggested)}</strong></span>
+        <button class="btn btn-primary" id="review-accept-suggest" style="margin-left:auto;font-size:12px;padding:4px 14px">Accept</button>
+      </div>` : '';
     const modal = existing.querySelector('.modal');
     modal.innerHTML = `
       <div class="modal-h">
@@ -429,11 +442,13 @@ async function openUncategorizedReview() {
           </div>
           <div style="font-size:17px;font-weight:600;color:${cc};white-space:nowrap">${isInc?'+':'−'}${fmtCurrency(Math.abs(amt))}</div>
         </div>
-        <div style="font-size:12px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Pick a category</div>
+        ${suggestBanner}
+        <div style="font-size:12px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${suggested ? 'Or pick a different category' : 'Pick a category'}</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;max-height:260px;overflow-y:auto" id="review-cats">
           ${topCats.map(c => {
             const col = catColor(c);
-            return `<button class="review-cat-btn" data-cat="${esc(c)}" style="background:${col}14;border:1px solid ${col}30;color:${col};border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-weight:500;transition:all .15s">${esc(c)}</button>`;
+            const isSuggested = c === suggested;
+            return `<button class="review-cat-btn" data-cat="${esc(c)}" style="background:${isSuggested ? col+'28' : col+'14'};border:1px solid ${isSuggested ? col+'60' : col+'30'};color:${col};border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-weight:${isSuggested ? '700' : '500'};transition:all .15s">${esc(c)}</button>`;
           }).join('')}
         </div>
       </div>
@@ -442,14 +457,24 @@ async function openUncategorizedReview() {
         <button class="btn" id="review-hide" style="color:var(--warn)">${icon('eye_off',12)} Hide</button>
       </div>`;
 
-    // Wire events
+    // Wire accept suggestion button
+    document.getElementById('review-accept-suggest')?.addEventListener('click', async () => {
+      const btn = document.getElementById('review-accept-suggest');
+      btn.style.opacity = '0.5'; btn.style.pointerEvents = 'none';
+      await api('/api/update/' + tx.id, 'PATCH', { category: suggested });
+      reviewed++;
+      const merchant = (tx.name || '').trim().toLowerCase();
+      txns = txns.filter((t, i) => i <= idx || t.name.trim().toLowerCase() !== merchant);
+      idx++;
+      renderReview();
+    });
+    // Wire category buttons
     modal.querySelectorAll('.review-cat-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const cat = btn.dataset.cat;
         btn.style.opacity = '0.5'; btn.style.pointerEvents = 'none';
         await api('/api/update/' + tx.id, 'PATCH', { category: cat });
         reviewed++;
-        // Remove any transactions with same merchant name that were retro-fixed
         const merchant = (tx.name || '').trim().toLowerCase();
         txns = txns.filter((t, i) => i <= idx || t.name.trim().toLowerCase() !== merchant);
         idx++;

@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify, request
 
 from boreal.models.database import get_db, tx_hash
 from boreal.routes.accounts import save_undo
+from boreal.services.categorization import normalize_merchant
 
 transactions_bp = Blueprint("transactions", __name__)
 
@@ -141,12 +142,20 @@ def api_update(tid):
     retro_fixed = 0
     if "category" in d and original and d["category"] != original["category"]:
         new_cat = d["category"]
-        orig_name = original["name"].lower().strip()
+        norm_name = normalize_merchant(original["name"])
+        raw_name = original["name"].lower().strip()
+        # Store the normalized keyword (shorter, matches more variants)
+        keyword = norm_name if norm_name else raw_name
         db.execute("""INSERT INTO learned_merchants (keyword, category) VALUES (?,?)
             ON CONFLICT(keyword) DO UPDATE SET category=excluded.category, updated_at=datetime('now')
-        """, (orig_name, new_cat))
-        # Retro-apply using SQL: update all uncategorized/old-category transactions
-        # where any learned keyword appears as a substring of the transaction name.
+        """, (keyword, new_cat))
+        # Also store raw name if different (for exact-match coverage)
+        if raw_name != keyword:
+            db.execute("""INSERT INTO learned_merchants (keyword, category) VALUES (?,?)
+                ON CONFLICT(keyword) DO UPDATE SET category=excluded.category, updated_at=datetime('now')
+            """, (raw_name, new_cat))
+        # Retro-apply: update all uncategorized transactions where any learned
+        # keyword appears as a substring of the transaction name.
         orig_cat = original["category"]
         result = db.execute("""
             UPDATE transactions SET category = (
@@ -155,12 +164,12 @@ def api_update(tid):
                 ORDER BY LENGTH(lm.keyword) DESC
                 LIMIT 1
             )
-            WHERE id != ? AND (category = 'UNCATEGORIZED' OR category = ?)
+            WHERE id != ? AND (category = 'UNCATEGORIZED' OR category = '')
             AND EXISTS (
                 SELECT 1 FROM learned_merchants lm
                 WHERE INSTR(LOWER(transactions.name), lm.keyword) > 0
             )
-        """, (tid, orig_cat))
+        """, (tid,))
         retro_fixed = result.rowcount
     db.commit()
     return jsonify({"ok": True, "retro_fixed": retro_fixed})
@@ -200,6 +209,25 @@ def api_hidden_count():
     return jsonify({"count": count})
 
 
+@transactions_bp.route("/api/transactions/uncategorized-suggestions")
+def api_uncategorized_suggestions():
+    """Return uncategorized transactions with AI-suggested categories + confidence."""
+    from boreal.services.categorization import categorize_with_confidence, load_learned_dict
+    db = get_db()
+    learned = load_learned_dict(db)
+    rows = db.execute(
+        "SELECT * FROM transactions WHERE hidden=0 AND (category='UNCATEGORIZED' OR category='') ORDER BY date DESC"
+    ).fetchall()
+    results = []
+    for r in rows:
+        suggested_cat, confidence = categorize_with_confidence(r["name"], learned)
+        tx = dict(r)
+        tx["suggested_category"] = suggested_cat if suggested_cat != "UNCATEGORIZED" else None
+        tx["confidence"] = confidence
+        results.append(tx)
+    return jsonify(results)
+
+
 @transactions_bp.route("/api/accounts")
 def api_accounts():
     db = get_db()
@@ -237,18 +265,27 @@ def api_bulk_categorize():
     db = get_db()
     db.row_factory = sqlite3.Row
     placeholders = ",".join("?" * len(ids))
-    # Learn merchants from the selected transactions
+    # Learn merchants from the selected transactions (store normalized keywords)
     rows = db.execute(
         f"SELECT DISTINCT name FROM transactions WHERE id IN ({placeholders})", ids
     ).fetchall()
     for row in rows:
-        keyword = row["name"].lower().strip()
+        raw = row["name"].lower().strip()
+        norm = normalize_merchant(row["name"])
+        keyword = norm if norm else raw
         if keyword:
             db.execute(
                 """INSERT INTO learned_merchants (keyword, category) VALUES (?,?)
                 ON CONFLICT(keyword) DO UPDATE SET category=excluded.category, updated_at=datetime('now')""",
                 (keyword, category),
             )
+            # Also store raw name if different
+            if raw != keyword and raw:
+                db.execute(
+                    """INSERT INTO learned_merchants (keyword, category) VALUES (?,?)
+                    ON CONFLICT(keyword) DO UPDATE SET category=excluded.category, updated_at=datetime('now')""",
+                    (raw, category),
+                )
     # Update selected transactions
     db.execute(
         f"UPDATE transactions SET category=? WHERE id IN ({placeholders})",
@@ -263,12 +300,12 @@ def api_bulk_categorize():
             ORDER BY LENGTH(lm.keyword) DESC
             LIMIT 1
         )
-        WHERE id NOT IN ({placeholders}) AND (category = 'UNCATEGORIZED' OR category = ?)
+        WHERE id NOT IN ({placeholders}) AND (category = 'UNCATEGORIZED' OR category = '')
         AND EXISTS (
             SELECT 1 FROM learned_merchants lm
             WHERE INSTR(LOWER(transactions.name), lm.keyword) > 0
         )
-    """, ids + [category])
+    """, ids)
     retro_fixed = result.rowcount
     db.commit()
     return jsonify({"ok": True, "updated": len(ids), "learned": len(rows), "retro_fixed": retro_fixed})
