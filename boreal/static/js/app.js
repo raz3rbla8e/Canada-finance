@@ -378,8 +378,9 @@ async function openUncategorizedReview() {
   _alertsOpen = false;
   document.getElementById('notif-dropdown')?.classList.add('hidden');
 
+  const month = currentMonth();
   const [data, cats] = await Promise.all([
-    api('/api/transactions/uncategorized-suggestions'),
+    api('/api/transactions/uncategorized-suggestions' + (month ? '?month=' + month : '')),
     api('/api/categories'),
   ]);
   let txns = (data || []).filter(t => t.category === 'UNCATEGORIZED' || t.category === '');
@@ -405,10 +406,10 @@ async function openUncategorizedReview() {
     const suggested = tx.suggested_category || null;
     const confidence = tx.confidence || 'low';
     const filteredCats = allCats.filter(c => isInc ? ['Income','Salary','Paycheque','Freelance','Job','Bonus','Refund','Other Income'].includes(c) || c === 'Transfer' : !['Income','Salary','Paycheque','Freelance','Job','Bonus','Refund','Other Income'].includes(c));
-    // Put suggested category first if it exists
-    let topCats = filteredCats.slice(0, 20);
+    // Put suggested category first if it exists, show all categories
+    let topCats = [...filteredCats];
     if (suggested && !topCats.includes(suggested)) {
-      topCats = [suggested, ...topCats.slice(0, 19)];
+      topCats = [suggested, ...topCats];
     } else if (suggested) {
       topCats = [suggested, ...topCats.filter(c => c !== suggested)];
     }
