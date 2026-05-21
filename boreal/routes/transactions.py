@@ -224,8 +224,8 @@ def api_uncategorized_suggestions():
     month = request.args.get("month")
     if month:
         rows = db.execute(
-            "SELECT * FROM transactions WHERE hidden=0 AND (category='UNCATEGORIZED' OR category='') AND strftime('%%Y-%%m', date)=? ORDER BY date DESC",
-            (month,)
+            "SELECT * FROM transactions WHERE hidden=0 AND (category='UNCATEGORIZED' OR category='') AND date LIKE ? ORDER BY date DESC",
+            (month + "%",)
         ).fetchall()
     else:
         rows = db.execute(
