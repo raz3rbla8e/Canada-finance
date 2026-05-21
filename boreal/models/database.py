@@ -243,6 +243,30 @@ def _migrate_v12(db):
     """)
 
 
+def _migrate_v13(db):
+    """Re-categorize UNCATEGORIZED transactions using improved rules + learned merchants."""
+    import sqlite3 as _sqlite3
+    from boreal.services.categorization import categorize
+    # Ensure row_factory is set for dict access during migration
+    old_factory = db.row_factory
+    db.row_factory = _sqlite3.Row
+    learned_rows = db.execute("SELECT keyword, category FROM learned_merchants").fetchall()
+    learned = {r["keyword"]: r["category"] for r in learned_rows}
+    rows = db.execute(
+        "SELECT id, name FROM transactions WHERE category='UNCATEGORIZED' OR category=''"
+    ).fetchall()
+    fixed = 0
+    for r in rows:
+        cat = categorize(r["name"], learned)
+        if cat != "UNCATEGORIZED":
+            db.execute("UPDATE transactions SET category=? WHERE id=?", (cat, r["id"]))
+            fixed += 1
+    db.row_factory = old_factory
+    if fixed:
+        import logging
+        logging.info("migration v13: re-categorized %d transactions", fixed)
+
+
 MIGRATIONS = [
     (1, "initial schema", _migrate_v1),
     (2, "split transactions", _migrate_v2),
@@ -256,6 +280,7 @@ MIGRATIONS = [
     (10, "balance_date on accounts", _migrate_v10),
     (11, "balance snapshots", _migrate_v11),
     (12, "performance indexes", _migrate_v12),
+    (13, "re-categorize with improved rules", _migrate_v13),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0]
