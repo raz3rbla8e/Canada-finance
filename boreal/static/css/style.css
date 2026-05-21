@@ -1209,6 +1209,26 @@ body:has(.bulk-dock.open) .undo-toast { bottom: 88px; }
 }
 .year-strip-v2 .col .b-inc { align-items: flex-end; padding-top: 4px; }
 .year-strip-v2 .col .b-exp { align-items: flex-start; padding-bottom: 4px; }
+
+/* ── Spinner ────────────────────────────────────────────────── */
+.spinner {
+  width: 28px; height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Reduced-motion preference ─────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 .year-strip-v2 .col .b-inc::before {
   content: ""; flex: 1; background: var(--pos);
   border-radius: 3px 3px 0 0; min-height: 2px;

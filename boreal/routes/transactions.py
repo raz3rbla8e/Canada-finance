@@ -145,20 +145,23 @@ def api_update(tid):
         db.execute("""INSERT INTO learned_merchants (keyword, category) VALUES (?,?)
             ON CONFLICT(keyword) DO UPDATE SET category=excluded.category, updated_at=datetime('now')
         """, (orig_name, new_cat))
-        # Retro-apply: match only if the FULL learned keyword appears in the
-        # transaction name (substring match).  The old word-level `any()` was
-        # too aggressive — e.g. a single word like "interac" would recategorise
-        # every e-Transfer.
-        all_learned = db.execute("SELECT keyword, category FROM learned_merchants").fetchall()
+        # Retro-apply using SQL: update all uncategorized/old-category transactions
+        # where any learned keyword appears as a substring of the transaction name.
         orig_cat = original["category"]
-        fixable = "SELECT id, name FROM transactions WHERE id!=? AND (category='UNCATEGORIZED' OR category=?)"
-        for row in db.execute(fixable, (tid, orig_cat)).fetchall():
-            rn = row["name"].lower()
-            for lrow in all_learned:
-                if lrow["keyword"] in rn:
-                    db.execute("UPDATE transactions SET category=? WHERE id=?", (lrow["category"], row["id"]))
-                    retro_fixed += 1
-                    break
+        result = db.execute("""
+            UPDATE transactions SET category = (
+                SELECT lm.category FROM learned_merchants lm
+                WHERE INSTR(LOWER(transactions.name), lm.keyword) > 0
+                ORDER BY LENGTH(lm.keyword) DESC
+                LIMIT 1
+            )
+            WHERE id != ? AND (category = 'UNCATEGORIZED' OR category = ?)
+            AND EXISTS (
+                SELECT 1 FROM learned_merchants lm
+                WHERE INSTR(LOWER(transactions.name), lm.keyword) > 0
+            )
+        """, (tid, orig_cat))
+        retro_fixed = result.rowcount
     db.commit()
     return jsonify({"ok": True, "retro_fixed": retro_fixed})
 
@@ -251,19 +254,22 @@ def api_bulk_categorize():
         f"UPDATE transactions SET category=? WHERE id IN ({placeholders})",
         [category] + ids,
     )
-    # Retroactively fix other matching transactions (full keyword substring match)
+    # Retroactively fix other matching transactions (full keyword substring match via SQL)
     retro_fixed = 0
-    all_learned = db.execute("SELECT keyword, category FROM learned_merchants").fetchall()
-    for txn in db.execute(
-        f"SELECT id, name FROM transactions WHERE id NOT IN ({placeholders}) AND (category='UNCATEGORIZED' OR category=?)",
-        ids + [category],
-    ).fetchall():
-        rn = txn["name"].lower()
-        for lrow in all_learned:
-            if lrow["keyword"] in rn:
-                db.execute("UPDATE transactions SET category=? WHERE id=?", (lrow["category"], txn["id"]))
-                retro_fixed += 1
-                break
+    result = db.execute(f"""
+        UPDATE transactions SET category = (
+            SELECT lm.category FROM learned_merchants lm
+            WHERE INSTR(LOWER(transactions.name), lm.keyword) > 0
+            ORDER BY LENGTH(lm.keyword) DESC
+            LIMIT 1
+        )
+        WHERE id NOT IN ({placeholders}) AND (category = 'UNCATEGORIZED' OR category = ?)
+        AND EXISTS (
+            SELECT 1 FROM learned_merchants lm
+            WHERE INSTR(LOWER(transactions.name), lm.keyword) > 0
+        )
+    """, ids + [category])
+    retro_fixed = result.rowcount
     db.commit()
     return jsonify({"ok": True, "updated": len(ids), "learned": len(rows), "retro_fixed": retro_fixed})
 

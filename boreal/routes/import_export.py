@@ -307,10 +307,11 @@ def api_export():
 @import_export_bp.route("/api/backup")
 def api_backup():
     """Download the full SQLite database file as a backup."""
-    from boreal.config import DB_PATH
-    if not os.path.exists(DB_PATH):
+    from flask import g
+    db_path = getattr(g, 'db_path', None)
+    if not db_path or not os.path.exists(db_path):
         return jsonify({"error": "No database found"}), 404
-    with open(DB_PATH, "rb") as f:
+    with open(db_path, "rb") as f:
         data = f.read()
     filename = f"finance_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
     return Response(data, mimetype="application/octet-stream",
@@ -320,7 +321,10 @@ def api_backup():
 @import_export_bp.route("/api/restore", methods=["POST"])
 def api_restore():
     """Restore the database from an uploaded .db file."""
-    from boreal.config import DB_PATH
+    from flask import g
+    db_path = getattr(g, 'db_path', None)
+    if not db_path:
+        return jsonify({"error": "No database path configured"}), 500
     f = request.files.get("file")
     if not f:
         return jsonify({"error": "No file provided"}), 400
@@ -333,7 +337,7 @@ def api_restore():
     # Close the current connection before overwriting
     db = get_db()
     db.close()
-    with open(DB_PATH, "wb") as out:
+    with open(db_path, "wb") as out:
         out.write(f.read())
     return jsonify({"ok": True, "message": "Database restored successfully"})
 

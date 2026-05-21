@@ -8,14 +8,17 @@ function esc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// ── DEBOUNCE UTILITY ──────────────────────────────────────────
+function debounce(fn, ms) {
+  let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
 // ── IN-APP CONFIRM / PROMPT MODALS ───────────────────────────
 function appConfirm(msg, { title = 'Confirm', danger = false } = {}) {
   return new Promise(resolve => {
     const id = 'app-confirm-' + Date.now();
-    document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="${id}">
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="${id}" role="dialog" aria-modal="true">
       <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
-        <div class="modal-h"><h3>${esc(title)}</h3></div>
-        <div class="modal-body" style="font-size:14px;color:var(--ink-2)">${esc(msg)}</div>
         <div class="modal-foot">
           <button class="btn" id="${id}-no">Cancel</button>
           <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="${id}-yes">${danger ? 'Delete' : 'Confirm'}</button>
@@ -32,7 +35,7 @@ function appConfirm(msg, { title = 'Confirm', danger = false } = {}) {
 function appPrompt(msg, { title = 'Input', defaultVal = '', placeholder = '' } = {}) {
   return new Promise(resolve => {
     const id = 'app-prompt-' + Date.now();
-    document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="${id}">
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="${id}" role="dialog" aria-modal="true">
       <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
         <div class="modal-h"><h3>${esc(title)}</h3></div>
         <div class="modal-body">
@@ -58,7 +61,7 @@ function appSelect(msg, { title = 'Select', options = [] } = {}) {
   return new Promise(resolve => {
     const id = 'app-select-' + Date.now();
     const opts = options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
-    document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="${id}">
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="${id}" role="dialog" aria-modal="true">
       <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
         <div class="modal-h"><h3>${esc(title)}</h3></div>
         <div class="modal-body">
@@ -441,7 +444,7 @@ function openMonthPicker() {
       const sel = (i+1 === curM && pickY === curY) ? ' mp-sel' : '';
       return `<button class="mp-btn${sel}" data-v="${val}">${m}</button>`;
     }).join('');
-    return `<div class="modal-back" id="${id}">
+    return `<div class="modal-back" id="${id}" role="dialog" aria-modal="true">
       <div class="modal" onclick="event.stopPropagation()" style="max-width:320px">
         <div class="modal-h"><h3>Go to month</h3></div>
         <div class="modal-body">
@@ -1016,6 +1019,22 @@ async function loadSampleData() {
   if (r) { showToast('Sample data loaded'); location.reload(); }
 }
 
+// ── KEYBOARD SHORTCUTS ────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  // Skip if user is typing in an input/textarea/select or a modal is open
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+  if (document.querySelector('.modal-back')) return;
+
+  if (e.altKey && !e.ctrlKey && !e.metaKey) {
+    const map = { '1':'dashboard', '2':'transactions', '3':'budgets', '4':'accounts', '5':'import', '6':'settings' };
+    if (map[e.key]) { e.preventDefault(); navigateTo(map[e.key]); }
+  }
+  if (e.key === 'n' && !e.altKey && !e.ctrlKey && !e.metaKey && STATE.view === 'transactions') {
+    e.preventDefault(); openAddModal();
+  }
+});
+
 document.addEventListener('DOMContentLoaded', init);
 
 // ══════════════════════════════════════════════════════════════
@@ -1545,8 +1564,9 @@ async function _renderTransactions(c) {
         <tbody id="tx-body"></tbody>
       </table>
     </div>
-    <div style="display:flex;justify-content:space-between;margin-top:14px;font-size:12px;color:var(--ink-3)">
-      <span>Showing <span id="tx-showing">${txns.length}</span> of ${txns.length}</span>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:12px;color:var(--ink-3)">
+      <span>Showing <span id="tx-showing">${txns.length}</span> of <span id="tx-total">${data.total ?? txns.length}</span></span>
+      ${(data.has_more) ? '<button class="btn" id="tx-load-more">Load more</button>' : ''}
     </div>
   </div>`;
 
@@ -1736,6 +1756,13 @@ async function _renderTransactions(c) {
   });
 
   function renderRows(list) {
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:48px 16px;color:var(--ink-3)">
+        <div style="font-size:14px;margin-bottom:8px">No transactions${(searchInput?.value||'').trim() ? ' match your search' : ' this month'}</div>
+        <div style="font-size:13px">${(searchInput?.value||'').trim() ? 'Try a different search term' : 'Import a bank statement or <a href="#" onclick="openAddModal();return false" style="color:var(--accent)">add one manually</a>'}</div>
+      </td></tr>`;
+      return;
+    }
     tbody.innerHTML = list.map(t => {
       const amt = t.amount || 0;
       const isInc = t.type === 'Income';
@@ -1781,7 +1808,35 @@ async function _renderTransactions(c) {
   }
   refresh();
 
-  searchInput?.addEventListener('input', refresh);
+  searchInput?.addEventListener('input', debounce(refresh, 300));
+
+  // Load More pagination
+  const loadMoreBtn = document.getElementById('tx-load-more');
+  if (loadMoreBtn) {
+    loadMoreBtn.addEventListener('click', async () => {
+      loadMoreBtn.disabled = true;
+      loadMoreBtn.textContent = 'Loading…';
+      const p = new URLSearchParams();
+      if (month) p.set('month', month);
+      p.set('limit', '200');
+      p.set('offset', String(txns.length));
+      if (viewMode === 'hidden') p.set('hidden', '1');
+      const more = await api(`/api/transactions?${p}`);
+      const items = more?.transactions || more || [];
+      items.forEach(t => txns.push(t));
+      refresh();
+      const showingEl = document.getElementById('tx-showing');
+      const totalEl = document.getElementById('tx-total');
+      if (showingEl) showingEl.textContent = txns.length;
+      if (totalEl) totalEl.textContent = more?.total ?? txns.length;
+      if (!more?.has_more) {
+        loadMoreBtn.remove();
+      } else {
+        loadMoreBtn.disabled = false;
+        loadMoreBtn.textContent = 'Load more';
+      }
+    });
+  }
 
   checkAll?.addEventListener('change', () => {
     const checked = checkAll.checked;
@@ -1923,6 +1978,8 @@ async function openTxDrawer(tx, cats, onSave) {
     document.body.appendChild(drawer);
   }
   drawer.className = 'drawer drawer-edit';
+  drawer.setAttribute('role', 'dialog');
+  drawer.setAttribute('aria-modal', 'true');
 
   // ── Static facts ─────────────────────────────────────────
   const amt = tx.amount || 0;
@@ -3254,17 +3311,31 @@ async function _renderImport(c) {
   });
 
   async function handleFiles(files) {
-    for (const file of files) {
-      try {
-        if (file.name.endsWith('.ofx') || file.name.endsWith('.qfx')) {
-          await importOFX(file);
-        } else {
-          await startCSVWizard(file);
+    // Show uploading state on dropzone
+    const origHTML = dropZone.innerHTML;
+    dropZone.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px">
+      <div class="spinner"></div>
+      <div style="font-size:14px;font-weight:500">Processing ${files.length} file${files.length>1?'s':''}…</div>
+    </div>`;
+    dropZone.style.pointerEvents = 'none';
+    try {
+      for (const file of files) {
+        try {
+          if (file.name.endsWith('.ofx') || file.name.endsWith('.qfx')) {
+            await importOFX(file);
+          } else {
+            await startCSVWizard(file);
+          }
+        } catch(e) {
+          console.error('Import error:', e);
+          showToast(`Error processing ${file.name}: ${e.message}`);
         }
-      } catch(e) {
-        console.error('Import error:', e);
-        showToast(`Error processing ${file.name}: ${e.message}`);
       }
+    } finally {
+      dropZone.innerHTML = origHTML;
+      dropZone.style.pointerEvents = '';
+      // Re-attach choose button listener
+      document.getElementById('import-choose-btn')?.addEventListener('click', (e) => { e.stopPropagation(); fileInput?.click(); });
     }
   }
 
