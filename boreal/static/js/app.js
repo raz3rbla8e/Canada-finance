@@ -203,6 +203,8 @@ function icon(name, size=16) {
 }
 
 // ── FORMAT HELPERS ────────────────────────────────────────────
+const CURRENCY_SYMBOLS = { CAD: '$', USD: '$', EUR: '€', GBP: '£' };
+function currSym() { return CURRENCY_SYMBOLS[(STATE.settings||{}).currency] || '$'; }
 function fmtParts(n) {
   const sign = n < 0 ? '-' : '';
   const abs = Math.abs(n);
@@ -210,12 +212,12 @@ function fmtParts(n) {
   return { sign, dollars: d.replace(/\B(?=(\d{3})+(?!\d))/g, ','), cents: c };
 }
 function fmtCurrency(n, hideCents) {
-  const { sign, dollars, cents } = fmtParts(n);
-  return hideCents ? `${sign}$${dollars}` : `${sign}$${dollars}.${cents}`;
+  const s = currSym(), { sign, dollars, cents } = fmtParts(n);
+  return hideCents ? `${sign}${s}${dollars}` : `${sign}${s}${dollars}.${cents}`;
 }
 function fmtCurrencyHTML(n) {
-  const { sign, dollars, cents } = fmtParts(n);
-  return `${sign}$${dollars}<span class="cents">.${cents}</span>`;
+  const s = currSym(), { sign, dollars, cents } = fmtParts(n);
+  return `${sign}${s}${dollars}<span class="cents">.${cents}</span>`;
 }
 function fmtDate(iso) {
   if (!iso) return '';
@@ -333,7 +335,9 @@ async function toggleAlerts() {
   const toneMap = { warn:['var(--warn-soft)','var(--warn)'], accent:['var(--accent-soft)','var(--accent)'], pos:['var(--pos-soft)','var(--pos)'] };
   dd.innerHTML = `<div class="notif-header"><span>Notifications · ${data.count}</span><button class="notif-clear-all" onclick="clearAllAlerts(event)">Clear all</button></div>` + data.alerts.map(a => {
     const [bg,fg] = toneMap[a.tone] || toneMap.accent;
-    return `<div class="notif-item" data-alert-id="${esc(a.id)}"><div class="icon-circle" style="background:${bg};color:${fg}">${icon(a.icon||'alert',13)}</div><div style="flex:1;min-width:0"><div class="notif-ttl">${esc(a.title)}</div><div class="notif-dt">${esc(a.detail)}</div></div><button class="notif-dismiss" onclick="dismissAlert(event,'${esc(a.id)}')" title="Dismiss">&times;</button></div>`;
+    const clickable = a.type === 'uncategorized' ? ` onclick="openUncategorizedReview()" style="cursor:pointer"` : '';
+    const action = a.type === 'uncategorized' ? `<button class="btn btn-sm" onclick="event.stopPropagation();openUncategorizedReview()" style="font-size:11px;padding:3px 10px;margin-top:4px">Review now</button>` : '';
+    return `<div class="notif-item" data-alert-id="${esc(a.id)}"${clickable}><div class="icon-circle" style="background:${bg};color:${fg}">${icon(a.icon||'alert',13)}</div><div style="flex:1;min-width:0"><div class="notif-ttl">${esc(a.title)}</div><div class="notif-dt">${esc(a.detail)}</div>${action}</div><button class="notif-dismiss" onclick="dismissAlert(event,'${esc(a.id)}')" title="Dismiss">&times;</button></div>`;
   }).join('');
 }
 async function dismissAlert(e, id) {
@@ -367,6 +371,107 @@ document.addEventListener('click', (e) => {
   const wrap = document.getElementById('notif-wrap');
   if (wrap && !wrap.contains(e.target) && _alertsOpen) { _alertsOpen = false; document.getElementById('notif-dropdown')?.classList.add('hidden'); }
 });
+
+// ── BATCH UNCATEGORIZED REVIEW ────────────────────────────────
+async function openUncategorizedReview() {
+  // Close alerts dropdown
+  _alertsOpen = false;
+  document.getElementById('notif-dropdown')?.classList.add('hidden');
+
+  const [data, cats] = await Promise.all([
+    api('/api/transactions?category=UNCATEGORIZED&hidden=0'),
+    api('/api/categories'),
+  ]);
+  let txns = (data.transactions || data || []).filter(t => t.category === 'UNCATEGORIZED' || t.category === '');
+  if (!txns.length) { showToast('No uncategorized transactions!'); return; }
+  const allCats = (cats || []).map(c => c.name || c);
+  let idx = 0;
+  let reviewed = 0;
+
+  function renderReview() {
+    if (idx >= txns.length) {
+      document.getElementById('review-modal')?.remove();
+      showToast(`Done — ${reviewed} transaction${reviewed !== 1 ? 's' : ''} categorized`);
+      invalidateApiCache();
+      refreshCurrentView();
+      refreshAlertsBadge();
+      return;
+    }
+    const tx = txns[idx];
+    const isInc = tx.type === 'Income';
+    const amt = tx.amount || 0;
+    const cc = isInc ? 'var(--pos)' : 'var(--ink-1)';
+    const remaining = txns.length - idx;
+    const filteredCats = allCats.filter(c => isInc ? ['Income','Salary','Paycheque','Freelance','Job','Bonus','Refund','Other Income'].includes(c) || c === 'Transfer' : !['Income','Salary','Paycheque','Freelance','Job','Bonus','Refund','Other Income'].includes(c));
+    const topCats = filteredCats.slice(0, 20);
+
+    let existing = document.getElementById('review-modal');
+    if (!existing) {
+      document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="review-modal" role="dialog" aria-modal="true"><div class="modal" onclick="event.stopPropagation()" style="max-width:480px;width:95vw"></div></div>`);
+      existing = document.getElementById('review-modal');
+      existing.addEventListener('click', () => closeReview());
+    }
+    const modal = existing.querySelector('.modal');
+    modal.innerHTML = `
+      <div class="modal-h">
+        <h3>Review uncategorized</h3>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;color:var(--ink-3)">${remaining} left</span>
+          <button class="icon-btn" onclick="closeReview()">${icon('x',14)}</button>
+        </div>
+      </div>
+      <div class="modal-body" style="padding:16px 20px">
+        <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:18px">
+          <div class="merchant-glyph" style="flex-shrink:0">${((tx.name||'?')[0]||'?').toUpperCase()}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:15px;font-weight:600;color:var(--ink-1);word-break:break-word">${esc(tx.name)}</div>
+            <div style="font-size:12.5px;color:var(--ink-3);margin-top:3px">${esc(fmtDateLong(tx.date))}<span style="margin:0 6px;opacity:.4">·</span>${esc(tx.account||'—')}</div>
+          </div>
+          <div style="font-size:17px;font-weight:600;color:${cc};white-space:nowrap">${isInc?'+':'−'}${fmtCurrency(Math.abs(amt))}</div>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Pick a category</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;max-height:260px;overflow-y:auto" id="review-cats">
+          ${topCats.map(c => {
+            const col = catColor(c);
+            return `<button class="review-cat-btn" data-cat="${esc(c)}" style="background:${col}14;border:1px solid ${col}30;color:${col};border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-weight:500;transition:all .15s">${esc(c)}</button>`;
+          }).join('')}
+        </div>
+      </div>
+      <div class="modal-foot" style="justify-content:space-between">
+        <button class="btn" id="review-skip" style="color:var(--ink-3)">Skip</button>
+        <button class="btn" id="review-hide" style="color:var(--warn)">${icon('eye_off',12)} Hide</button>
+      </div>`;
+
+    // Wire events
+    modal.querySelectorAll('.review-cat-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const cat = btn.dataset.cat;
+        btn.style.opacity = '0.5'; btn.style.pointerEvents = 'none';
+        await api('/api/update/' + tx.id, 'PATCH', { category: cat });
+        reviewed++;
+        // Remove any transactions with same merchant name that were retro-fixed
+        const merchant = (tx.name || '').trim().toLowerCase();
+        txns = txns.filter((t, i) => i <= idx || t.name.trim().toLowerCase() !== merchant);
+        idx++;
+        renderReview();
+      });
+    });
+    document.getElementById('review-skip')?.addEventListener('click', () => { idx++; renderReview(); });
+    document.getElementById('review-hide')?.addEventListener('click', async () => {
+      await api('/api/update/' + tx.id, 'PATCH', { hidden: 1 });
+      reviewed++;
+      idx++;
+      renderReview();
+    });
+  }
+  renderReview();
+}
+function closeReview() {
+  document.getElementById('review-modal')?.remove();
+  invalidateApiCache();
+  refreshCurrentView();
+  refreshAlertsBadge();
+}
 
 // ── NAVIGATION ────────────────────────────────────────────────
 const MONTH_AWARE_VIEWS = new Set(['dashboard','transactions','budgets']);
@@ -1515,6 +1620,7 @@ async function _renderTransactions(c) {
 
   const totalIn = txns.filter(t=>t.type==='Income').reduce((s,t)=>s+(t.amount||0),0);
   const totalOut = txns.filter(t=>t.type==='Expense').reduce((s,t)=>s+(t.amount||0),0);
+  const uncatCount = txns.filter(t=>t.category==='UNCATEGORIZED'||t.category==='').length;
 
   c.innerHTML = `<div class="page">
     <div class="page-head">
@@ -1527,6 +1633,17 @@ async function _renderTransactions(c) {
         <button class="btn btn-primary" onclick="openAddModal()">${icon('plus',14)} Add transaction</button>
       </div>
     </div>
+
+    ${uncatCount > 0 ? `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:10px;margin-bottom:14px">
+      <div style="flex:1;display:flex;align-items:center;gap:10px">
+        ${icon('tag',16)}
+        <div>
+          <div style="font-size:13.5px;font-weight:600;color:var(--ink-1)">${uncatCount} uncategorized transaction${uncatCount!==1?'s':''}</div>
+          <div style="font-size:12px;color:var(--ink-3)">Review them quickly to keep your data accurate</div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="openUncategorizedReview()" style="white-space:nowrap">${icon('chev_r',12)} Review now</button>
+    </div>` : ''}
 
     <div class="tx-tools">
       <div class="searchbox">
@@ -3988,22 +4105,13 @@ async function _renderSettings(c) {
           <div class="settings-row">
             <div class="label-block">
               <div class="lbl">Default currency</div>
-              <div class="desc">CAD · Canadian Dollar</div>
+              <div class="desc">${({'CAD':'CAD · Canadian Dollar','USD':'USD · US Dollar','EUR':'EUR · Euro','GBP':'GBP · British Pound'})[s.currency||'CAD']||'CAD · Canadian Dollar'}</div>
             </div>
             <select class="btn btn-sm" style="padding:6px 10px" id="set-currency">
               <option value="CAD" ${s.currency==='CAD'?'selected':''}>CAD</option>
               <option value="USD" ${s.currency==='USD'?'selected':''}>USD</option>
               <option value="EUR" ${s.currency==='EUR'?'selected':''}>EUR</option>
               <option value="GBP" ${s.currency==='GBP'?'selected':''}>GBP</option>
-            </select>
-          </div>
-          <div class="settings-row">
-            <div class="label-block">
-              <div class="lbl">Start of month</div>
-              <div class="desc">When monthly totals reset</div>
-            </div>
-            <select class="btn btn-sm" style="padding:6px 10px" id="set-month-start">
-              ${[1,5,10,15,20,25].map(d => `<option value="${d}" ${(s.month_start_day||1)===d?'selected':''}>${d}${d===1?'st':d===5?'th':d===10?'th':d===15?'th':d===20?'th':'th'}</option>`).join('')}
             </select>
           </div>
         </div>
@@ -4121,13 +4229,9 @@ async function _renderSettings(c) {
   });
 
   document.getElementById('set-currency')?.addEventListener('change', async (e) => {
+    STATE.settings.currency = e.target.value;
     await api('/api/settings', 'POST', { currency: e.target.value });
-    showToast('Currency updated');
-  });
-
-  document.getElementById('set-month-start')?.addEventListener('change', async (e) => {
-    await api('/api/settings', 'POST', { month_start_day: parseInt(e.target.value) });
-    showToast('Month start updated');
+    showToast('Currency updated — refresh any view to see the change');
   });
 
   document.getElementById('add-cat-btn')?.addEventListener('click', () => {

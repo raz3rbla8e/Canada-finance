@@ -3,42 +3,19 @@ import json
 import sqlite3
 from datetime import date, timedelta
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from boreal.models.database import get_db, tx_hash
 
 accounts_bp = Blueprint("accounts_extra", __name__)
 
 
-# ── ACCOUNTS ──────────────────────────────────────────────────────────────────
-
-@accounts_bp.route("/api/account-names")
-def api_account_names():
-    """Return distinct account names from transactions (what the user actually has).
-    Also auto-creates accounts table entries for any missing names."""
-    db = get_db()
-    rows = db.execute(
-        "SELECT DISTINCT account FROM transactions WHERE account IS NOT NULL AND account != '' ORDER BY account"
-    ).fetchall()
-    names = [r["account"] for r in rows]
-    # Auto-register any missing accounts
-    for name in names:
-        try:
-            db.execute(
-                "INSERT OR IGNORE INTO accounts (name, account_type, opening_balance) VALUES (?, 'chequing', 0)",
-                (name,)
-            )
-        except Exception:
-            pass
-    db.commit()
-    return jsonify(names)
-
-
-@accounts_bp.route("/api/accounts-list")
-def api_accounts_list():
-    """List all registered accounts with computed balances."""
-    db = get_db()
-    # Backfill: auto-register any transaction account names not yet in accounts table
+def _ensure_accounts_backfill(db):
+    """Backfill accounts table from transactions — runs at most once per request."""
+    if getattr(g, '_accounts_backfilled', False):
+        return
+    g._accounts_backfilled = True
+    # Auto-register any transaction account names not yet in accounts table
     db.execute("""
         INSERT OR IGNORE INTO accounts (name, account_type, opening_balance)
         SELECT DISTINCT account, 'chequing', 0
@@ -47,7 +24,6 @@ def api_accounts_list():
           AND account NOT IN (SELECT name FROM accounts)
     """)
     # Fix-up: auto-detect account type for accounts still defaulted to 'chequing'
-    # whose name clearly indicates a different type
     for row in db.execute(
         "SELECT id, name FROM accounts WHERE account_type = 'chequing'"
     ).fetchall():
@@ -65,6 +41,27 @@ def api_accounts_list():
         ) WHERE account_id IS NULL AND account IS NOT NULL AND account != ''
     """)
     db.commit()
+
+# ── ACCOUNTS ──────────────────────────────────────────────────────────────────
+
+@accounts_bp.route("/api/account-names")
+def api_account_names():
+    """Return distinct account names from transactions (what the user actually has).
+    Also auto-creates accounts table entries for any missing names."""
+    db = get_db()
+    rows = db.execute(
+        "SELECT DISTINCT account FROM transactions WHERE account IS NOT NULL AND account != '' ORDER BY account"
+    ).fetchall()
+    names = [r["account"] for r in rows]
+    _ensure_accounts_backfill(db)
+    return jsonify(names)
+
+
+@accounts_bp.route("/api/accounts-list")
+def api_accounts_list():
+    """List all registered accounts with computed balances."""
+    db = get_db()
+    _ensure_accounts_backfill(db)
     accounts = db.execute("SELECT * FROM accounts ORDER BY name").fetchall()
     if not accounts:
         return jsonify([])
@@ -178,19 +175,7 @@ def api_net_worth():
     """Compute net worth at each month-end from accounts."""
     db = get_db()
     # Ensure accounts and account_id FKs are populated (idempotent, cheap)
-    db.execute("""
-        INSERT OR IGNORE INTO accounts (name, account_type, opening_balance)
-        SELECT DISTINCT account, 'chequing', 0
-        FROM transactions
-        WHERE account IS NOT NULL AND account != ''
-          AND account NOT IN (SELECT name FROM accounts)
-    """)
-    db.execute("""
-        UPDATE transactions SET account_id = (
-            SELECT id FROM accounts WHERE accounts.name = transactions.account
-        ) WHERE account_id IS NULL AND account IS NOT NULL AND account != ''
-    """)
-    db.commit()
+    _ensure_accounts_backfill(db)
     accounts = db.execute("SELECT * FROM accounts").fetchall()
     if not accounts:
         return jsonify([])

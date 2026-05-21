@@ -232,6 +232,17 @@ def _migrate_v11(db):
     """)
 
 
+def _migrate_v12(db):
+    """Add performance indexes for common query patterns."""
+    db.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions(account);
+        CREATE INDEX IF NOT EXISTS idx_tx_name ON transactions(name);
+        CREATE INDEX IF NOT EXISTS idx_tx_hidden_date ON transactions(hidden, date);
+        CREATE INDEX IF NOT EXISTS idx_tx_hidden_type_date ON transactions(hidden, type, date);
+        CREATE INDEX IF NOT EXISTS idx_learned_keyword ON learned_merchants(keyword);
+    """)
+
+
 MIGRATIONS = [
     (1, "initial schema", _migrate_v1),
     (2, "split transactions", _migrate_v2),
@@ -244,6 +255,7 @@ MIGRATIONS = [
     (9, "account_id FK", _migrate_v9),
     (10, "balance_date on accounts", _migrate_v10),
     (11, "balance snapshots", _migrate_v11),
+    (12, "performance indexes", _migrate_v12),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0]

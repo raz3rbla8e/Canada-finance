@@ -2,22 +2,29 @@ from datetime import date, timedelta
 
 from flask import Blueprint, jsonify, request
 
-from boreal.models.database import get_db
+from boreal.models.database import get_db, get_setting
 
 summary_bp = Blueprint("summary", __name__)
+
+
+def _currency_symbol():
+    """Return the user's chosen currency symbol."""
+    code = get_setting("currency", "CAD")
+    return {"CAD": "$", "USD": "$", "EUR": "€", "GBP": "£"}.get(code, "$")
 
 
 def _generate_insights(income, expenses, prev_exp, by_cat, budgets):
     """Generate smart insights for the dashboard."""
     insights = []
     net = income - expenses
+    cs = _currency_symbol()
     # Savings rate insight
     if income > 0:
         rate = net / income * 100
         if rate >= 20:
             insights.append({"icon": "spark", "tone": "pos", "title": f"{rate:.0f}% savings rate", "detail": "You're saving well this month!"})
         elif rate < 0:
-            insights.append({"icon": "alert", "tone": "warn", "title": "Spending exceeds income", "detail": f"You're ${abs(net):,.0f} over budget this month."})
+            insights.append({"icon": "alert", "tone": "warn", "title": "Spending exceeds income", "detail": f"You're {cs}{abs(net):,.0f} over budget this month."})
     # Month-over-month change
     if prev_exp and expenses:
         change = (expenses - prev_exp) / prev_exp * 100
@@ -29,13 +36,13 @@ def _generate_insights(income, expenses, prev_exp, by_cat, budgets):
     for b in budgets:
         if b["limit"] and b["spent"] > b["limit"]:
             over = b["spent"] - b["limit"]
-            insights.append({"icon": "alert", "tone": "warn", "title": f"{b['category']} over budget", "detail": f"${over:,.0f} over the ${b['limit']:,.0f} limit."})
+            insights.append({"icon": "alert", "tone": "warn", "title": f"{b['category']} over budget", "detail": f"{cs}{over:,.0f} over the {cs}{b['limit']:,.0f} limit."})
     # Top spending category spike
     for cat in by_cat[:1]:
         if cat.get("prev_total") and cat["total"] > 0:
             change = (cat["total"] - cat["prev_total"]) / cat["prev_total"] * 100 if cat["prev_total"] else 0
             if change > 30:
-                insights.append({"icon": "trending", "tone": "accent", "title": f"{cat['category']} up {change:.0f}%", "detail": f"${cat['total']:,.0f} this month vs ${cat['prev_total']:,.0f} last month."})
+                insights.append({"icon": "trending", "tone": "accent", "title": f"{cat['category']} up {change:.0f}%", "detail": f"{cs}{cat['total']:,.0f} this month vs {cs}{cat['prev_total']:,.0f} last month."})
     return insights[:4]  # Cap at 4
 
 
@@ -302,6 +309,7 @@ def api_alerts():
     today = date.today()
     month = today.strftime("%Y-%m")
     alerts = []
+    cs = _currency_symbol()
 
     # Load dismissed alert IDs
     row = db.execute("SELECT value FROM settings WHERE key='dismissed_alerts'").fetchone()
@@ -327,7 +335,7 @@ def api_alerts():
             "icon": "alert",
             "tone": "warn",
             "title": f"{b['category']} over budget",
-            "detail": f"${over:,.0f} over the ${b['monthly_limit']:,.0f} limit",
+            "detail": f"{cs}{over:,.0f} over the {cs}{b['monthly_limit']:,.0f} limit",
         })
 
     # 2. Scheduled transactions due within 7 days
@@ -344,7 +352,7 @@ def api_alerts():
             "icon": "calendar" if not is_overdue else "alert",
             "tone": "warn" if is_overdue else "accent",
             "title": f"{s['name']} {'overdue' if is_overdue else 'due soon'}",
-            "detail": f"${s['amount']:,.2f} · due {s['next_due']}",
+            "detail": f"{cs}{s['amount']:,.2f} · due {s['next_due']}",
         })
 
     # 3. Uncategorized transactions
@@ -380,7 +388,7 @@ def api_alerts():
             "icon": "trending",
             "tone": "accent",
             "title": f"{p['name']} price changed",
-            "detail": f"${p['min_amount']:,.2f} → ${p['max_amount']:,.2f}",
+            "detail": f"{cs}{p['min_amount']:,.2f} → {cs}{p['max_amount']:,.2f}",
         })
 
     # Filter out dismissed alerts
