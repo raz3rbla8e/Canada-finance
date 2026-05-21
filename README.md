@@ -1,6 +1,6 @@
 # Boreal
 
-**Free, private, self-hosted personal finance dashboard for Canadians.**
+**Free, private, personal finance dashboard for Canadians.**
 
 Track your spending, budget by category, monitor net worth, and manage multiple bank accounts — all from a single app that runs on your own machine. Your bank data never leaves your computer.
 
