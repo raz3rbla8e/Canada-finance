@@ -388,6 +388,7 @@ async function openUncategorizedReview() {
   const allCats = (cats || []).map(c => c.name || c);
   let idx = 0;
   let reviewed = 0;
+  let reviewBusy = false;
 
   function renderReview() {
     if (idx >= txns.length) {
@@ -460,33 +461,47 @@ async function openUncategorizedReview() {
 
     // Wire accept suggestion button
     document.getElementById('review-accept-suggest')?.addEventListener('click', async () => {
+      if (reviewBusy) return;
+      reviewBusy = true;
       const btn = document.getElementById('review-accept-suggest');
       btn.style.opacity = '0.5'; btn.style.pointerEvents = 'none';
-      await api('/api/update/' + tx.id, 'PATCH', { category: suggested });
+      modal.querySelectorAll('.review-cat-btn, #review-skip, #review-hide').forEach(b => { b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
+      const result = await api('/api/update/' + tx.id, 'PATCH', { category: suggested });
+      if (result === null) { reviewBusy = false; btn.style.opacity = ''; btn.style.pointerEvents = ''; modal.querySelectorAll('.review-cat-btn, #review-skip, #review-hide').forEach(b => { b.style.opacity = ''; b.style.pointerEvents = ''; }); return; }
       reviewed++;
       const merchant = (tx.name || '').trim().toLowerCase();
       txns = txns.filter((t, i) => i <= idx || t.name.trim().toLowerCase() !== merchant);
       idx++;
+      reviewBusy = false;
       renderReview();
     });
     // Wire category buttons
     modal.querySelectorAll('.review-cat-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
+        if (reviewBusy) return;
+        reviewBusy = true;
         const cat = btn.dataset.cat;
-        btn.style.opacity = '0.5'; btn.style.pointerEvents = 'none';
-        await api('/api/update/' + tx.id, 'PATCH', { category: cat });
+        modal.querySelectorAll('.review-cat-btn, #review-accept-suggest, #review-skip, #review-hide').forEach(b => { b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
+        const result = await api('/api/update/' + tx.id, 'PATCH', { category: cat });
+        if (result === null) { reviewBusy = false; modal.querySelectorAll('.review-cat-btn, #review-accept-suggest, #review-skip, #review-hide').forEach(b => { b.style.opacity = ''; b.style.pointerEvents = ''; }); return; }
         reviewed++;
         const merchant = (tx.name || '').trim().toLowerCase();
         txns = txns.filter((t, i) => i <= idx || t.name.trim().toLowerCase() !== merchant);
         idx++;
+        reviewBusy = false;
         renderReview();
       });
     });
-    document.getElementById('review-skip')?.addEventListener('click', () => { idx++; renderReview(); });
+    document.getElementById('review-skip')?.addEventListener('click', () => { if (reviewBusy) return; idx++; renderReview(); });
     document.getElementById('review-hide')?.addEventListener('click', async () => {
-      await api('/api/update/' + tx.id, 'PATCH', { hidden: 1 });
+      if (reviewBusy) return;
+      reviewBusy = true;
+      modal.querySelectorAll('.review-cat-btn, #review-accept-suggest, #review-skip, #review-hide').forEach(b => { b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
+      const result = await api('/api/update/' + tx.id, 'PATCH', { hidden: 1 });
+      if (result === null) { reviewBusy = false; modal.querySelectorAll('.review-cat-btn, #review-accept-suggest, #review-skip, #review-hide').forEach(b => { b.style.opacity = ''; b.style.pointerEvents = ''; }); return; }
       reviewed++;
       idx++;
+      reviewBusy = false;
       renderReview();
     });
   }

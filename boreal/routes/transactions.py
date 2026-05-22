@@ -122,7 +122,7 @@ def api_update(tid):
     d = request.json
     if not d:
         return jsonify({"error": "Request body required"}), 400
-    allowed = ["date", "type", "name", "category", "amount", "account", "notes"]
+    allowed = ["date", "type", "name", "category", "amount", "account", "notes", "hidden"]
     updates = {k: d[k] for k in d if k in allowed}
     # If account name changed, also resolve and update account_id
     if "account" in updates:
