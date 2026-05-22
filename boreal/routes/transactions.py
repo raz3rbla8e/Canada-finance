@@ -140,6 +140,7 @@ def api_update(tid):
         save_undo(db, "update", {"id": tid, "old": dict(original)})
     db.execute(f"UPDATE transactions SET {sets} WHERE id=?", vals)
     retro_fixed = 0
+    learn = d.get("learn", True)
     if "category" in d and original and d["category"] != original["category"]:
         new_cat = d["category"]
         # Ensure the category exists in the categories table
@@ -148,35 +149,36 @@ def api_update(tid):
             cat_type = "Income" if new_cat in ("Income","Salary","Paycheque","Freelance","Job","Bonus","Refund","Other Income") else "Expense"
             max_order = db.execute("SELECT COALESCE(MAX(sort_order),0) FROM categories WHERE type=?", (cat_type,)).fetchone()[0]
             db.execute("INSERT INTO categories (name, type, icon, user_created, sort_order) VALUES (?,?,?,1,?)", (new_cat, cat_type, "", max_order + 1))
-        norm_name = normalize_merchant(original["name"])
-        raw_name = original["name"].lower().strip()
-        # Store the normalized keyword (shorter, matches more variants)
-        keyword = norm_name if norm_name else raw_name
-        db.execute("""INSERT INTO learned_merchants (keyword, category) VALUES (?,?)
-            ON CONFLICT(keyword) DO UPDATE SET category=excluded.category, updated_at=datetime('now')
-        """, (keyword, new_cat))
-        # Also store raw name if different (for exact-match coverage)
-        if raw_name != keyword:
+        if learn:
+            norm_name = normalize_merchant(original["name"])
+            raw_name = original["name"].lower().strip()
+            # Store the normalized keyword (shorter, matches more variants)
+            keyword = norm_name if norm_name else raw_name
             db.execute("""INSERT INTO learned_merchants (keyword, category) VALUES (?,?)
                 ON CONFLICT(keyword) DO UPDATE SET category=excluded.category, updated_at=datetime('now')
-            """, (raw_name, new_cat))
-        # Retro-apply: update all uncategorized transactions where any learned
-        # keyword appears as a substring of the transaction name.
-        orig_cat = original["category"]
-        result = db.execute("""
-            UPDATE transactions SET category = (
-                SELECT lm.category FROM learned_merchants lm
-                WHERE INSTR(LOWER(transactions.name), lm.keyword) > 0
-                ORDER BY LENGTH(lm.keyword) DESC
-                LIMIT 1
-            )
-            WHERE id != ? AND (category = 'UNCATEGORIZED' OR category = '')
-            AND EXISTS (
-                SELECT 1 FROM learned_merchants lm
-                WHERE INSTR(LOWER(transactions.name), lm.keyword) > 0
-            )
-        """, (tid,))
-        retro_fixed = result.rowcount
+            """, (keyword, new_cat))
+            # Also store raw name if different (for exact-match coverage)
+            if raw_name != keyword:
+                db.execute("""INSERT INTO learned_merchants (keyword, category) VALUES (?,?)
+                    ON CONFLICT(keyword) DO UPDATE SET category=excluded.category, updated_at=datetime('now')
+                """, (raw_name, new_cat))
+            # Retro-apply: update all uncategorized transactions where any learned
+            # keyword appears as a substring of the transaction name.
+            orig_cat = original["category"]
+            result = db.execute("""
+                UPDATE transactions SET category = (
+                    SELECT lm.category FROM learned_merchants lm
+                    WHERE INSTR(LOWER(transactions.name), lm.keyword) > 0
+                    ORDER BY LENGTH(lm.keyword) DESC
+                    LIMIT 1
+                )
+                WHERE id != ? AND (category = 'UNCATEGORIZED' OR category = '')
+                AND EXISTS (
+                    SELECT 1 FROM learned_merchants lm
+                    WHERE INSTR(LOWER(transactions.name), lm.keyword) > 0
+                )
+            """, (tid,))
+            retro_fixed = result.rowcount
     db.commit()
     return jsonify({"ok": True, "retro_fixed": retro_fixed})
 
@@ -275,30 +277,32 @@ def api_bulk_categorize():
         return err
     if not category:
         return jsonify({"error": "IDs and category required"}), 400
+    learn = d.get("learn", True)
     db = get_db()
     db.row_factory = sqlite3.Row
     placeholders = ",".join("?" * len(ids))
     # Learn merchants from the selected transactions (store normalized keywords)
-    rows = db.execute(
-        f"SELECT DISTINCT name FROM transactions WHERE id IN ({placeholders})", ids
-    ).fetchall()
-    for row in rows:
-        raw = row["name"].lower().strip()
-        norm = normalize_merchant(row["name"])
-        keyword = norm if norm else raw
-        if keyword:
-            db.execute(
-                """INSERT INTO learned_merchants (keyword, category) VALUES (?,?)
-                ON CONFLICT(keyword) DO UPDATE SET category=excluded.category, updated_at=datetime('now')""",
-                (keyword, category),
-            )
-            # Also store raw name if different
-            if raw != keyword and raw:
+    if learn:
+        rows = db.execute(
+            f"SELECT DISTINCT name FROM transactions WHERE id IN ({placeholders})", ids
+        ).fetchall()
+        for row in rows:
+            raw = row["name"].lower().strip()
+            norm = normalize_merchant(row["name"])
+            keyword = norm if norm else raw
+            if keyword:
                 db.execute(
                     """INSERT INTO learned_merchants (keyword, category) VALUES (?,?)
                     ON CONFLICT(keyword) DO UPDATE SET category=excluded.category, updated_at=datetime('now')""",
-                    (raw, category),
+                    (keyword, category),
                 )
+                # Also store raw name if different
+                if raw != keyword and raw:
+                    db.execute(
+                        """INSERT INTO learned_merchants (keyword, category) VALUES (?,?)
+                        ON CONFLICT(keyword) DO UPDATE SET category=excluded.category, updated_at=datetime('now')""",
+                        (raw, category),
+                    )
     # Ensure the category exists in the categories table
     existing = db.execute("SELECT id FROM categories WHERE name=?", (category,)).fetchone()
     if not existing:
@@ -312,22 +316,23 @@ def api_bulk_categorize():
     )
     # Retroactively fix other matching transactions (full keyword substring match via SQL)
     retro_fixed = 0
-    result = db.execute(f"""
-        UPDATE transactions SET category = (
-            SELECT lm.category FROM learned_merchants lm
-            WHERE INSTR(LOWER(transactions.name), lm.keyword) > 0
-            ORDER BY LENGTH(lm.keyword) DESC
-            LIMIT 1
-        )
-        WHERE id NOT IN ({placeholders}) AND (category = 'UNCATEGORIZED' OR category = '')
-        AND EXISTS (
-            SELECT 1 FROM learned_merchants lm
-            WHERE INSTR(LOWER(transactions.name), lm.keyword) > 0
-        )
-    """, ids)
-    retro_fixed = result.rowcount
+    if learn:
+        result = db.execute(f"""
+            UPDATE transactions SET category = (
+                SELECT lm.category FROM learned_merchants lm
+                WHERE INSTR(LOWER(transactions.name), lm.keyword) > 0
+                ORDER BY LENGTH(lm.keyword) DESC
+                LIMIT 1
+            )
+            WHERE id NOT IN ({placeholders}) AND (category = 'UNCATEGORIZED' OR category = '')
+            AND EXISTS (
+                SELECT 1 FROM learned_merchants lm
+                WHERE INSTR(LOWER(transactions.name), lm.keyword) > 0
+            )
+        """, ids)
+        retro_fixed = result.rowcount
     db.commit()
-    return jsonify({"ok": True, "updated": len(ids), "learned": len(rows), "retro_fixed": retro_fixed})
+    return jsonify({"ok": True, "updated": len(ids), "retro_fixed": retro_fixed})
 
 
 @transactions_bp.route("/api/bulk-hide", methods=["POST"])

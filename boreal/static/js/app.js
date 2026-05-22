@@ -389,6 +389,7 @@ async function openUncategorizedReview() {
   let idx = 0;
   let reviewed = 0;
   let reviewBusy = false;
+  let reviewLearn = true;
 
   function renderReview() {
     if (idx >= txns.length) {
@@ -454,11 +455,16 @@ async function openUncategorizedReview() {
           }).join('')}
         </div>
       </div>
-      <div class="modal-foot" style="justify-content:space-between">
+      <div class="modal-foot" style="justify-content:space-between;align-items:center">
         <button class="btn" id="review-skip" style="color:var(--ink-3)">Skip</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-3);cursor:pointer;user-select:none" title="When on, future similar transactions will be auto-categorized the same way">
+          <input type="checkbox" id="review-learn" ${reviewLearn ? 'checked' : ''} style="accent-color:var(--accent,#4285f4)"> Remember this
+        </label>
         <button class="btn" id="review-hide" style="color:var(--warn)">${icon('eye_off',12)} Hide</button>
       </div>`;
 
+    // Wire remember checkbox
+    document.getElementById('review-learn')?.addEventListener('change', (e) => { reviewLearn = e.target.checked; });
     // Wire accept suggestion button
     document.getElementById('review-accept-suggest')?.addEventListener('click', async () => {
       if (reviewBusy) return;
@@ -466,11 +472,13 @@ async function openUncategorizedReview() {
       const btn = document.getElementById('review-accept-suggest');
       btn.style.opacity = '0.5'; btn.style.pointerEvents = 'none';
       modal.querySelectorAll('.review-cat-btn, #review-skip, #review-hide').forEach(b => { b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
-      const result = await api('/api/update/' + tx.id, 'PATCH', { category: suggested });
+      const result = await api('/api/update/' + tx.id, 'PATCH', { category: suggested, learn: reviewLearn });
       if (result === null) { reviewBusy = false; btn.style.opacity = ''; btn.style.pointerEvents = ''; modal.querySelectorAll('.review-cat-btn, #review-skip, #review-hide').forEach(b => { b.style.opacity = ''; b.style.pointerEvents = ''; }); return; }
       reviewed++;
-      const merchant = (tx.name || '').trim().toLowerCase();
-      txns = txns.filter((t, i) => i <= idx || t.name.trim().toLowerCase() !== merchant);
+      if (reviewLearn) {
+        const merchant = (tx.name || '').trim().toLowerCase();
+        txns = txns.filter((t, i) => i <= idx || t.name.trim().toLowerCase() !== merchant);
+      }
       idx++;
       reviewBusy = false;
       renderReview();
@@ -482,11 +490,13 @@ async function openUncategorizedReview() {
         reviewBusy = true;
         const cat = btn.dataset.cat;
         modal.querySelectorAll('.review-cat-btn, #review-accept-suggest, #review-skip, #review-hide').forEach(b => { b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
-        const result = await api('/api/update/' + tx.id, 'PATCH', { category: cat });
+        const result = await api('/api/update/' + tx.id, 'PATCH', { category: cat, learn: reviewLearn });
         if (result === null) { reviewBusy = false; modal.querySelectorAll('.review-cat-btn, #review-accept-suggest, #review-skip, #review-hide').forEach(b => { b.style.opacity = ''; b.style.pointerEvents = ''; }); return; }
         reviewed++;
-        const merchant = (tx.name || '').trim().toLowerCase();
-        txns = txns.filter((t, i) => i <= idx || t.name.trim().toLowerCase() !== merchant);
+        if (reviewLearn) {
+          const merchant = (tx.name || '').trim().toLowerCase();
+          txns = txns.filter((t, i) => i <= idx || t.name.trim().toLowerCase() !== merchant);
+        }
         idx++;
         reviewBusy = false;
         renderReview();
