@@ -3516,6 +3516,7 @@ async function _renderImport(c) {
     if (!prevRes.ok) { const err = await prevRes.json().catch(() => ({})); wizard.style.display='none'; showToast(err.error || 'Failed to preview CSV'); return; }
     const preview = await prevRes.json();
     const rows = preview.transactions || preview.rows || [];
+    const totalCount = preview.total || preview.count || rows.length;
 
     wizard.innerHTML = `<div class="card" style="margin-top:20px">
       <div class="card-h">
@@ -3544,9 +3545,9 @@ async function _renderImport(c) {
           </tr>`).join('')}</tbody>
         </table>
       </div>
-      <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">${rows.length} transactions found${rows.length>20?' (showing first 20)':''}</div>
+      <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">${totalCount} transactions found${totalCount>20?' (showing first 20)':''}</div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" id="wiz-import">${icon('check',14)} Import ${rows.length} transactions</button>
+        <button class="btn btn-primary" id="wiz-import">${icon('check',14)} Import ${totalCount} transactions</button>
         <button class="btn" id="wiz-cancel">Cancel</button>
       </div>
     </div>`;
