@@ -264,8 +264,9 @@ def create_app():
 
     # ── Auth: set per-user DB path before each request ────────────────────────
     _PUBLIC_PREFIXES = ("/login", "/signup", "/logout", "/verify-email/",
-                        "/forgot-password", "/reset-password/", "/static/")
-    _PUBLIC_API = ("/api/health", "/api/csrf-token", "/api/demo", "/api/demo/reset")
+                        "/forgot-password", "/reset-password/", "/static/",
+                        "/try-demo")
+    _PUBLIC_API = ("/api/health", "/api/csrf-token", "/api/demo", "/api/demo/reset", "/")
 
     @app.before_request
     def set_user_db():

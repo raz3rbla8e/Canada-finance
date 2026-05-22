@@ -36,7 +36,7 @@ body{font-family:var(--font-sans);background:var(--bg-app);color:var(--ink-1);fo
 </head>
 <body>
 <div class="auth-wrap">
-  <div class="auth-logo">
+  <a href="/" class="auth-logo" style="text-decoration:none;color:var(--ink-1)">
     <svg viewBox="0 0 512 512" fill="none">
       <polygon points="256,80 196,180 316,180" fill="currentColor"/>
       <polygon points="256,140 176,260 336,260" fill="currentColor"/>
@@ -44,7 +44,7 @@ body{font-family:var(--font-sans);background:var(--bg-app);color:var(--ink-1);fo
       <rect x="240" y="340" width="32" height="52" rx="4" fill="currentColor" opacity="0.7"/>
     </svg>
     <span class="auth-logo-text">Boreal</span>
-  </div>
+  </a>
 
   <div class="auth-card">
     <h2>Welcome back</h2>
@@ -75,6 +75,10 @@ body{font-family:var(--font-sans);background:var(--bg-app);color:var(--ink-1);fo
     <div class="auth-links">
       Don't have an account? <a href="{{ url_for('auth.signup') }}">Sign up</a>
     </div>
+  </div>
+
+  <div class="auth-links" style="margin-top:16px">
+    <a href="/">&larr; Back to home</a>
   </div>
 </div>
 </body>
