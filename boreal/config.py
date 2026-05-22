@@ -10,3 +10,8 @@ RULES_TEMPLATE_DIR = os.path.join(PROJECT_ROOT, "rules", "templates")
 SAMPLE_DATA_DIR = os.path.join(PROJECT_ROOT, "sample_data")
 DEMO_MODE = os.environ.get("DEMO_MODE", "false").lower() == "true"
 PROTECTED_ACCOUNTS = [e.strip().lower() for e in os.environ.get("PROTECTED_ACCOUNTS", "").split(",") if e.strip()]
+
+# Plaid integration
+PLAID_CLIENT_ID = os.environ.get("PLAID_CLIENT_ID", "")
+PLAID_SECRET = os.environ.get("PLAID_SECRET", "")
+PLAID_ENV = os.environ.get("PLAID_ENV", "sandbox")  # sandbox | production

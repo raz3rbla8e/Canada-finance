@@ -129,6 +129,14 @@ def api_update(tid):
         db = get_db()
         acct_row = db.execute("SELECT id FROM accounts WHERE name=?", (updates["account"],)).fetchone()
         updates["account_id"] = acct_row["id"] if acct_row else None
+    # Preserve plaid_tx dedup marker when user edits notes
+    if "notes" in updates:
+        db = get_db()
+        existing = db.execute("SELECT notes, source FROM transactions WHERE id=?", (tid,)).fetchone()
+        if existing and existing["source"] == "plaid" and existing["notes"] and existing["notes"].startswith("plaid_tx:"):
+            plaid_marker = existing["notes"].split("\n")[0]
+            user_notes = updates["notes"].strip()
+            updates["notes"] = f"{plaid_marker}\n{user_notes}" if user_notes else plaid_marker
     sets = ", ".join(f"{k}=?" for k in updates)
     vals = list(updates.values()) + [tid]
     if not sets:

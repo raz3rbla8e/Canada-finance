@@ -7,6 +7,7 @@ from boreal.routes.summary import summary_bp
 from boreal.routes.settings import settings_bp
 from boreal.routes.rules import rules_bp
 from boreal.routes.accounts import accounts_bp
+from boreal.routes.plaid import plaid_bp
 
 
 def register_blueprints(app):
@@ -19,6 +20,7 @@ def register_blueprints(app):
     app.register_blueprint(settings_bp)
     app.register_blueprint(rules_bp)
     app.register_blueprint(accounts_bp)
+    app.register_blueprint(plaid_bp)
 
     # Apply stricter rate limits to auth endpoints (brute-force protection)
     limiter = getattr(app, "limiter", None)

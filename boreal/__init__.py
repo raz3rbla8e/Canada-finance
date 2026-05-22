@@ -106,6 +106,10 @@ _DEMO_BLOCKED = [
     ("POST",   r"^/api/transfers$"),
     ("POST",   r"^/api/undo$"),
     ("POST",   r"^/api/import-ofx$"),
+    ("POST",   r"^/api/plaid/create-link-token$"),
+    ("POST",   r"^/api/plaid/exchange-token$"),
+    ("POST",   r"^/api/plaid/sync$"),
+    ("DELETE", r"^/api/plaid/items/\d+$"),
 ]
 
 _DEMO_BLOCKED_COMPILED = [(m, re.compile(p)) for m, p in _DEMO_BLOCKED]
@@ -157,11 +161,12 @@ def _register_security_headers(app):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.plaid.com; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com data:; "
             "img-src 'self' data:; "
-            "connect-src 'self'"
+            "frame-src https://cdn.plaid.com; "
+            "connect-src 'self' https://production.plaid.com https://sandbox.plaid.com"
         )
         # Cache static assets aggressively (they have hash-based cache busters)
         if request.path.startswith("/static/"):

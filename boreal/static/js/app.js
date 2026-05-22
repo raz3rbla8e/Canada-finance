@@ -7,6 +7,7 @@ function esc(str) {
   if (str == null) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+function stripPlaidNotes(n) { return (n||'').replace(/^plaid_tx:[^\n]*\n?/,'').trim(); }
 
 // ── DEBOUNCE UTILITY ──────────────────────────────────────────
 function debounce(fn, ms) {
@@ -1913,7 +1914,7 @@ async function _renderTransactions(c) {
       return `<tr data-id="${t.id}" class="${txSelected.has(t.id)?'selected':''}${t.hidden?' hidden-row':''}" style="cursor:pointer">
         <td><input type="checkbox" class="tx-check" data-id="${t.id}" ${txSelected.has(t.id)?'checked':''}></td>
         <td style="color:var(--ink-3);font-size:12.5px;white-space:nowrap">${fmtDate(t.date)}</td>
-        <td><div class="name-cell">${merchantGlyph(t.name)}<div><div style="font-weight:500">${esc(t.name)}</div>${t.notes?`<div style="font-size:11.5px;color:var(--ink-3)">${esc(t.notes)}</div>`:''}</div></div></td>
+        <td><div class="name-cell">${merchantGlyph(t.name)}<div><div style="font-weight:500">${esc(t.name)}</div>${stripPlaidNotes(t.notes)?`<div style="font-size:11.5px;color:var(--ink-3)">${esc(stripPlaidNotes(t.notes))}</div>`:''}</div></div></td>
         <td>${catPill(t.category)}</td>
         <td><span class="acct-tag">${esc(t.account || '')}</span></td>
         <td class="amt ${isInc?'amount-pos':'amount-neg'}" style="text-align:right;font-variant-numeric:tabular-nums">${displayAmt}</td>
@@ -2157,7 +2158,7 @@ async function openTxDrawer(tx, cats, onSave) {
   const state = {
     cat: initialCat,
     name: tx.name || '',
-    notes: tx.notes || '',
+    notes: stripPlaidNotes(tx.notes),
     account: tx.account || '',
     date: tx.date || '',
     hidden: !!tx.hidden,
@@ -3355,9 +3356,88 @@ window.deleteSchedule = async function(id) {
 };
 
 // ══════════════════════════════════════════════════════════════
+// PLAID BANK CONNECTION
+// ══════════════════════════════════════════════════════════════
+async function openPlaidLink() {
+  const btn = document.getElementById('plaid-connect-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
+  try {
+    const data = await api('/api/plaid/create-link-token', 'POST');
+    if (!data || data.error) {
+      showToast(data?.error || 'Failed to initialize Plaid');
+      if (btn) { btn.disabled = false; btn.textContent = 'Connect bank'; }
+      return;
+    }
+    const handler = Plaid.create({
+      token: data.link_token,
+      onSuccess: async (public_token, metadata) => {
+        showToast('Linking account…');
+        const result = await api('/api/plaid/exchange-token', 'POST', {
+          public_token,
+          institution_id: metadata.institution?.institution_id || '',
+          institution_name: metadata.institution?.name || '',
+        });
+        if (result?.ok) {
+          showToast(`Connected ${result.institution_name || 'bank'}! Syncing transactions…`);
+          const sync = await api('/api/plaid/sync', 'POST', { item_id: result.item_id });
+          if (sync?.ok) {
+            showToast(`Synced ${sync.added} transaction${sync.added !== 1 ? 's' : ''}`);
+          }
+          invalidateApiCache();
+          refreshCurrentView();
+        } else {
+          showToast(result?.error || 'Failed to link account');
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Connect another bank'; }
+      },
+      onExit: () => {
+        if (btn) { btn.disabled = false; btn.textContent = 'Connect bank'; }
+      },
+    });
+    handler.open();
+  } catch(e) {
+    showToast('Error: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Connect bank'; }
+  }
+}
+
+async function syncPlaidTransactions() {
+  const btn = document.getElementById('plaid-sync-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = icon('refresh',14) + ' Syncing…'; }
+  try {
+    const result = await api('/api/plaid/sync', 'POST', {});
+    if (result?.ok) {
+      showToast(`Synced: ${result.added} added, ${result.modified} updated, ${result.removed} removed`);
+      invalidateApiCache();
+      refreshCurrentView();
+    } else {
+      showToast(result?.error || 'Sync failed');
+    }
+  } catch(e) {
+    showToast('Sync error: ' + e.message);
+  }
+  if (btn) { btn.disabled = false; btn.innerHTML = icon('refresh',14) + ' Sync now'; }
+}
+
+async function disconnectPlaidItem(pk) {
+  if (!confirm('Disconnect this bank? Transactions already imported will remain.')) return;
+  const result = await api(`/api/plaid/items/${pk}`, 'DELETE');
+  if (result?.ok) {
+    showToast('Bank disconnected');
+    invalidateApiCache();
+    refreshCurrentView();
+  } else {
+    showToast(result?.error || 'Failed to disconnect');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
 // IMPORT VIEW (CSV wizard + drag-drop + OFX)
 // ══════════════════════════════════════════════════════════════
 async function _renderImport(c) {
+  // Fetch Plaid status alongside other data
+  const plaidStatus = await api('/api/plaid/status').catch(() => ({ configured: false, items: [] }));
+
   const banks = [
     { n: "TD",           ch: "#0d8a2e" },
     { n: "Tangerine",    ch: "#ff6e1f" },
@@ -3375,13 +3455,40 @@ async function _renderImport(c) {
     <div class="page-head">
       <div>
         <div class="page-title">Import</div>
-        <div class="page-sub">Drop bank CSVs or OFX/QFX downloads — duplicates are detected by SHA-256 hash, never double-counted</div>
+        <div class="page-sub">Connect your bank directly or drop CSVs — duplicates are detected by SHA-256 hash</div>
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn" onclick="window.location.href='/api/backup'">${icon('upload',14)} Backup</button>
         <button class="btn" id="import-restore-btn">${icon('download',14)} Restore</button>
       </div>
     </div>
+
+    ${plaidStatus.configured ? `
+    <div class="card" style="margin-bottom:16px;padding:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${plaidStatus.items.length ? '16px' : '0'}">
+        <div>
+          <div style="font-size:15px;font-weight:600;color:var(--ink-1)">🏦 Connected banks</div>
+          <div style="font-size:12.5px;color:var(--ink-3);margin-top:2px">Link your bank for automatic transaction sync</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          ${plaidStatus.items.length ? `<button class="btn" id="plaid-sync-btn" onclick="syncPlaidTransactions()">${icon('refresh',14)} Sync now</button>` : ''}
+          <button class="btn btn-primary" id="plaid-connect-btn" onclick="openPlaidLink()">${icon('plus',14)} Connect bank</button>
+        </div>
+      </div>
+      ${plaidStatus.items.length ? `<div style="display:flex;flex-direction:column;gap:8px">
+        ${plaidStatus.items.map(item => `
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg-2);border-radius:8px">
+            <div style="width:36px;height:36px;border-radius:8px;background:var(--accent);color:white;display:grid;place-items:center;font-weight:700;font-size:14px">${(item.institution_name||'?')[0]}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13.5px;font-weight:600;color:var(--ink-1)">${esc(item.institution_name || 'Unknown')}</div>
+              <div style="font-size:11.5px;color:var(--ink-3)">${item.accounts.length} account${item.accounts.length!==1?'s':''} · ${item.status === 'good' ? '<span style="color:var(--pos)">Connected</span>' : '<span style="color:var(--danger)">Error</span>'}</div>
+            </div>
+            <button class="btn btn-sm" style="color:var(--danger);font-size:11px" onclick="disconnectPlaidItem(${item.id})">Disconnect</button>
+          </div>
+        `).join('')}
+      </div>` : ''}
+    </div>
+    ` : ''}
 
     <div class="dropzone" id="csv-drop">
       <div style="width:56px;height:56px;border-radius:16px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;margin:0 auto">

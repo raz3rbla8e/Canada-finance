@@ -243,6 +243,34 @@ def _migrate_v12(db):
     """)
 
 
+def _migrate_v13(db):
+    """Add Plaid linked accounts table for bank connection sync."""
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS plaid_items (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id         TEXT NOT NULL UNIQUE,
+            access_token    TEXT NOT NULL,
+            institution_id  TEXT,
+            institution_name TEXT,
+            cursor          TEXT DEFAULT '',
+            status          TEXT DEFAULT 'good',
+            created_at      TEXT DEFAULT (datetime('now')),
+            updated_at      TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS plaid_accounts (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            plaid_item_id   INTEGER NOT NULL REFERENCES plaid_items(id) ON DELETE CASCADE,
+            account_id      TEXT NOT NULL UNIQUE,
+            name            TEXT NOT NULL,
+            official_name   TEXT,
+            type            TEXT,
+            subtype         TEXT,
+            mask            TEXT,
+            boreal_account  TEXT
+        );
+    """)
+
+
 MIGRATIONS = [
     (1, "initial schema", _migrate_v1),
     (2, "split transactions", _migrate_v2),
@@ -256,6 +284,7 @@ MIGRATIONS = [
     (10, "balance_date on accounts", _migrate_v10),
     (11, "balance snapshots", _migrate_v11),
     (12, "performance indexes", _migrate_v12),
+    (13, "plaid integration", _migrate_v13),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0]
