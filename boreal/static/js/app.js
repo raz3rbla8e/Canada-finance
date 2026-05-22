@@ -2864,9 +2864,6 @@ async function _renderAccounts(c) {
             </span>` : ''}
           </div>
         </div>
-        <div style="display:flex;gap:4px">
-          <button class="filter-chip">3M</button>
-          <button class="filter-chip">6M</button>
         <div style="display:flex;gap:4px" id="acct-nw-filters">
           <button class="filter-chip" data-months="3">3M</button>
           <button class="filter-chip" data-months="6">6M</button>
