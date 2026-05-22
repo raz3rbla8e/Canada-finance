@@ -378,8 +378,9 @@ async function openUncategorizedReview() {
   _alertsOpen = false;
   document.getElementById('notif-dropdown')?.classList.add('hidden');
 
+  const month = currentMonth();
   const [data, cats] = await Promise.all([
-    api('/api/transactions/uncategorized-suggestions'),
+    api('/api/transactions/uncategorized-suggestions' + (month ? '?month=' + month : '')),
     api('/api/categories'),
   ]);
   let txns = (data || []).filter(t => t.category === 'UNCATEGORIZED' || t.category === '');
@@ -387,6 +388,7 @@ async function openUncategorizedReview() {
   const allCats = (cats || []).map(c => c.name || c);
   let idx = 0;
   let reviewed = 0;
+  let reviewBusy = false;
 
   function renderReview() {
     if (idx >= txns.length) {
@@ -405,10 +407,10 @@ async function openUncategorizedReview() {
     const suggested = tx.suggested_category || null;
     const confidence = tx.confidence || 'low';
     const filteredCats = allCats.filter(c => isInc ? ['Income','Salary','Paycheque','Freelance','Job','Bonus','Refund','Other Income'].includes(c) || c === 'Transfer' : !['Income','Salary','Paycheque','Freelance','Job','Bonus','Refund','Other Income'].includes(c));
-    // Put suggested category first if it exists
-    let topCats = filteredCats.slice(0, 20);
+    // Put suggested category first if it exists, show all categories
+    let topCats = [...filteredCats];
     if (suggested && !topCats.includes(suggested)) {
-      topCats = [suggested, ...topCats.slice(0, 19)];
+      topCats = [suggested, ...topCats];
     } else if (suggested) {
       topCats = [suggested, ...topCats.filter(c => c !== suggested)];
     }
@@ -459,33 +461,47 @@ async function openUncategorizedReview() {
 
     // Wire accept suggestion button
     document.getElementById('review-accept-suggest')?.addEventListener('click', async () => {
+      if (reviewBusy) return;
+      reviewBusy = true;
       const btn = document.getElementById('review-accept-suggest');
       btn.style.opacity = '0.5'; btn.style.pointerEvents = 'none';
-      await api('/api/update/' + tx.id, 'PATCH', { category: suggested });
+      modal.querySelectorAll('.review-cat-btn, #review-skip, #review-hide').forEach(b => { b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
+      const result = await api('/api/update/' + tx.id, 'PATCH', { category: suggested });
+      if (result === null) { reviewBusy = false; btn.style.opacity = ''; btn.style.pointerEvents = ''; modal.querySelectorAll('.review-cat-btn, #review-skip, #review-hide').forEach(b => { b.style.opacity = ''; b.style.pointerEvents = ''; }); return; }
       reviewed++;
       const merchant = (tx.name || '').trim().toLowerCase();
       txns = txns.filter((t, i) => i <= idx || t.name.trim().toLowerCase() !== merchant);
       idx++;
+      reviewBusy = false;
       renderReview();
     });
     // Wire category buttons
     modal.querySelectorAll('.review-cat-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
+        if (reviewBusy) return;
+        reviewBusy = true;
         const cat = btn.dataset.cat;
-        btn.style.opacity = '0.5'; btn.style.pointerEvents = 'none';
-        await api('/api/update/' + tx.id, 'PATCH', { category: cat });
+        modal.querySelectorAll('.review-cat-btn, #review-accept-suggest, #review-skip, #review-hide').forEach(b => { b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
+        const result = await api('/api/update/' + tx.id, 'PATCH', { category: cat });
+        if (result === null) { reviewBusy = false; modal.querySelectorAll('.review-cat-btn, #review-accept-suggest, #review-skip, #review-hide').forEach(b => { b.style.opacity = ''; b.style.pointerEvents = ''; }); return; }
         reviewed++;
         const merchant = (tx.name || '').trim().toLowerCase();
         txns = txns.filter((t, i) => i <= idx || t.name.trim().toLowerCase() !== merchant);
         idx++;
+        reviewBusy = false;
         renderReview();
       });
     });
-    document.getElementById('review-skip')?.addEventListener('click', () => { idx++; renderReview(); });
+    document.getElementById('review-skip')?.addEventListener('click', () => { if (reviewBusy) return; idx++; renderReview(); });
     document.getElementById('review-hide')?.addEventListener('click', async () => {
-      await api('/api/update/' + tx.id, 'PATCH', { hidden: 1 });
+      if (reviewBusy) return;
+      reviewBusy = true;
+      modal.querySelectorAll('.review-cat-btn, #review-accept-suggest, #review-skip, #review-hide').forEach(b => { b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
+      const result = await api('/api/update/' + tx.id, 'PATCH', { hidden: 1 });
+      if (result === null) { reviewBusy = false; modal.querySelectorAll('.review-cat-btn, #review-accept-suggest, #review-skip, #review-hide').forEach(b => { b.style.opacity = ''; b.style.pointerEvents = ''; }); return; }
       reviewed++;
       idx++;
+      reviewBusy = false;
       renderReview();
     });
   }
@@ -1373,7 +1389,16 @@ async function _renderDashboard(c) {
   const prevMonthName = summary.prev_month ? new Date(summary.prev_month + '-15').toLocaleString('en-CA', {month: 'short'}) : 'last month';
 
   // Build comparative headline (Case 03)
-  let headlineText = `You saved <span style="color:${net>=0?'var(--pos)':'var(--danger)'};font-variant-numeric:tabular-nums">${fmtCurrency(net,true)}</span> \u00b7 ${savingsRate.toFixed(0)}% savings rate`;
+  let headlineText;
+  if (net >= 0) {
+    headlineText = `You saved <span style="color:var(--pos);font-variant-numeric:tabular-nums">${fmtCurrency(net,true)}</span> \u00b7 ${savingsRate.toFixed(0)}% savings rate`;
+  } else {
+    headlineText = `You spent <span style="color:var(--danger);font-variant-numeric:tabular-nums">${fmtCurrency(Math.abs(net),true)}</span> more than you earned`;
+    if (Array.isArray(trends) && trends.length > 1) {
+      const prevNet = (trends[trends.length-2]?.income||0) - (trends[trends.length-2]?.expenses||0);
+      if (prevNet < net) headlineText += ` \u00b7 but improving from ${new Date(trends[trends.length-2].month+'-15').toLocaleString('en-CA',{month:'short'})}`;
+    }
+  }
   if (net > 0 && Array.isArray(trends) && trends.length > 2) {
     const historicalSavings = trends.slice(0, -1).map(t => ({ m: t.month, s: (t.income || 0) - (t.expenses || 0) }));
     const lastBetter = [...historicalSavings].reverse().find(h => h.s > net);
@@ -3045,7 +3070,7 @@ async function _renderYear(c) {
     <div class="page-head">
       <div>
         <div class="page-title">Year in review · ${year}</div>
-        <div class="page-sub">${months.length} months with data · Net savings ${fmtCurrency(totalNet, true)}</div>
+        <div class="page-sub">${months.length} months with data · ${totalNet >= 0 ? 'Net savings ' + fmtCurrency(totalNet, true) : 'Overspent by ' + fmtCurrency(Math.abs(totalNet), true)}</div>
       </div>
     </div>
 
@@ -3061,8 +3086,8 @@ async function _renderYear(c) {
         <div class="kpi-delta"><span>${fmtCurrency(avgExp,true)}/mo avg</span></div>
       </div>
       <div class="kpi">
-        <div class="kpi-label">Net saved</div>
-        <div class="kpi-value" style="color:${totalNet>=0?'var(--pos)':'var(--danger)'}">${fmtCurrencyHTML(totalNet)}</div>
+        <div class="kpi-label">${totalNet >= 0 ? 'Net saved' : 'Overspent'}</div>
+        <div class="kpi-value" style="color:${totalNet>=0?'var(--pos)':'var(--danger)'}">${fmtCurrencyHTML(Math.abs(totalNet))}</div>
       </div>
       <div class="kpi">
         <div class="kpi-label">Savings rate</div>
@@ -3515,6 +3540,7 @@ async function _renderImport(c) {
     if (!prevRes.ok) { const err = await prevRes.json().catch(() => ({})); wizard.style.display='none'; showToast(err.error || 'Failed to preview CSV'); return; }
     const preview = await prevRes.json();
     const rows = preview.transactions || preview.rows || [];
+    const totalCount = preview.total || preview.count || rows.length;
 
     wizard.innerHTML = `<div class="card" style="margin-top:20px">
       <div class="card-h">
@@ -3543,9 +3569,9 @@ async function _renderImport(c) {
           </tr>`).join('')}</tbody>
         </table>
       </div>
-      <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">${rows.length} transactions found${rows.length>20?' (showing first 20)':''}</div>
+      <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">${totalCount} transactions found${totalCount>20?' (showing first 20)':''}</div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" id="wiz-import">${icon('check',14)} Import ${rows.length} transactions</button>
+        <button class="btn btn-primary" id="wiz-import">${icon('check',14)} Import ${totalCount} transactions</button>
         <button class="btn" id="wiz-cancel">Cancel</button>
       </div>
     </div>`;

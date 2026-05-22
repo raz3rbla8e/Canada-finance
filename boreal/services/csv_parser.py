@@ -31,7 +31,10 @@ def detect_bank_config(header: str, configs: list = None):
     if configs is None:
         configs = load_bank_configs()
     h = header.strip().lower()
+    # First pass: try header-based detection (configs WITH headers)
     for cfg in configs:
+        if cfg.get("no_header"):
+            continue
         det = cfg.get("detection", {})
         # header_starts_with check
         starts = det.get("header_starts_with", "")
@@ -55,6 +58,15 @@ def detect_bank_config(header: str, configs: list = None):
             continue
         config_name = cfg["_filename"].rsplit(".", 1)[0]
         return cfg, config_name
+    # Second pass: try first_line_regex detection (headerless CSVs)
+    for cfg in configs:
+        if not cfg.get("no_header"):
+            continue
+        det = cfg.get("detection", {})
+        pattern = det.get("first_line_regex")
+        if pattern and re.match(pattern, header.strip()):
+            config_name = cfg["_filename"].rsplit(".", 1)[0]
+            return cfg, config_name
     return None, "unknown"
 
 
@@ -101,7 +113,12 @@ def parse_with_config(text: str, config: dict, learned: dict) -> list:
         lines = text.splitlines(True)
         text = "".join(lines[skip:])
 
-    reader = csv.DictReader(io.StringIO(text))
+    no_header = config.get("no_header", False)
+    if no_header:
+        col_names = config.get("column_names", [])
+        reader = csv.DictReader(io.StringIO(text), fieldnames=col_names)
+    else:
+        reader = csv.DictReader(io.StringIO(text))
     if not reader.fieldnames:
         return txns
 

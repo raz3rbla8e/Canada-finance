@@ -1,25 +1,28 @@
-# CIBC Online Banking
+# CIBC Online Banking — Chequing / Debit Account
+# Headerless CSV: Date, Description, Debit, Credit (4 columns)
 name: "CIBC (Chequing)"
-version: 1
-last_verified: "2026-04"
+version: 2
+last_verified: "2026-05"
 account_label: "CIBC Chequing"
 encoding: "utf-8-sig"
 
+no_header: true
+column_names:
+  - "Date"
+  - "Description"
+  - "Debit"
+  - "Credit"
+
 detection:
-  header_starts_with: "transaction date,"
-  header_contains:
-    - "withdrawals"
+  # First data line: date, unquoted description with CIBC-style phrases, debit, credit
+  first_line_regex: '^\d{4}-\d{2}-\d{2},(Point of Sale|Internet Banking|Electronic Funds Transfer|Branch Transaction|Automated Banking Machine) .+'
 
 columns:
-  date: "Transaction Date"
+  date: "Date"
   description: "Description"
-  debit: "Withdrawals"
-  credit: "Deposits"
-
-# Flexible column matching — keys are matched case-insensitively
-flexible_columns: true
+  debit: "Debit"
+  credit: "Credit"
 
 date_formats:
-  - "%m/%d/%Y"
   - "%Y-%m-%d"
-  - "%m-%d-%Y"
+  - "%m/%d/%Y"

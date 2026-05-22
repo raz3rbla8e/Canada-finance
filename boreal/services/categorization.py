@@ -152,9 +152,10 @@ CATEGORY_RULES = {
         "laundromat", "post office", "fedex", "ups", "purolator", "canada post",
         "storage", "moving", "atm withdrawal", "atm deposit",
         "e-transfer sent", "etransfer sent", "interac e-transfer sent",
+        "internet transfer",
     ],
     "Rent": [
-        "rent", "landlord", "property management", "tenancy",
+        "rent payment", "landlord", "property management", "tenancy",
     ],
     "Savings Transfer": [
         "transfer to savings", "transfer to tfsa", "transfer to rrsp",

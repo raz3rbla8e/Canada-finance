@@ -122,7 +122,7 @@ def api_update(tid):
     d = request.json
     if not d:
         return jsonify({"error": "Request body required"}), 400
-    allowed = ["date", "type", "name", "category", "amount", "account", "notes"]
+    allowed = ["date", "type", "name", "category", "amount", "account", "notes", "hidden"]
     updates = {k: d[k] for k in d if k in allowed}
     # If account name changed, also resolve and update account_id
     if "account" in updates:
@@ -142,6 +142,12 @@ def api_update(tid):
     retro_fixed = 0
     if "category" in d and original and d["category"] != original["category"]:
         new_cat = d["category"]
+        # Ensure the category exists in the categories table
+        existing_cat = db.execute("SELECT id FROM categories WHERE name=?", (new_cat,)).fetchone()
+        if not existing_cat:
+            cat_type = "Income" if new_cat in ("Income","Salary","Paycheque","Freelance","Job","Bonus","Refund","Other Income") else "Expense"
+            max_order = db.execute("SELECT COALESCE(MAX(sort_order),0) FROM categories WHERE type=?", (cat_type,)).fetchone()[0]
+            db.execute("INSERT INTO categories (name, type, icon, user_created, sort_order) VALUES (?,?,?,1,?)", (new_cat, cat_type, "", max_order + 1))
         norm_name = normalize_merchant(original["name"])
         raw_name = original["name"].lower().strip()
         # Store the normalized keyword (shorter, matches more variants)
@@ -215,9 +221,16 @@ def api_uncategorized_suggestions():
     from boreal.services.categorization import categorize_with_confidence, load_learned_dict
     db = get_db()
     learned = load_learned_dict(db)
-    rows = db.execute(
-        "SELECT * FROM transactions WHERE hidden=0 AND (category='UNCATEGORIZED' OR category='') ORDER BY date DESC"
-    ).fetchall()
+    month = request.args.get("month")
+    if month:
+        rows = db.execute(
+            "SELECT * FROM transactions WHERE hidden=0 AND (category='UNCATEGORIZED' OR category='') AND date LIKE ? ORDER BY date DESC",
+            (month + "%",)
+        ).fetchall()
+    else:
+        rows = db.execute(
+            "SELECT * FROM transactions WHERE hidden=0 AND (category='UNCATEGORIZED' OR category='') ORDER BY date DESC"
+        ).fetchall()
     results = []
     for r in rows:
         suggested_cat, confidence = categorize_with_confidence(r["name"], learned)
@@ -286,6 +299,12 @@ def api_bulk_categorize():
                     ON CONFLICT(keyword) DO UPDATE SET category=excluded.category, updated_at=datetime('now')""",
                     (raw, category),
                 )
+    # Ensure the category exists in the categories table
+    existing = db.execute("SELECT id FROM categories WHERE name=?", (category,)).fetchone()
+    if not existing:
+        cat_type = "Income" if category in ("Income","Salary","Paycheque","Freelance","Job","Bonus","Refund","Other Income") else "Expense"
+        max_order = db.execute("SELECT COALESCE(MAX(sort_order),0) FROM categories WHERE type=?", (cat_type,)).fetchone()[0]
+        db.execute("INSERT INTO categories (name, type, icon, user_created, sort_order) VALUES (?,?,?,1,?)", (category, cat_type, "", max_order + 1))
     # Update selected transactions
     db.execute(
         f"UPDATE transactions SET category=? WHERE id IN ({placeholders})",

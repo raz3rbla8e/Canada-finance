@@ -242,7 +242,7 @@ def api_preview_parse():
             return jsonify({"error": "Could not detect bank format", "transactions": [], "total": 0}), 400
         learned = load_learned_dict(get_db())
         txns = parse_with_config(text, config, learned)
-        return jsonify({"transactions": txns[:50], "total": len(txns)})
+        return jsonify({"transactions": txns[:50], "total": len(txns), "count": len(txns)})
 
     # ── Mode 2: JSON with raw_text + mapping (from unknown-bank wizard) ──
     d = request.json
@@ -268,7 +268,7 @@ def api_preview_parse():
         config["columns"]["debit"] = mapping.get("debit_column", "")
         config["columns"]["credit"] = mapping.get("credit_column", "")
     txns = parse_with_config(text, config, {})
-    return jsonify({"transactions": txns[:50], "total": len(txns)})
+    return jsonify({"transactions": txns[:50], "total": len(txns), "count": len(txns)})
 
 
 @import_export_bp.route("/api/export")

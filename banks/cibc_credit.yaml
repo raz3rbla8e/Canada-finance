@@ -1,0 +1,35 @@
+# CIBC Credit Card (Visa)
+# Headerless CSV: Date, Description, Debit, Credit, Card Number (5 columns)
+name: "CIBC (Credit Card)"
+version: 1
+last_verified: "2026-05"
+account_label: "CIBC Credit Card"
+encoding: "utf-8-sig"
+
+no_header: true
+column_names:
+  - "Date"
+  - "Description"
+  - "Debit"
+  - "Credit"
+  - "Card"
+
+detection:
+  # First data line: date, quoted description with city/province, amounts, masked card number
+  first_line_regex: '^\d{4}-\d{2}-\d{2},"[^"]+",[\d.]*,[\d.]*,\d{4}\*+\d{4}$'
+
+columns:
+  date: "Date"
+  description: "Description"
+  debit: "Debit"
+  credit: "Credit"
+
+date_formats:
+  - "%Y-%m-%d"
+  - "%m/%d/%Y"
+
+skip_rows_where:
+  description_contains:
+    - "PURCHASE INTEREST"
+
+credit_default_category: "Refund"

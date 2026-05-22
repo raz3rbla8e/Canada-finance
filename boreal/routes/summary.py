@@ -24,7 +24,8 @@ def _generate_insights(income, expenses, prev_exp, by_cat, budgets):
         if rate >= 20:
             insights.append({"icon": "spark", "tone": "pos", "title": f"{rate:.0f}% savings rate", "detail": "You're saving well this month!"})
         elif rate < 0:
-            insights.append({"icon": "alert", "tone": "warn", "title": "Spending exceeds income", "detail": f"You're {cs}{abs(net):,.0f} over budget this month."})
+            over_amt = abs(net)
+            insights.append({"icon": "alert", "tone": "warn", "title": f"Spending exceeds income by {cs}{over_amt:,.0f}", "detail": "Review your expenses to find areas to cut back."})
     # Month-over-month change
     if prev_exp and expenses:
         change = (expenses - prev_exp) / prev_exp * 100
