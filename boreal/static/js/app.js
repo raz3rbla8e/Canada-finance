@@ -19,6 +19,10 @@ function appConfirm(msg, { title = 'Confirm', danger = false } = {}) {
     const id = 'app-confirm-' + Date.now();
     document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="${id}" role="dialog" aria-modal="true">
       <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+        <div class="modal-h"><h3>${esc(title)}</h3></div>
+        <div class="modal-body">
+          <div style="font-size:14px;color:var(--ink-2)">${esc(msg)}</div>
+        </div>
         <div class="modal-foot">
           <button class="btn" id="${id}-no">Cancel</button>
           <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="${id}-yes">${danger ? 'Delete' : 'Confirm'}</button>
