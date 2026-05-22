@@ -1389,7 +1389,16 @@ async function _renderDashboard(c) {
   const prevMonthName = summary.prev_month ? new Date(summary.prev_month + '-15').toLocaleString('en-CA', {month: 'short'}) : 'last month';
 
   // Build comparative headline (Case 03)
-  let headlineText = `You saved <span style="color:${net>=0?'var(--pos)':'var(--danger)'};font-variant-numeric:tabular-nums">${fmtCurrency(net,true)}</span> \u00b7 ${savingsRate.toFixed(0)}% savings rate`;
+  let headlineText;
+  if (net >= 0) {
+    headlineText = `You saved <span style="color:var(--pos);font-variant-numeric:tabular-nums">${fmtCurrency(net,true)}</span> \u00b7 ${savingsRate.toFixed(0)}% savings rate`;
+  } else {
+    headlineText = `You spent <span style="color:var(--danger);font-variant-numeric:tabular-nums">${fmtCurrency(Math.abs(net),true)}</span> more than you earned`;
+    if (Array.isArray(trends) && trends.length > 1) {
+      const prevNet = (trends[trends.length-2]?.income||0) - (trends[trends.length-2]?.expenses||0);
+      if (prevNet < net) headlineText += ` \u00b7 but improving from ${new Date(trends[trends.length-2].month+'-15').toLocaleString('en-CA',{month:'short'})}`;
+    }
+  }
   if (net > 0 && Array.isArray(trends) && trends.length > 2) {
     const historicalSavings = trends.slice(0, -1).map(t => ({ m: t.month, s: (t.income || 0) - (t.expenses || 0) }));
     const lastBetter = [...historicalSavings].reverse().find(h => h.s > net);
@@ -3061,7 +3070,7 @@ async function _renderYear(c) {
     <div class="page-head">
       <div>
         <div class="page-title">Year in review · ${year}</div>
-        <div class="page-sub">${months.length} months with data · Net savings ${fmtCurrency(totalNet, true)}</div>
+        <div class="page-sub">${months.length} months with data · ${totalNet >= 0 ? 'Net savings ' + fmtCurrency(totalNet, true) : 'Overspent by ' + fmtCurrency(Math.abs(totalNet), true)}</div>
       </div>
     </div>
 
@@ -3077,8 +3086,8 @@ async function _renderYear(c) {
         <div class="kpi-delta"><span>${fmtCurrency(avgExp,true)}/mo avg</span></div>
       </div>
       <div class="kpi">
-        <div class="kpi-label">Net saved</div>
-        <div class="kpi-value" style="color:${totalNet>=0?'var(--pos)':'var(--danger)'}">${fmtCurrencyHTML(totalNet)}</div>
+        <div class="kpi-label">${totalNet >= 0 ? 'Net saved' : 'Overspent'}</div>
+        <div class="kpi-value" style="color:${totalNet>=0?'var(--pos)':'var(--danger)'}">${fmtCurrencyHTML(Math.abs(totalNet))}</div>
       </div>
       <div class="kpi">
         <div class="kpi-label">Savings rate</div>
