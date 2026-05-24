@@ -21,6 +21,23 @@ from boreal.services.email import (
 auth_bp = Blueprint("auth", __name__)
 
 
+@auth_bp.route("/try-demo")
+def try_demo():
+    """Auto-login to the public demo account so visitors can explore the app."""
+    if current_user.is_authenticated:
+        return redirect(url_for("main.index"))
+    demo_email = os.environ.get("DEMO_EMAIL", "friends@boreal.app")
+    user = get_user_by_email(demo_email)
+    if not user:
+        flash("Demo account is not available right now.", "error")
+        return redirect(url_for("auth.login"))
+    login_user(user, remember=False)
+    db_path = get_user_db_path(user.id)
+    if not os.path.exists(db_path):
+        init_user_db(db_path)
+    return redirect(url_for("main.index"))
+
+
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
@@ -106,7 +123,7 @@ def signup():
 @auth_bp.route("/logout")
 def logout():
     logout_user()
-    return redirect(url_for("auth.login"))
+    return redirect(url_for("main.index"))
 
 
 @auth_bp.route("/verify-email/<token>")

@@ -19,6 +19,10 @@ function appConfirm(msg, { title = 'Confirm', danger = false } = {}) {
     const id = 'app-confirm-' + Date.now();
     document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="${id}" role="dialog" aria-modal="true">
       <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+        <div class="modal-h"><h3>${esc(title)}</h3></div>
+        <div class="modal-body">
+          <div style="font-size:14px;color:var(--ink-2)">${esc(msg)}</div>
+        </div>
         <div class="modal-foot">
           <button class="btn" id="${id}-no">Cancel</button>
           <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="${id}-yes">${danger ? 'Delete' : 'Confirm'}</button>
@@ -2870,9 +2874,6 @@ async function _renderAccounts(c) {
             </span>` : ''}
           </div>
         </div>
-        <div style="display:flex;gap:4px">
-          <button class="filter-chip">3M</button>
-          <button class="filter-chip">6M</button>
         <div style="display:flex;gap:4px" id="acct-nw-filters">
           <button class="filter-chip" data-months="3">3M</button>
           <button class="filter-chip" data-months="6">6M</button>
@@ -4238,12 +4239,15 @@ async function _renderSettings(c) {
         <div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">
           ${learnedList.length ? `<table class="tbl">
             <thead><tr><th>Keyword</th><th>Category</th><th></th></tr></thead>
-            <tbody>${learnedList.slice(0,30).map(m => `<tr>
+            <tbody id="learned-tbody">${learnedList.slice(0,5).map(m => `<tr>
               <td class="mono" style="font-size:12.5px">${esc(m.keyword||m.description||m.name||'')}</td>
               <td>${catPill(m.category)}</td>
               <td class="right"><button class="btn btn-sm btn-ghost" onclick="deleteLearned('${esc(m.keyword||m.description||m.name||'')}')">${icon('trash',12)}</button></td>
             </tr>`).join('')}</tbody>
-          </table>` : '<div style="padding:16px;color:var(--ink-3);font-size:13px">No learned merchants yet</div>'}
+          </table>
+          ${learnedList.length > 5 ? `<div style="padding:10px 14px;border-top:1px solid var(--line-1)" id="learned-expand-area">
+            <button class="btn btn-sm btn-ghost" id="learned-show-all" style="width:100%">${icon('chevron-down',12)} View all ${learnedList.length} merchants</button>
+          </div>` : ''}` : '<div style="padding:16px;color:var(--ink-3);font-size:13px">No learned merchants yet</div>'}
         </div>
 
         <div class="section-h"><h2>Custom categories</h2><p>${catList.length} categories</p></div>
@@ -4351,6 +4355,32 @@ async function _renderSettings(c) {
       closeCatModal();
       refreshCurrentView();
     });
+  });
+
+  // Learned merchants: expand with search
+  document.getElementById('learned-show-all')?.addEventListener('click', () => {
+    const area = document.getElementById('learned-expand-area');
+    const tbody = document.getElementById('learned-tbody');
+    if (!area || !tbody) return;
+    const allRows = learnedList.map(m => {
+      const kw = m.keyword||m.description||m.name||'';
+      return `<tr data-kw="${esc(kw).toLowerCase()} ${esc(m.category||'').toLowerCase()}">
+        <td class="mono" style="font-size:12.5px">${esc(kw)}</td>
+        <td>${catPill(m.category)}</td>
+        <td class="right"><button class="btn btn-sm btn-ghost" onclick="deleteLearned('${esc(kw)}')">${icon('trash',12)}</button></td>
+      </tr>`;
+    }).join('');
+    tbody.innerHTML = allRows;
+    area.innerHTML = `<div style="padding:2px 0">
+      <input type="text" id="learned-search" placeholder="Filter merchants…" style="width:100%;padding:7px 10px;border:1px solid var(--line-2);border-radius:var(--r-2);background:var(--bg-app);color:var(--ink-1);font-family:var(--font-sans);font-size:13px;outline:none">
+    </div>`;
+    document.getElementById('learned-search')?.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase();
+      tbody.querySelectorAll('tr').forEach(row => {
+        row.style.display = row.dataset.kw.includes(q) ? '' : 'none';
+      });
+    });
+    document.getElementById('learned-search')?.focus();
   });
 }
 

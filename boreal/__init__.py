@@ -130,6 +130,31 @@ def _register_demo_guard(app):
                 }), 403
 
 
+def _register_demo_account_guard(app):
+    """Block all writes when logged in as the public demo account (friends@boreal.app)."""
+    demo_email = os.environ.get("DEMO_EMAIL", "friends@boreal.app")
+
+    @app.before_request
+    def demo_account_guard():
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return
+        if not current_user.is_authenticated:
+            return
+        if getattr(current_user, "email", None) != demo_email:
+            return
+        # Allow non-API routes (logout, etc.)
+        if not request.path.startswith("/api/"):
+            return
+        # Allow dashboard_layout saves (display preference, not data)
+        if request.method == "POST" and request.path == "/api/settings":
+            d = request.get_json(silent=True) or {}
+            if set(d.keys()) <= {"dashboard_layout"}:
+                return
+        return jsonify({
+            "error": "This is a read-only demo account. Create a free account to make changes!"
+        }), 403
+
+
 def _start_demo_reset_timer(app):
     """Reset demo data every 60 minutes."""
     def _reset():
@@ -264,8 +289,9 @@ def create_app():
 
     # ── Auth: set per-user DB path before each request ────────────────────────
     _PUBLIC_PREFIXES = ("/login", "/signup", "/logout", "/verify-email/",
-                        "/forgot-password", "/reset-password/", "/static/")
-    _PUBLIC_API = ("/api/health", "/api/csrf-token", "/api/demo", "/api/demo/reset")
+                        "/forgot-password", "/reset-password/", "/static/",
+                        "/try-demo")
+    _PUBLIC_API = ("/api/health", "/api/csrf-token", "/api/demo", "/api/demo/reset", "/")
 
     @app.before_request
     def set_user_db():
@@ -301,6 +327,7 @@ def create_app():
 
     _register_csrf(app)
     _register_demo_guard(app)
+    _register_demo_account_guard(app)
     _register_security_headers(app)
     register_blueprints(app)
 

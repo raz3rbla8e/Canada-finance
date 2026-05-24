@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#2a5a3f">
+<meta name="description" content="The free personal finance app built for Canadians. Track spending, budget smarter, and grow your net worth with CSV imports from any major bank.">
+<title>Boreal — Personal Finance for Canadians</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect width='24' height='24' rx='6' fill='%232a5a3f'/%3E%3Cpath d='M12 3 L7 10 L9.5 10 L6.5 14 L9 14 L5 19 L19 19 L15 14 L17.5 14 L14.5 10 L17 10 Z' fill='white' opacity='0.95'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;450;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg-app:oklch(13% 0.015 240);--bg-surface:oklch(17% 0.02 240);--bg-hover:oklch(21% 0.022 240);--line-1:oklch(24% 0.022 240);--line-2:oklch(28% 0.025 240);--ink-1:oklch(96% 0.005 95);--ink-2:oklch(80% 0.01 240);--ink-3:oklch(68% 0.012 240);--ink-4:oklch(48% 0.012 240);--accent:oklch(72% 0.13 165);--accent-soft:oklch(26% 0.05 165);--accent-ink:oklch(85% 0.13 165);--accent-fg:oklch(15% 0.02 165);--font-sans:"Inter Tight","Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;--r-1:6px;--r-2:10px;--r-3:14px;--r-4:20px}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);background:var(--bg-app);color:var(--ink-1);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+/* ── Nav ── */
+.landing-nav{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:14px 32px;background:oklch(13% 0.015 240 / 0.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line-1)}
+.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink-1)}
+.nav-logo svg{width:28px;height:28px;color:var(--accent)}
+.nav-logo-text{font-size:18px;font-weight:600;letter-spacing:-0.02em}
+.nav-actions{display:flex;gap:10px;align-items:center}
+
+/* ── Buttons ── */
+.btn-ghost{display:inline-flex;align-items:center;padding:8px 18px;border:1px solid var(--line-2);border-radius:var(--r-2);background:transparent;color:var(--ink-2);font-family:var(--font-sans);font-size:13px;font-weight:500;text-decoration:none;transition:all 0.15s;cursor:pointer}
+.btn-ghost:hover{border-color:var(--accent);color:var(--ink-1)}
+.btn-primary{display:inline-flex;align-items:center;padding:8px 18px;border:none;border-radius:var(--r-2);background:var(--accent);color:var(--accent-fg);font-family:var(--font-sans);font-size:13px;font-weight:600;text-decoration:none;transition:background 0.15s;cursor:pointer}
+.btn-primary:hover{background:var(--accent-ink)}
+
+/* ── Hero ── */
+.hero{max-width:1120px;margin:0 auto;padding:80px 32px 64px;display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center}
+.hero h1{font-size:44px;font-weight:700;letter-spacing:-0.03em;line-height:1.12;margin-bottom:20px}
+.hero-accent{color:var(--accent)}
+.hero-sub{font-size:17px;line-height:1.6;color:var(--ink-2);margin-bottom:32px;max-width:480px}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap}
+.hero-actions .btn-primary,.hero-actions .btn-ghost{padding:12px 24px;font-size:15px}
+
+/* ── Dashboard Mockup ── */
+.mockup-frame{background:var(--bg-surface);border:1px solid var(--line-1);border-radius:var(--r-4);overflow:hidden;box-shadow:0 24px 80px oklch(0% 0 0 / 0.5),0 0 0 1px oklch(100% 0 0 / 0.03)}
+.mockup-chrome{display:flex;align-items:center;gap:6px;padding:10px 14px;background:oklch(15% 0.018 240);border-bottom:1px solid var(--line-1)}
+.mockup-dot{width:8px;height:8px;border-radius:50%;background:var(--ink-4)}
+.mockup-body{padding:16px}
+.mockup-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.mockup-stat{background:var(--bg-app);border:1px solid var(--line-1);border-radius:var(--r-2);padding:10px 12px}
+.mockup-stat-label{display:block;font-size:10px;color:var(--ink-3);margin-bottom:2px;letter-spacing:0.02em}
+.mockup-stat-value{display:block;font-size:18px;font-weight:700;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+.mockup-stat-value.pos{color:var(--accent)}
+.mockup-stat-value.muted{color:var(--ink-2)}
+.mockup-chart{display:flex;align-items:flex-end;gap:6px;height:72px;margin-bottom:14px;padding:0 2px}
+.mockup-bar-group{flex:1;display:flex;gap:3px;align-items:flex-end;height:100%}
+.mockup-bar{flex:1;border-radius:3px 3px 0 0;min-height:6px}
+.mockup-bar.income{background:var(--accent);opacity:0.8}
+.mockup-bar.expense{background:var(--ink-3);opacity:0.35}
+.mockup-txns{display:flex;flex-direction:column;gap:6px}
+.mockup-txn{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--bg-app);border-radius:var(--r-1);font-size:12px}
+.mockup-txn-name{color:var(--ink-2)}
+.mockup-txn-amt{font-weight:600;font-variant-numeric:tabular-nums}
+.mockup-txn-amt.pos{color:var(--accent)}
+.mockup-txn-amt.neg{color:var(--ink-2)}
+
+/* ── Features ── */
+.features{max-width:1120px;margin:0 auto;padding:48px 32px 64px}
+.features-header{text-align:center;margin-bottom:48px}
+.features-header h2{font-size:28px;font-weight:700;letter-spacing:-0.02em;margin-bottom:8px}
+.features-header p{color:var(--ink-3);font-size:15px}
+.features-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.feature-card{background:var(--bg-surface);border:1px solid var(--line-1);border-radius:var(--r-3);padding:28px 24px;transition:border-color 0.2s}
+.feature-card:hover{border-color:oklch(30% 0.04 165)}
+.feature-icon{width:40px;height:40px;border-radius:var(--r-2);background:var(--accent-soft);display:flex;align-items:center;justify-content:center;margin-bottom:16px}
+.feature-icon svg{width:20px;height:20px;color:var(--accent)}
+.feature-card h3{font-size:16px;font-weight:600;margin-bottom:6px;letter-spacing:-0.01em}
+.feature-card p{font-size:13px;color:var(--ink-3);line-height:1.55}
+
+/* ── Banks ── */
+.banks-section{max-width:1120px;margin:0 auto;padding:32px 32px 64px;text-align:center}
+.banks-label{font-size:13px;color:var(--ink-4);text-transform:uppercase;letter-spacing:0.05em;font-weight:500;margin-bottom:20px}
+.bank-list{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
+.bank-pill{padding:7px 16px;background:var(--bg-surface);border:1px solid var(--line-1);border-radius:100px;font-size:13px;color:var(--ink-2);font-weight:450}
+
+/* ── Bottom CTA ── */
+.bottom-cta{max-width:680px;margin:0 auto;padding:48px 32px 80px;text-align:center}
+.bottom-cta h2{font-size:32px;font-weight:700;letter-spacing:-0.02em;margin-bottom:12px}
+.bottom-cta p{color:var(--ink-3);font-size:15px;margin-bottom:28px}
+.bottom-cta .btn-primary{padding:14px 32px;font-size:16px}
+
+/* ── Footer ── */
+.landing-footer{border-top:1px solid var(--line-1);padding:24px 32px;text-align:center;font-size:12px;color:var(--ink-4)}
+
+/* ── Responsive ── */
+@media(max-width:768px){
+  .landing-nav{padding:12px 20px}
+  .hero{grid-template-columns:1fr;padding:48px 20px 40px;gap:40px}
+  .hero h1{font-size:30px}
+  .hero-sub{font-size:15px}
+  .hero-actions .btn-primary,.hero-actions .btn-ghost{padding:11px 20px;font-size:14px}
+  .features{padding:32px 20px 48px}
+  .features-grid{grid-template-columns:1fr}
+  .features-header h2{font-size:22px}
+  .banks-section{padding:24px 20px 48px}
+  .bottom-cta{padding:40px 20px 64px}
+  .bottom-cta h2{font-size:24px}
+  .mockup-stats{gap:6px}
+  .mockup-stat{padding:8px}
+  .mockup-stat-value{font-size:15px}
+  .mockup-stat-label{font-size:9px}
+}
+
+/* ── Animations ── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.hero-content{animation:fadeUp 0.6s ease-out}
+.hero-visual{animation:fadeUp 0.6s ease-out 0.15s both}
+</style>
+</head>
+<body>
+
+<nav class="landing-nav">
+  <a href="/" class="nav-logo">
+    <svg viewBox="0 0 512 512" fill="none">
+      <polygon points="256,80 196,180 316,180" fill="currentColor"/>
+      <polygon points="256,140 176,260 336,260" fill="currentColor"/>
+      <polygon points="256,210 156,340 356,340" fill="currentColor"/>
+      <rect x="240" y="340" width="32" height="52" rx="4" fill="currentColor" opacity="0.7"/>
+    </svg>
+    <span class="nav-logo-text">Boreal</span>
+  </a>
+  <div class="nav-actions">
+    <a href="{{ url_for('auth.login') }}" class="btn-ghost">Log in</a>
+    <a href="{{ url_for('auth.signup') }}" class="btn-primary">Create account</a>
+  </div>
+</nav>
+
+<main>
+  <!-- ── Hero ── -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1>The free personal finance app <span class="hero-accent">built for Canadians.</span></h1>
+      <p class="hero-sub">Track spending, budget smarter, and grow your net worth. Import CSVs from any major Canadian bank — no bank login required.</p>
+      <div class="hero-actions">
+        <a href="{{ url_for('auth.try_demo') }}" class="btn-ghost">Try the demo &rarr;</a>
+        <a href="{{ url_for('auth.signup') }}" class="btn-primary">Create free account</a>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="mockup-frame">
+        <div class="mockup-chrome">
+          <span class="mockup-dot"></span>
+          <span class="mockup-dot"></span>
+          <span class="mockup-dot"></span>
+        </div>
+        <div class="mockup-body">
+          <div class="mockup-stats">
+            <div class="mockup-stat">
+              <span class="mockup-stat-label">Income</span>
+              <span class="mockup-stat-value pos">$4,280</span>
+            </div>
+            <div class="mockup-stat">
+              <span class="mockup-stat-label">Expenses</span>
+              <span class="mockup-stat-value muted">$3,150</span>
+            </div>
+            <div class="mockup-stat">
+              <span class="mockup-stat-label">Savings Rate</span>
+              <span class="mockup-stat-value pos">26%</span>
+            </div>
+          </div>
+          <div class="mockup-chart">
+            <div class="mockup-bar-group">
+              <div class="mockup-bar income" style="height:58%"></div>
+              <div class="mockup-bar expense" style="height:50%"></div>
+            </div>
+            <div class="mockup-bar-group">
+              <div class="mockup-bar income" style="height:62%"></div>
+              <div class="mockup-bar expense" style="height:48%"></div>
+            </div>
+            <div class="mockup-bar-group">
+              <div class="mockup-bar income" style="height:70%"></div>
+              <div class="mockup-bar expense" style="height:55%"></div>
+            </div>
+            <div class="mockup-bar-group">
+              <div class="mockup-bar income" style="height:65%"></div>
+              <div class="mockup-bar expense" style="height:60%"></div>
+            </div>
+            <div class="mockup-bar-group">
+              <div class="mockup-bar income" style="height:75%"></div>
+              <div class="mockup-bar expense" style="height:52%"></div>
+            </div>
+            <div class="mockup-bar-group">
+              <div class="mockup-bar income" style="height:80%"></div>
+              <div class="mockup-bar expense" style="height:46%"></div>
+            </div>
+          </div>
+          <div class="mockup-txns">
+            <div class="mockup-txn">
+              <span class="mockup-txn-name">🏪 Loblaws</span>
+              <span class="mockup-txn-amt neg">-$127.45</span>
+            </div>
+            <div class="mockup-txn">
+              <span class="mockup-txn-name">☕ Tim Hortons</span>
+              <span class="mockup-txn-amt neg">-$4.85</span>
+            </div>
+            <div class="mockup-txn">
+              <span class="mockup-txn-name">💰 Payroll Deposit</span>
+              <span class="mockup-txn-amt pos">+$2,140.00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Features ── -->
+  <section class="features">
+    <div class="features-header">
+      <h2>Everything you need to take control of your money.</h2>
+      <p>No subscriptions. No bank login. No complexity.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26Z"/>
+          </svg>
+        </div>
+        <h3>Auto-categorize everything</h3>
+        <p>300+ built-in rules recognize Canadian merchants instantly. Groceries, gas, subscriptions — categorized before you even look.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+          </svg>
+        </div>
+        <h3>Budgets &amp; savings goals</h3>
+        <p>Set per-category spending targets, track savings goals with contributions, and see where every dollar goes with visual progress bars.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
+          </svg>
+        </div>
+        <h3>Net worth tracking</h3>
+        <p>Register chequing, savings, credit, and investment accounts. Watch your net worth grow on a 24-month chart.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <h3>Privacy-first</h3>
+        <p>No bank credentials, no screen scraping, no third-party data sharing. You import CSVs — your financial data stays yours.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Banks ── -->
+  <section class="banks-section">
+    <p class="banks-label">Works with all major Canadian banks</p>
+    <div class="bank-list">
+      <span class="bank-pill">RBC</span>
+      <span class="bank-pill">TD</span>
+      <span class="bank-pill">Tangerine</span>
+      <span class="bank-pill">CIBC</span>
+      <span class="bank-pill">BMO</span>
+      <span class="bank-pill">Scotiabank</span>
+      <span class="bank-pill">Amex</span>
+      <span class="bank-pill">National Bank</span>
+      <span class="bank-pill">Wealthsimple</span>
+      <span class="bank-pill">+ OFX/QFX from any bank</span>
+    </div>
+  </section>
+
+  <!-- ── Bottom CTA ── -->
+  <section class="bottom-cta">
+    <h2>Start tracking your finances in&nbsp;under&nbsp;60&nbsp;seconds.</h2>
+    <p>Import your first CSV and see your spending auto-categorized instantly.</p>
+    <a href="{{ url_for('auth.signup') }}" class="btn-primary">Create free account</a>
+  </section>
+</main>
+
+<footer class="landing-footer">Boreal &copy; 2026</footer>
+
+</body>
+</html>
