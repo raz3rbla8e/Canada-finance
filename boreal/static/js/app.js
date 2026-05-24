@@ -3542,9 +3542,11 @@ async function _renderImport(c) {
     wizard.style.display = 'block';
 
     const bankName = detect.bank || detect.detected_bank || '';
+    const isAutoDetected = detect.auto_detected || false;
+    const detectionInfo = detect.detection || {};
     const previewFd = new FormData();
     previewFd.append('file', file);
-    if (bankName) previewFd.append('bank', bankName);
+    if (bankName && !isAutoDetected) previewFd.append('bank', bankName);
     const prevRes = await authFetch('/api/preview-parse', { method: 'POST', body: previewFd, headers: { 'X-CSRF-Token': _csrfToken } });
     if (!prevRes) { wizard.style.display='none'; showToast('Failed to preview CSV'); return; }
     if (!prevRes.ok) { const err = await prevRes.json().catch(() => ({})); wizard.style.display='none'; showToast(err.error || 'Failed to preview CSV'); return; }
@@ -3557,7 +3559,13 @@ async function _renderImport(c) {
         <h3>CSV import — ${esc(file.name)}</h3>
         <span class="cat-pill">${bankName ? esc(bankName) : 'Unknown bank'}</span>
       </div>
-      ${bankName ? '' : `<div style="margin-bottom:12px">
+      ${isAutoDetected ? `<div style="margin-bottom:12px;padding:10px 14px;background:var(--bg-warn,#fff8e1);border:1px solid var(--line-warn,#ffe082);border-radius:8px;font-size:12px">
+        <div style="font-weight:600;margin-bottom:4px">Auto-detected columns</div>
+        <div style="color:var(--ink-3)">Date: <strong>${esc(detectionInfo.date_col||'?')}</strong> · Description: <strong>${esc(detectionInfo.desc_col||'?')}</strong> · Amount: <strong>${esc(detectionInfo.amount_col || ((detectionInfo.debit_col||'')+'/'+(detectionInfo.credit_col||'')) || '?')}</strong></div>
+        ${(detectionInfo.warnings||[]).length ? `<div style="color:var(--neg,#c62828);margin-top:4px">${(detectionInfo.warnings||[]).map(w => esc(w)).join('<br>')}</div>` : ''}
+        <div style="margin-top:4px;color:var(--ink-3)">Please name your account below and verify the preview looks correct.</div>
+      </div>` : ''}
+      ${bankName && !isAutoDetected ? '' : `<div style="margin-bottom:12px">
         <label style="font-size:12px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:4px">Select bank format</label>
         <select id="wiz-bank" style="padding:6px 10px;border:1px solid var(--line-1);border-radius:8px;background:var(--bg-surface);font-size:13px">
           <option value="">Auto-detect</option>
@@ -3594,7 +3602,10 @@ async function _renderImport(c) {
       const bank = document.getElementById('wiz-bank')?.value || bankName;
       if (bank) importFd.append('bank', bank);
       const acct = document.getElementById('wiz-account')?.value;
-      if (acct) importFd.append('account', acct);
+      if (acct) {
+        importFd.append('account', acct);
+        importFd.append('account_label', acct);
+      }
 
       await _ensureCsrf();
       const res = await authFetch('/api/import', { method: 'POST', body: importFd, headers: { 'X-CSRF-Token': _csrfToken } });
