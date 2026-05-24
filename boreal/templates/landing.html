@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f7f6f3">
+<title>Boreal — Personal finance for Canadians</title>
+<meta name="description" content="Track spending, set budgets, and understand your money across all your Canadian bank accounts. Private, fast, and beautifully simple.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect width='24' height='24' rx='6' fill='%232a5a3f'/%3E%3Cpath d='M12 3 L7 10 L9.5 10 L6.5 14 L9 14 L5 19 L19 19 L15 14 L17.5 14 L14.5 10 L17 10 Z' fill='white' opacity='0.95'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;450;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-app:        oklch(98.8% 0.004 95);
+  --bg-surface:    oklch(100% 0 0);
+  --bg-2:          oklch(96.5% 0.006 95);
+  --line:          oklch(91% 0.008 95);
+  --line-2:        oklch(85% 0.01 95);
+  --ink:           oklch(18% 0.015 240);
+  --ink-2:         oklch(38% 0.012 240);
+  --ink-3:         oklch(52% 0.012 240);
+  --ink-4:         oklch(68% 0.008 240);
+  --accent:        oklch(38% 0.075 165);
+  --accent-2:      oklch(48% 0.09 165);
+  --accent-soft:   oklch(94% 0.025 165);
+  --accent-ink:    oklch(28% 0.06 165);
+  --accent-fg:     oklch(99% 0.005 165);
+  --pos:           oklch(48% 0.13 155);
+  --aurora: linear-gradient(135deg, oklch(42% 0.09 165) 0%, oklch(48% 0.11 200) 45%, oklch(55% 0.13 230) 100%);
+  --font-sans: "Inter Tight","Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --font-display: "Fraunces",Georgia,serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);background:var(--bg-app);color:var(--ink);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+/* NAV */
+.l-nav{display:flex;align-items:center;justify-content:space-between;max-width:960px;margin:0 auto;padding:20px 24px}
+.l-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink)}
+.l-brand .mark{width:28px;height:28px;border-radius:8px;background:var(--aurora);color:white;display:grid;place-items:center;box-shadow:inset 0 1px 0 oklch(100% 0 0 / 0.18),0 1px 2px oklch(0% 0 0 / 0.12)}
+.l-brand .mark svg{width:14px;height:14px}
+.l-brand span{font-size:15px;font-weight:600;letter-spacing:-0.01em}
+.l-nav-links{display:flex;align-items:center;gap:6px}
+.l-nav-links a{font-size:12.5px;font-weight:500;text-decoration:none;padding:6px 14px;border-radius:8px;transition:background .12s,color .12s}
+.l-nav-links .login{color:var(--ink-2)}
+.l-nav-links .login:hover{background:var(--bg-2);color:var(--ink)}
+.l-nav-links .signup{background:var(--ink);color:white}
+.l-nav-links .signup:hover{opacity:.92}
+
+/* HERO */
+.l-hero{max-width:960px;margin:0 auto;padding:80px 24px 60px;text-align:center}
+.l-hero h1{font-family:var(--font-display);font-size:48px;font-weight:500;letter-spacing:-0.03em;line-height:1.1;color:var(--ink);margin-bottom:18px}
+.l-hero h1 .green{color:var(--accent)}
+.l-hero .sub{font-size:16px;color:var(--ink-3);max-width:480px;margin:0 auto 32px;line-height:1.6}
+.l-hero-cta{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.l-hero-cta .primary{display:inline-flex;align-items:center;gap:6px;padding:10px 24px;border-radius:10px;background:var(--ink);color:white;font-size:13px;font-weight:600;text-decoration:none;border:none;transition:opacity .12s}
+.l-hero-cta .primary:hover{opacity:.92}
+.l-hero-cta .secondary{display:inline-flex;align-items:center;gap:6px;padding:10px 24px;border-radius:10px;background:var(--bg-surface);color:var(--ink-2);font-size:13px;font-weight:500;text-decoration:none;border:1px solid var(--line);transition:background .12s,border-color .12s}
+.l-hero-cta .secondary:hover{background:var(--bg-2);border-color:var(--line-2);color:var(--ink)}
+
+/* BANKS STRIP */
+.l-banks{max-width:960px;margin:0 auto;padding:0 24px 64px;text-align:center}
+.l-banks .label{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-4);font-weight:500;margin-bottom:16px}
+.l-banks-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.l-bank-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;background:var(--bg-surface);border:1px solid var(--line);font-size:12px;font-weight:450;color:var(--ink-3)}
+
+/* FEATURES */
+.l-features{max-width:960px;margin:0 auto;padding:0 24px 80px}
+.l-features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.l-feat{background:var(--bg-surface);border:1px solid var(--line);border-radius:14px;padding:24px}
+.l-feat .icon{width:36px;height:36px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;margin-bottom:14px}
+.l-feat .icon svg{width:18px;height:18px}
+.l-feat h3{font-size:14px;font-weight:600;margin-bottom:6px;letter-spacing:-0.01em}
+.l-feat p{font-size:12.5px;color:var(--ink-3);line-height:1.55}
+
+/* FOOTER */
+.l-footer{max-width:960px;margin:0 auto;padding:24px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+.l-footer span{font-size:11.5px;color:var(--ink-4)}
+.l-footer a{font-size:11.5px;color:var(--ink-4);text-decoration:none}
+.l-footer a:hover{color:var(--ink-2)}
+
+/* RESPONSIVE */
+@media(max-width:720px){
+  .l-hero{padding:48px 20px 40px}
+  .l-hero h1{font-size:32px}
+  .l-hero .sub{font-size:14px}
+  .l-features-grid{grid-template-columns:1fr}
+  .l-banks{padding:0 20px 48px}
+  .l-footer{flex-direction:column;gap:8px;text-align:center}
+}
+@media(max-width:480px){
+  .l-hero h1{font-size:28px}
+  .l-hero-cta{flex-direction:column;align-items:center}
+  .l-hero-cta a{width:100%;text-align:center}
+}
+</style>
+</head>
+<body>
+
+<nav class="l-nav">
+  <a href="/" class="l-brand">
+    <div class="mark"><svg viewBox="0 0 512 512" fill="none"><polygon points="256,80 196,180 316,180" fill="currentColor"/><polygon points="256,140 176,260 336,260" fill="currentColor"/><polygon points="256,210 156,340 356,340" fill="currentColor"/><rect x="240" y="340" width="32" height="52" rx="4" fill="currentColor" opacity="0.7"/></svg></div>
+    <span>Boreal</span>
+  </a>
+  <div class="l-nav-links">
+    <a href="{{ url_for('auth.login') }}" class="login">Log in</a>
+    <a href="{{ url_for('auth.signup') }}" class="signup">Sign up free</a>
+  </div>
+</nav>
+
+<section class="l-hero">
+  <h1>Your money,<br><span class="green">clearly understood.</span></h1>
+  <p class="sub">Track spending, set budgets, and see where every dollar goes — across all your Canadian bank accounts. Private and beautifully simple.</p>
+  <div class="l-hero-cta">
+    <a href="{{ url_for('auth.signup') }}" class="primary">Get started — it's free →</a>
+    <a href="{{ url_for('auth.login') }}" class="secondary">I have an account</a>
+  </div>
+</section>
+
+<section class="l-banks">
+  <div class="label">Works with your banks</div>
+  <div class="l-banks-row">
+    <span class="l-bank-chip">RBC</span>
+    <span class="l-bank-chip">TD</span>
+    <span class="l-bank-chip">Tangerine</span>
+    <span class="l-bank-chip">Scotiabank</span>
+    <span class="l-bank-chip">CIBC</span>
+    <span class="l-bank-chip">BMO</span>
+    <span class="l-bank-chip">National Bank</span>
+    <span class="l-bank-chip">Amex</span>
+    <span class="l-bank-chip">Wealthsimple</span>
+  </div>
+</section>
+
+<section class="l-features">
+  <div class="l-features-grid">
+    <div class="l-feat">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4h-4z"/></svg></div>
+      <h3>All accounts, one view</h3>
+      <p>Import CSV exports from any major Canadian bank. See every account's balance, transactions, and trends in a single dashboard.</p>
+    </div>
+    <div class="l-feat">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
+      <h3>Smart categorization</h3>
+      <p>Transactions are automatically categorized. Create custom rules, rename merchants, and fine-tune categories to match how you think about your spending.</p>
+    </div>
+    <div class="l-feat">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+      <h3>Budgets & goals</h3>
+      <p>Set monthly spending limits by category and savings goals. Visual progress bars show exactly where you stand — no surprises at month-end.</p>
+    </div>
+    <div class="l-feat">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+      <h3>Monthly trends</h3>
+      <p>See how your income, spending, and net cash flow change month over month. Spot patterns before they become problems.</p>
+    </div>
+    <div class="l-feat">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+      <h3>Private by design</h3>
+      <p>Your data stays on the server you control. Each user gets an isolated database. No third-party tracking, no data selling, no bank API connections.</p>
+    </div>
+    <div class="l-feat">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg></div>
+      <h3>Made for Canada</h3>
+      <p>Built specifically for Canadian banks and financial institutions. Understands Canadian CSV formats, date conventions, and currency.</p>
+    </div>
+  </div>
+</section>
+
+<footer class="l-footer">
+  <span>Boreal</span>
+  <a href="https://github.com/Razor/Boreal">GitHub</a>
+</footer>
+
+</body>
+</html>

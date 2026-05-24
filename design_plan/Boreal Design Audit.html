@@ -1,0 +1,1247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Boreal — Design Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,400;9..144,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:oklch(98.5% 0.005 95);
+  --bg-2:oklch(95.5% 0.008 95);
+  --surf:oklch(100% 0 0);
+  --line:oklch(90% 0.008 95);
+  --line-2:oklch(82% 0.01 95);
+  --ink:oklch(18% 0.015 240);
+  --ink-2:oklch(38% 0.012 240);
+  --ink-3:oklch(52% 0.012 240);
+  --ink-4:oklch(68% 0.008 240);
+  --accent:oklch(38% 0.075 165);
+  --accent-2:oklch(58% 0.11 165);
+  --accent-soft:oklch(94% 0.025 165);
+  --warn:oklch(58% 0.16 65);
+  --warn-soft:oklch(95% 0.045 80);
+  --pos:oklch(48% 0.13 155);
+  --danger:oklch(58% 0.18 28);
+  --danger-soft:oklch(96% 0.025 28);
+  --boreal:oklch(30% 0.05 165);
+  --aurora:linear-gradient(135deg, oklch(42% 0.09 165) 0%, oklch(48% 0.11 200) 45%, oklch(55% 0.13 230) 100%);
+  --r1:6px; --r2:10px; --r3:14px; --r4:20px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--ink);font-family:"Inter Tight","Inter",-apple-system,sans-serif;font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;letter-spacing:-0.005em}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:.86em;letter-spacing:-0.02em}
+.serif{font-family:"Fraunces",Georgia,serif;font-feature-settings:"ss01" 1}
+a{color:inherit}
+
+/* ── Layout shell ── */
+.shell{display:grid;grid-template-columns:240px minmax(0,1fr);max-width:1320px;margin:0 auto;gap:40px;padding:0 32px}
+@media(max-width:1000px){.shell{grid-template-columns:1fr;gap:8px;padding:0 16px}.toc{display:none}}
+
+/* ── Side TOC ── */
+.toc{position:sticky;top:0;align-self:start;height:100vh;padding:36px 0;overflow-y:auto;font-size:13px;border-right:1px solid var(--line)}
+.toc .toc-brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px;margin-bottom:20px;padding-right:24px}
+.toc .toc-brand .mark{width:24px;height:24px;border-radius:7px;background:var(--aurora);color:white;display:grid;place-items:center}
+.toc h5{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-4);margin:18px 0 6px;font-weight:600}
+.toc a{display:block;padding:4px 12px 4px 0;color:var(--ink-2);text-decoration:none;border-left:2px solid transparent;padding-left:12px;margin-left:-2px;transition:color .12s,border-color .12s}
+.toc a:hover{color:var(--ink);border-left-color:var(--line-2)}
+.toc a.is-current{color:var(--accent);border-left-color:var(--accent);font-weight:500}
+.toc-meta{padding:24px 0 0;border-top:1px solid var(--line);margin-top:24px;font-size:11.5px;color:var(--ink-4);line-height:1.5}
+
+/* ── Content ── */
+.content{padding:48px 0 120px;min-width:0}
+
+/* ── Cover ── */
+.cover{padding:24px 0 56px;border-bottom:1px solid var(--line);margin-bottom:48px}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;padding:5px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em}
+.cover h1{font-family:"Fraunces",Georgia,serif;font-size:68px;line-height:.98;letter-spacing:-0.035em;margin:18px 0 14px;font-weight:500}
+.cover h1 em{font-style:italic;color:var(--accent);font-weight:400}
+.cover .lede{font-size:18px;color:var(--ink-2);max-width:640px;line-height:1.5}
+.cover .meta{display:flex;gap:32px;margin-top:32px;flex-wrap:wrap}
+.cover .meta div{font-size:12px}
+.cover .meta .k{color:var(--ink-4);text-transform:uppercase;letter-spacing:.06em;font-size:10px;margin-bottom:4px;font-weight:600}
+.cover .meta .v{color:var(--ink);font-weight:500}
+
+/* ── Typography ── */
+h2{font-family:"Fraunces",Georgia,serif;font-size:34px;line-height:1.1;letter-spacing:-0.025em;margin:64px 0 6px;font-weight:500}
+h2 .num{font-family:"JetBrains Mono",monospace;font-size:13px;color:var(--ink-4);letter-spacing:0;font-weight:500;display:block;margin-bottom:6px}
+h2.first{margin-top:0}
+h3{font-size:21px;line-height:1.25;letter-spacing:-0.015em;margin:36px 0 10px;font-weight:500}
+h4{font-size:15px;font-weight:600;letter-spacing:-0.005em;margin:18px 0 6px}
+p{margin:0 0 12px;color:var(--ink-2);max-width:72ch}
+p+p{margin-top:-2px}
+strong{color:var(--ink);font-weight:600}
+.tag{display:inline-block;padding:1px 7px;border-radius:5px;font-size:11px;font-weight:600;letter-spacing:.02em;line-height:1.6;background:var(--bg-2);color:var(--ink-2);border:1px solid var(--line)}
+.tag.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.tag.pos{background:oklch(94% 0.04 155);color:var(--pos);border-color:transparent}
+.tag.crit{background:var(--danger-soft);color:var(--danger);border-color:transparent}
+.tag.accent{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.section-lede{font-size:17px;color:var(--ink-2);max-width:72ch;margin-bottom:20px;line-height:1.5}
+
+/* ── Cards ── */
+.card{background:var(--surf);border:1px solid var(--line);border-radius:var(--r3);padding:22px 24px;margin:14px 0}
+.card.tight{padding:14px 18px}
+.card-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0}
+@media(max-width:760px){.card-row{grid-template-columns:1fr}}
+
+/* ── Issue list ── */
+.issue{display:grid;grid-template-columns:90px 1fr;gap:18px;padding:14px 0;border-bottom:1px solid var(--line)}
+.issue:last-child{border-bottom:none}
+.issue .sev{display:flex;flex-direction:column;gap:4px;align-items:flex-start;padding-top:2px}
+.issue .sev .pri{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--ink-4);font-weight:500}
+.issue h4{margin:0 0 4px}
+.issue p{font-size:14px;line-height:1.5;margin:0 0 6px}
+.issue .fix{margin-top:8px;padding:10px 12px;background:var(--bg-2);border-radius:8px;border-left:3px solid var(--accent);font-size:13.5px;color:var(--ink-2);line-height:1.5}
+.issue .fix b{color:var(--ink);font-weight:600}
+
+/* ── Verdict block ── */
+.verdict{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:18px 0 4px}
+@media(max-width:760px){.verdict{grid-template-columns:1fr}}
+.verdict .v-card{background:var(--surf);border:1px solid var(--line);border-radius:var(--r3);padding:16px 18px}
+.verdict .v-card h5{font-size:11px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.verdict .v-card .icon{width:14px;height:14px}
+.verdict .v-card.keep h5{color:var(--pos)}
+.verdict .v-card.change h5{color:var(--warn)}
+.verdict .v-card.fix h5{color:var(--danger)}
+.verdict ul{list-style:none;padding:0;margin:0}
+.verdict li{font-size:13px;color:var(--ink-2);padding:3px 0;line-height:1.45;padding-left:14px;position:relative}
+.verdict li::before{content:"";position:absolute;left:2px;top:9px;width:4px;height:4px;border-radius:50%;background:var(--ink-4)}
+.verdict .keep li::before{background:var(--pos)}
+.verdict .change li::before{background:var(--warn)}
+.verdict .fix li::before{background:var(--danger)}
+
+/* ── Mocks: little inline component previews ── */
+.mock{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r3);padding:18px;margin:14px 0;position:relative}
+.mock .mock-label{position:absolute;top:-8px;left:14px;background:var(--bg);padding:0 6px;font-size:10.5px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+.mock.dual{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:0;background:transparent;border:none}
+.mock.dual .side{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r3);padding:18px;position:relative}
+.mock.dual .side.now{background:oklch(97% 0.01 28);border-color:oklch(88% 0.04 28)}
+.mock.dual .side.next{background:oklch(96% 0.02 165);border-color:oklch(85% 0.04 165)}
+.mock.dual .side h6{position:absolute;top:-7px;left:14px;background:inherit;padding:0 6px;font-size:10.5px;letter-spacing:.08em;font-weight:700;text-transform:uppercase}
+.mock.dual .side.now h6{color:oklch(48% 0.18 28);background:oklch(97% 0.01 28)}
+.mock.dual .side.next h6{color:var(--accent);background:oklch(96% 0.02 165)}
+@media(max-width:680px){.mock.dual{grid-template-columns:1fr}}
+
+/* ── Mini fake widgets used inside mocks ── */
+.m-row{display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 0;border-bottom:1px solid var(--line);color:var(--ink-2)}
+.m-row:last-child{border-bottom:none}
+.m-row .name{flex:1}
+.m-row .amt{font-variant-numeric:tabular-nums;font-weight:500;color:var(--ink)}
+.m-row .dot{width:6px;height:6px;border-radius:2px;background:var(--accent-2);flex-shrink:0}
+.m-pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:var(--surf);border:1px solid var(--line);font-size:11px;color:var(--ink-2);gap:5px}
+.m-pill .px{width:6px;height:6px;border-radius:2px}
+.m-kpi{display:flex;flex-direction:column;gap:2px;padding:10px;background:var(--surf);border:1px solid var(--line);border-radius:8px}
+.m-kpi .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-4);font-weight:600}
+.m-kpi .v{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-0.02em}
+.m-kpi .d{font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.m-kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+
+/* ── Token swatches ── */
+.swatch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin:14px 0}
+.sw{padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surf)}
+.sw .chip{height:42px;border-radius:7px;margin-bottom:8px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.04)}
+.sw .label{font-size:11px;font-weight:600;letter-spacing:.02em}
+.sw .val{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--ink-3);margin-top:1px}
+
+/* ── Roadmap ── */
+.roadmap-tbl{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:12px}
+.roadmap-tbl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-4);font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line-2);background:var(--bg-2)}
+.roadmap-tbl td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+.roadmap-tbl td:first-child{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--ink-3);width:48px}
+.roadmap-tbl td.area{color:var(--ink);font-weight:500;width:160px}
+.roadmap-tbl td .effort{display:inline-block;padding:1px 7px;border-radius:5px;font-size:11px;background:var(--bg-2);color:var(--ink-3);border:1px solid var(--line)}
+.roadmap-tbl td .effort.s{background:oklch(94% 0.04 155);color:var(--pos);border:none}
+.roadmap-tbl td .effort.m{background:var(--warn-soft);color:var(--warn);border:none}
+.roadmap-tbl td .effort.l{background:var(--danger-soft);color:var(--danger);border:none}
+
+/* ── Pull quotes ── */
+.pull{border-left:3px solid var(--accent);padding:6px 0 6px 18px;margin:18px 0;font-family:"Fraunces",Georgia,serif;font-size:20px;line-height:1.35;color:var(--ink);font-weight:500;letter-spacing:-0.01em;max-width:600px}
+.pull em{color:var(--accent);font-style:italic}
+
+/* ── Inline phone mock ── */
+.phone-mock{width:240px;background:#0a0d11;border-radius:30px;padding:8px;box-shadow:0 12px 48px oklch(0% 0 0 / .15)}
+.phone-mock .screen{background:var(--surf);border-radius:22px;padding:18px 14px;min-height:380px;font-size:11px}
+
+/* ── Section divider ── */
+hr.div{border:none;border-top:1px solid var(--line);margin:48px 0 0}
+
+/* ── Code spans ── */
+code{font-family:"JetBrains Mono",monospace;font-size:.86em;padding:1px 5px;background:var(--bg-2);border:1px solid var(--line);border-radius:4px;color:var(--ink-2)}
+
+/* ── Bullets ── */
+ul.bul{padding-left:18px;margin:6px 0 14px}
+ul.bul li{margin-bottom:4px;color:var(--ink-2);max-width:72ch}
+ul.bul li strong{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+<!-- ────────────── TOC ────────────── -->
+<aside class="toc">
+  <div class="toc-brand">
+    <div class="mark">
+      <svg width="14" height="14" viewBox="0 0 512 512" fill="none">
+        <polygon points="256,80 196,180 316,180" fill="currentColor"/>
+        <polygon points="256,140 176,260 336,260" fill="currentColor"/>
+        <polygon points="256,210 156,340 356,340" fill="currentColor"/>
+      </svg>
+    </div>
+    Boreal Audit
+  </div>
+
+  <h5>Overview</h5>
+  <a href="#summary">Executive summary</a>
+  <a href="#design-system">Design system health</a>
+
+  <h5>Marketing &amp; auth</h5>
+  <a href="#landing">Landing page</a>
+  <a href="#auth">Login / signup / reset</a>
+  <a href="#onboarding">Onboarding</a>
+
+  <h5>App shell</h5>
+  <a href="#shell">Sidebar &amp; topbar</a>
+  <a href="#fab">FAB &amp; toasts</a>
+
+  <h5>Core views</h5>
+  <a href="#dashboard">Dashboard</a>
+  <a href="#transactions">Transactions</a>
+  <a href="#budgets">Budgets</a>
+  <a href="#accounts">Accounts</a>
+  <a href="#year">Year review</a>
+
+  <h5>Automation</h5>
+  <a href="#import">Import &amp; CSV wizard</a>
+  <a href="#schedules">Scheduled</a>
+  <a href="#rules">Rules</a>
+
+  <h5>System</h5>
+  <a href="#settings">Settings</a>
+  <a href="#admin">Admin panel</a>
+
+  <h5>Cross-cutting</h5>
+  <a href="#modals">Modals &amp; drawers</a>
+  <a href="#mobile">Mobile audit</a>
+
+  <h5>Roadmap</h5>
+  <a href="#roadmap">Prioritized fixes</a>
+
+  <div class="toc-meta">
+    Reviewed against<br>
+    <span class="mono" style="color:var(--ink-2)">raz3rbla8e/Boreal@master</span><br>
+    on May 24, 2026
+  </div>
+</aside>
+
+<!-- ────────────── CONTENT ────────────── -->
+<main class="content">
+
+  <!-- ────── COVER ────── -->
+  <header class="cover">
+    <span class="eyebrow">Design audit · v1</span>
+    <h1>Boreal is <em>quietly excellent</em> — but it's getting in its own way.</h1>
+    <p class="lede">
+      You've built a finance app with real visual taste: oklch tokens, a coherent nordic-calm palette, tabular numerics, an aurora gradient that earns its keep. But the app is also <em>overgrown</em>. Multiple "v2" components live next to v1 leftovers, the dashboard tries to do nine things at once, and the marketing/in-app aesthetics speak two different languages. This audit walks every surface and tells you what to keep, what to trim, and what to redesign.
+    </p>
+    <div class="meta">
+      <div><div class="k">Scope</div><div class="v">All 13 views + auth + admin</div></div>
+      <div><div class="k">Method</div><div class="v">Code &amp; templates review</div></div>
+      <div><div class="k">Overall grade</div><div class="v">B − &nbsp;<span style="color:var(--ink-3);font-weight:400">solid bones, fixable issues</span></div></div>
+      <div><div class="k">Critical fixes</div><div class="v">7</div></div>
+    </div>
+  </header>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 1.  EXECUTIVE SUMMARY                                -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="summary" class="first"><span class="num">01 — Overview</span>Executive summary</h2>
+
+  <p class="section-lede">If you do nothing else from this audit, do these seven things. They're cheap, they compound, and they fix the loudest problems first.</p>
+
+  <ol class="bul" style="padding-left:0;list-style:none;counter-reset:item">
+    <li style="counter-increment:item;padding-left:36px;position:relative;margin-bottom:14px"><span style="position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--bg);font-size:12px;font-weight:600;display:grid;place-items:center;font-family:'JetBrains Mono',monospace">1</span>
+    <strong>Pick one identity.</strong> The landing page is dark/nocturnal and the app is light/paper. They share a logo and not much else. Either ship a light landing that previews the actual product, or ship a dark app theme that matches the marketing — but stop selling people one product and delivering another.</li>
+
+    <li style="counter-increment:item;padding-left:36px;position:relative;margin-bottom:14px"><span style="position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--bg);font-size:12px;font-weight:600;display:grid;place-items:center;font-family:'JetBrains Mono',monospace">2</span>
+    <strong>Cut the dashboard in half.</strong> Today it's: headline → insights → aurora hero → 3 flow cards → net worth chart → spend doughnut → budgets → accounts → recurring → goals → 12-month bars → forecast chart. Twelve modules competing for a glance. Pick a primary KPI (net worth or this-month savings, not both), demote everything else into a second-tier grid, and move recurring/forecast/goals to their own sub-tab.</li>
+
+    <li style="counter-increment:item;padding-left:36px;position:relative;margin-bottom:14px"><span style="position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--bg);font-size:12px;font-weight:600;display:grid;place-items:center;font-family:'JetBrains Mono',monospace">3</span>
+    <strong>Kill the aurora gradient in the app (keep it on the logo).</strong> Right now the dashboard hero, the empty-states, and the brand mark all use the same blue→teal→green gradient. It's loud, it doesn't match the rest of the calm light theme, and it makes net worth feel like a marketing banner. Replace with a flat surface and a single accent line; reserve the aurora for the 28-pixel logo mark and onboarding only.</li>
+
+    <li style="counter-increment:item;padding-left:36px;position:relative;margin-bottom:14px"><span style="position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--bg);font-size:12px;font-weight:600;display:grid;place-items:center;font-family:'JetBrains Mono',monospace">4</span>
+    <strong>Consolidate the "v2" components.</strong> Your CSS has <code>.kpi</code> and <code>.dash-flow .f-card</code>; <code>.recur-row</code> and <code>.recur-v2</code>; <code>.budget-v2</code> with no v1 to compare; <code>.insights</code> and <code>.insights-v2</code>. Ship one canonical component for each pattern and delete the rest. This is the single biggest source of design entropy in the codebase.</li>
+
+    <li style="counter-increment:item;padding-left:36px;position:relative;margin-bottom:14px"><span style="position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--bg);font-size:12px;font-weight:600;display:grid;place-items:center;font-family:'JetBrains Mono',monospace">5</span>
+    <strong>Re-do the sidebar for density.</strong> Eight nav items + a theme toggle + a user row at 13.5px is borderline cluttered. Group "Workspace" and "Automate" works; merge Year review into Dashboard as a tab, and move Rules into Import as a secondary tab. Targets: 5 top-level items, one settings slot.</li>
+
+    <li style="counter-increment:item;padding-left:36px;position:relative;margin-bottom:14px"><span style="position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--bg);font-size:12px;font-weight:600;display:grid;place-items:center;font-family:'JetBrains Mono',monospace">6</span>
+    <strong>Fix copywriting voice.</strong> The landing is confident ("The free personal finance app built for Canadians"), the app is hesitant ("No goals yet", "Not enough data yet"). Empty states should sell the next action, not describe absence. Examples below.</li>
+
+    <li style="counter-increment:item;padding-left:36px;position:relative;margin-bottom:14px"><span style="position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--bg);font-size:12px;font-weight:600;display:grid;place-items:center;font-family:'JetBrains Mono',monospace">7</span>
+    <strong>Build a proper mobile shell.</strong> The 1100px breakpoint collapses the sidebar to a 64px icon rail, but the topbar still has a 240px search input, a 110px month chip, and a notification bell — they overflow. Below 720px there's no mobile nav at all. Implement a bottom tab bar at &lt;720px and turn the topbar into a sticky page header.</li>
+  </ol>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 2.  DESIGN SYSTEM HEALTH                             -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="design-system"><span class="num">02 — Foundations</span>Design system health</h2>
+  <p class="section-lede">Your tokens are tasteful; your components are over-replicated. The system has the bones to be a true product DNA — it just needs an editor.</p>
+
+  <h3>Color tokens — keep</h3>
+  <p>The oklch base is the right call: perceptually-uniform, gracefully translates light→dark, and lets you compose tints with <code>color-mix()</code> instead of hand-tuning. The palette is anchored on three notes that work together:</p>
+
+  <div class="swatch-grid">
+    <div class="sw"><div class="chip" style="background:oklch(38% 0.075 165)"></div><div class="label">accent — boreal pine</div><div class="val">oklch(38% .075 165)</div></div>
+    <div class="sw"><div class="chip" style="background:oklch(48% 0.13 155)"></div><div class="label">pos — money in</div><div class="val">oklch(48% .13 155)</div></div>
+    <div class="sw"><div class="chip" style="background:oklch(58% 0.18 28)"></div><div class="label">danger</div><div class="val">oklch(58% .18 28)</div></div>
+    <div class="sw"><div class="chip" style="background:oklch(62% 0.16 65)"></div><div class="label">warn</div><div class="val">oklch(62% .16 65)</div></div>
+    <div class="sw"><div class="chip" style="background:oklch(18% 0.015 240)"></div><div class="label">ink-1</div><div class="val">oklch(18% .015 240)</div></div>
+    <div class="sw"><div class="chip" style="background:oklch(98.5% 0.003 95);border:1px solid var(--line)"></div><div class="label">bg-app</div><div class="val">oklch(98.5% .003 95)</div></div>
+  </div>
+
+  <h3>Color tokens — fix</h3>
+  <div class="issue">
+    <div class="sev"><span class="tag warn">Polish</span><span class="pri">DS-01</span></div>
+    <div>
+      <h4>The dark-mode accent is too saturated</h4>
+      <p>Light mode accent is <code>oklch(38% .075 165)</code> — a confident, muted pine. Dark mode jumps to <code>oklch(72% .13 165)</code> — almost a neon mint, especially against the deep navy bg. It makes the dark theme feel "vibrant SaaS" while light feels "considered tool".</p>
+      <div class="fix"><b>Fix.</b> Dial dark accent to <code>oklch(68% .09 165)</code>. Keep the chroma close to light mode so the two themes feel like the same product.</div>
+    </div>
+  </div>
+
+  <div class="issue">
+    <div class="sev"><span class="tag warn">Polish</span><span class="pri">DS-02</span></div>
+    <div>
+      <h4><code>--neg</code> is named negatively but used for expenses (which aren't bad)</h4>
+      <p>You have <code>--neg: oklch(48% .005 240)</code> — a near-black neutral — that you apply to expense amounts. Semantically that's <em>fine</em> (expenses shouldn't blare red), but the variable name says "negative" which suggests "wrong". And then expense amounts in the table use <code>--ink-1</code> directly, not <code>--neg</code>, so the token is half-orphaned.</p>
+      <div class="fix"><b>Fix.</b> Rename to <code>--money-out</code>; rename <code>--pos</code> to <code>--money-in</code>. Use them consistently everywhere amounts appear (table, drawer, dashboard).</div>
+    </div>
+  </div>
+
+  <h3>Type — keep, but tune</h3>
+  <p>Inter Tight + JetBrains Mono is a strong pair: Inter Tight's negative letterspacing makes large numbers feel typographic instead of spreadsheet-ish, and the mono is reserved appropriately for keyboard shortcuts and dates. <strong>What's missing</strong> is a display face for moments where you want voice — the dashboard headline ("You saved $1,240 · 26% savings rate"), empty-state titles, the year-review hero. Today those use the same Inter Tight 500 as nav, which flattens the hierarchy.</p>
+
+  <div class="card">
+    <h4 style="margin-top:0">Proposed type scale</h4>
+    <div style="display:grid;grid-template-columns:160px 1fr;gap:10px 24px;align-items:baseline">
+      <span class="mono" style="color:var(--ink-4);font-size:11px">display / 48 / 500</span>
+      <span class="serif" style="font-size:36px;letter-spacing:-0.03em;line-height:1.05;font-weight:500">You saved $1,240</span>
+
+      <span class="mono" style="color:var(--ink-4);font-size:11px">h1-page / 26 / 600</span>
+      <span style="font-size:22px;font-weight:600;letter-spacing:-0.02em">Transactions</span>
+
+      <span class="mono" style="color:var(--ink-4);font-size:11px">h2-card / 13 / 500 / case</span>
+      <span style="font-size:13px;font-weight:500;color:var(--ink-2)">Where it went</span>
+
+      <span class="mono" style="color:var(--ink-4);font-size:11px">body / 13.5 / 450</span>
+      <span style="font-size:13.5px;font-weight:450">Three groceries trips at Loblaws this week.</span>
+
+      <span class="mono" style="color:var(--ink-4);font-size:11px">num-kpi / 28 / 500 / tab</span>
+      <span style="font-size:28px;font-weight:500;letter-spacing:-0.025em;font-variant-numeric:tabular-nums">$12,480.20</span>
+
+      <span class="mono" style="color:var(--ink-4);font-size:11px">label / 11 / 600 / upper</span>
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)">Income</span>
+    </div>
+  </div>
+  <p>Add <strong>Fraunces</strong> (or any modern serif like Newsreader/Source Serif) as your display face — used <em>only</em> for: dashboard headline, year-review title, onboarding, empty-state titles, and the landing H1. This gives Boreal a voice that distinguishes it from the dozens of YNAB/Copilot/Monarch-style apps.</p>
+
+  <h3>Spacing &amp; radii — keep</h3>
+  <p>Your ladder (<code>6/10/14/20</code> for radii, padding generally <code>16/20/24</code>) is consistent and pleasant. No notes.</p>
+
+  <h3>Components — the biggest debt</h3>
+  <p>You have <em>three</em> overlapping KPI patterns, <em>two</em> recurring-row patterns, <em>two</em> insights patterns. Audit them and pick one:</p>
+
+  <div class="mock dual">
+    <div class="side now">
+      <h6>Currently live</h6>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
+        <div class="m-kpi"><div class="k">Income</div><div class="v">$4,280</div><div class="d">+8%</div></div>
+        <div class="m-kpi"><div class="k">Expenses</div><div class="v">$3,150</div><div class="d">−2%</div></div>
+        <div class="m-kpi"><div class="k">Net</div><div class="v" style="color:var(--pos)">+$1,130</div><div class="d">26%</div></div>
+      </div>
+      <div style="background:var(--aurora);color:white;padding:14px;border-radius:10px;margin-bottom:10px">
+        <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;opacity:.7">Net worth · May</div>
+        <div style="font-size:24px;font-weight:500;letter-spacing:-0.02em;font-variant-numeric:tabular-nums">$42,180</div>
+      </div>
+      <div style="background:var(--surf);border:1px solid var(--line);padding:8px 10px;border-radius:8px;font-size:11px">
+        <div style="color:var(--ink-4);font-size:9.5px;text-transform:uppercase;letter-spacing:.06em">In</div>
+        <div style="font-size:18px;font-weight:500;color:var(--pos)">$4,280</div>
+      </div>
+      <div style="font-size:11px;color:var(--danger);margin-top:8px"><b>Problem:</b> three KPI styles in one view. The user has to learn three "this is a number" shapes.</div>
+    </div>
+    <div class="side next">
+      <h6>Proposed</h6>
+      <div style="background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:8px">
+        <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-4);font-weight:600">Net worth — May 2026</div>
+        <div style="font-size:30px;font-weight:500;letter-spacing:-0.025em;font-variant-numeric:tabular-nums;margin-top:2px">$42,180<span style="font-size:18px;color:var(--ink-3)">.45</span></div>
+        <div style="font-size:11.5px;color:var(--ink-3);margin-top:2px"><span style="color:var(--pos);font-weight:500">+$1,260</span> · +3.1% vs Apr</div>
+        <svg viewBox="0 0 200 32" style="width:100%;height:32px;margin-top:6px"><polyline fill="none" stroke="var(--accent)" stroke-width="1.5" points="0,28 25,24 50,22 75,20 100,16 125,14 150,10 175,8 200,4"/></svg>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+        <div class="m-kpi" style="padding:8px"><div class="k">In</div><div class="v" style="font-size:15px;color:var(--pos)">$4,280</div></div>
+        <div class="m-kpi" style="padding:8px"><div class="k">Out</div><div class="v" style="font-size:15px">$3,150</div></div>
+        <div class="m-kpi" style="padding:8px"><div class="k">Recurring</div><div class="v" style="font-size:15px">$640</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--pos);margin-top:8px"><b>Fix.</b> One hero KPI (the most important number), three identically-styled supporting metrics. Same component, no aurora.</div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 3.  LANDING PAGE                                     -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="landing"><span class="num">03 — Marketing</span>Landing page</h2>
+  <p class="section-lede"><code>boreal/templates/landing.html</code> · Dark theme, hero with mockup, four feature cards, bank pills, CTA.</p>
+
+  <div class="verdict">
+    <div class="v-card keep">
+      <h5>Keep</h5>
+      <ul>
+        <li>The hero copy ("built for Canadians") is the differentiator — lean into it</li>
+        <li>The dashboard mockup is a smart proof-of-concept, not stock art</li>
+        <li>Bank pills as social proof is the right pattern</li>
+        <li>Two-CTA hero (demo + signup) reduces commitment friction</li>
+      </ul>
+    </div>
+    <div class="v-card change">
+      <h5>Change</h5>
+      <ul>
+        <li>Dark theme contradicts the light-by-default app</li>
+        <li>Hero mockup is too small (320px wide) to read</li>
+        <li>Generic feature icons (star, target, shield) — could be product UI</li>
+        <li>No "what makes this different from Monarch / Copilot / Mint" comparison</li>
+      </ul>
+    </div>
+    <div class="v-card fix">
+      <h5>Fix</h5>
+      <ul>
+        <li>"Privacy-first" card claims data stays yours, but the app ships to Railway by default</li>
+        <li>Bank pills include "+ OFX/QFX from any bank" — long pill stands out awkwardly</li>
+        <li>No screenshots of actual product views (only the hero mockup)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Specific issues</h3>
+
+  <div class="issue">
+    <div class="sev"><span class="tag crit">Critical</span><span class="pri">L-01</span></div>
+    <div>
+      <h4>Marketing and product use different visual languages</h4>
+      <p>The landing is forest-dark, mockup-as-window-chrome, marketing-SaaS in feel. The actual app is paper-light, sans-chrome, productivity-tool in feel. A visitor signs up expecting the dark hero experience and lands in something that looks unrelated.</p>
+      <div class="fix"><b>Fix.</b> Re-shoot the landing in the light theme. Make the hero "preview" actually look like the app: same sidebar, same KPI cards, same fonts. Sell what you ship.</div>
+    </div>
+  </div>
+
+  <div class="issue">
+    <div class="sev"><span class="tag warn">High</span><span class="pri">L-02</span></div>
+    <div>
+      <h4>Feature grid is generic</h4>
+      <p>"Auto-categorize everything / Budgets &amp; goals / Net worth / Privacy-first" — these are table-stakes claims with abstract icons. Anyone reading them has seen them on five other apps this week.</p>
+      <div class="fix"><b>Fix.</b> Replace abstract icons with cropped screenshots of the actual feature. "Auto-categorize" → show a row going from <span class="tag">UNCATEGORIZED</span> → <span class="tag pos">Groceries</span>. "Net worth" → show the line chart. This converts.</div>
+    </div>
+  </div>
+
+  <div class="issue">
+    <div class="sev"><span class="tag warn">High</span><span class="pri">L-03</span></div>
+    <div>
+      <h4>Missing differentiation section</h4>
+      <p>Your README has the best sales pitch in the repo: "Zero cost. Fully local. No subscriptions, no cloud, no ads, no tracking." That's not on the landing page.</p>
+      <div class="fix"><b>Fix.</b> Add a comparison section between Features and Banks: <strong>Boreal vs Monarch ($14.99/mo) vs Copilot ($13/mo) vs Mint (sunset)</strong>. Three columns. Price · cloud-required · CSV import · Canadian banks. You win every row.</div>
+    </div>
+  </div>
+
+  <div class="issue">
+    <div class="sev"><span class="tag">Med</span><span class="pri">L-04</span></div>
+    <div>
+      <h4>The "browser chrome" mockup is dated</h4>
+      <p>Three traffic-light dots is the most-overused mockup frame on the internet (every YC company since 2018). It's also misleading — Boreal is a web app, not a desktop app.</p>
+      <div class="fix"><b>Fix.</b> Either ditch the chrome entirely and let the screenshot bleed, or use a tilted "screen at an angle" treatment to make it feel like a product not a website screenshot.</div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 4.  AUTH                                             -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="auth"><span class="num">04 — Auth</span>Login, signup, reset, forgot</h2>
+  <p class="section-lede">Four templates — <code>login.html</code>, <code>forgot_password.html</code>, <code>reset_password.html</code>, <code>auth_message.html</code> — each with its own self-contained <code>&lt;style&gt;</code> block. They're functional, identical-feeling, dark-themed.</p>
+
+  <div class="verdict">
+    <div class="v-card keep">
+      <h5>Keep</h5>
+      <ul>
+        <li>380px max-width card centered on viewport — right scale</li>
+        <li>Logo above card establishes brand</li>
+        <li>"Back to home" link is courteous</li>
+      </ul>
+    </div>
+    <div class="v-card change">
+      <h5>Change</h5>
+      <ul>
+        <li>Dark theme — same issue as landing</li>
+        <li>Each file inlines the same 30 lines of CSS — extract to <code>auth.css</code></li>
+        <li>"Welcome back" + "Log in to your account" is redundant; pick one</li>
+      </ul>
+    </div>
+    <div class="v-card fix">
+      <h5>Fix</h5>
+      <ul>
+        <li>No inline validation (password length, email shape)</li>
+        <li>No password visibility toggle (eye icon)</li>
+        <li>Error state is just a red banner — no field-level highlighting</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="mock dual">
+    <div class="side now">
+      <h6>Current login</h6>
+      <div style="background:#13191f;color:#e6e6e6;padding:18px;border-radius:12px">
+        <div style="text-align:center;margin-bottom:18px">
+          <div style="width:24px;height:24px;background:var(--accent-2);border-radius:6px;margin:0 auto 6px"></div>
+          <div style="font-size:14px;font-weight:600">Boreal</div>
+        </div>
+        <div style="background:#1c232a;border-radius:10px;padding:18px">
+          <div style="font-size:13px;font-weight:600">Welcome back</div>
+          <div style="font-size:11px;color:#888;margin-bottom:12px">Log in to your account</div>
+          <div style="font-size:10px;color:#aaa;margin-bottom:3px">Email</div>
+          <div style="background:#13191f;border:1px solid #2a3138;border-radius:7px;padding:6px 9px;font-size:10px;color:#777;margin-bottom:10px"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="6f16001a2f0a170e021f030a410c0002">[email&#160;protected]</a></div>
+          <div style="font-size:10px;color:#aaa;margin-bottom:3px">Password</div>
+          <div style="background:#13191f;border:1px solid #2a3138;border-radius:7px;padding:6px 9px;font-size:10px;color:#777;margin-bottom:12px">••••••••</div>
+          <div style="background:var(--accent-2);color:white;padding:7px;border-radius:7px;font-size:11px;text-align:center;font-weight:600">Log in</div>
+        </div>
+      </div>
+    </div>
+    <div class="side next">
+      <h6>Proposed</h6>
+      <div style="background:var(--surf);padding:18px;border-radius:12px;border:1px solid var(--line)">
+        <div style="margin-bottom:18px">
+          <div style="display:flex;align-items:center;gap:8px"><div style="width:22px;height:22px;background:var(--aurora);border-radius:6px"></div><div style="font-size:14px;font-weight:600">Boreal</div></div>
+        </div>
+        <div class="serif" style="font-size:22px;letter-spacing:-0.02em;margin-bottom:18px;font-weight:500">Welcome back.</div>
+        <div style="font-size:10px;color:var(--ink-3);margin-bottom:3px;font-weight:500">Email</div>
+        <div style="background:var(--bg-2);border:1px solid var(--line);border-radius:7px;padding:7px 9px;font-size:11px;color:var(--ink);margin-bottom:10px"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="4e3c2f34342f3f0e2b362f233e222b602d2123">[email&#160;protected]</a></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:10px;margin-bottom:3px">
+          <span style="color:var(--ink-3);font-weight:500">Password</span>
+          <a style="color:var(--accent);font-size:10px;text-decoration:none">Forgot?</a>
+        </div>
+        <div style="background:var(--bg-2);border:1px solid var(--line);border-radius:7px;padding:7px 9px;font-size:11px;color:var(--ink);margin-bottom:12px;display:flex;justify-content:space-between">
+          <span>••••••••</span>
+          <span style="opacity:.4">👁</span>
+        </div>
+        <div style="background:var(--ink);color:white;padding:8px;border-radius:7px;font-size:11px;text-align:center;font-weight:600">Continue →</div>
+        <div style="text-align:center;font-size:10px;color:var(--ink-3);margin-top:14px">No account? <span style="color:var(--accent);font-weight:500">Sign up free</span></div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="bul">
+    <li><strong>Move "Forgot password?" inline</strong> with the password label — it's the standard pattern and removes the awkward "Welcome back / Log in to your account / Forgot password / divider / Sign up" stack.</li>
+    <li><strong>Drop the in-card subtitle.</strong> The H2 "Welcome back" is enough; "Log in to your account" doesn't add information.</li>
+    <li><strong>Add an eye toggle</strong> for the password field. Single most common usability friction point in auth.</li>
+    <li><strong>One file, one stylesheet.</strong> Move the inline <code>&lt;style&gt;</code> blocks into <code>boreal/static/css/auth.css</code>. Four templates × 30 lines of CSS = 120 lines of drift waiting to happen.</li>
+  </ul>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 5.  ONBOARDING                                       -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="onboarding"><span class="num">05 — First run</span>Onboarding</h2>
+  <p class="section-lede">Renders when <code>!db_exists</code>. A centered card with three options: <em>Import a CSV</em>, <em>Try sample data</em>, <em>Start blank</em>.</p>
+
+  <p>This is one of the better-designed surfaces in the app. The card grid is intentional, the copy is friendly, the aurora brand mark anchors it. Two notes:</p>
+
+  <ul class="bul">
+    <li><strong>"Start blank" is a trap door.</strong> If a user picks it, they land on the dashboard which then shows another empty state telling them to import. Two empty states in a row is bad. Either remove this option (and let users add manual transactions after picking sample data), or replace it with "Set up my accounts" which takes them directly to the accounts settings — a more productive blank-start than the dashboard.</li>
+    <li><strong>The headline is generic.</strong> "Welcome to Boreal" is a missed opportunity for voice. Try: <em>"Let's see where the money actually went."</em> — same sentiment, much more memorable.</li>
+    <li><strong>Show one preview screenshot.</strong> Below the three cards, a single 50% width screenshot of the dashboard (the sample-data one) would dramatically lower the activation cost for "Try sample data".</li>
+  </ul>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 6.  APP SHELL — sidebar + topbar                     -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="shell"><span class="num">06 — Chrome</span>Sidebar &amp; topbar</h2>
+  <p class="section-lede">The shell holds: 8 nav items + theme toggle + user row in the sidebar; breadcrumb + month chip + reset + search + notif bell in the topbar.</p>
+
+  <div class="verdict">
+    <div class="v-card keep">
+      <h5>Keep</h5>
+      <ul>
+        <li>Sectioned sidebar ("Workspace" / "Automate") is good IA</li>
+        <li>Live counts on Transactions/Schedules/Rules are useful at a glance</li>
+        <li>Sidebar gracefully collapses to icon rail at &lt;1100px</li>
+        <li>Sticky topbar with backdrop blur — feels modern</li>
+        <li>Month chip with prev/next + click-to-pick is a smart pattern</li>
+      </ul>
+    </div>
+    <div class="v-card change">
+      <h5>Change</h5>
+      <ul>
+        <li>8 top-level items is too many; collapse to 5</li>
+        <li>Theme toggle in the sidebar is unusual — most apps put it in user menu</li>
+        <li>Topbar breadcrumb just says "Dashboard" — no actual breadcrumb behavior</li>
+        <li>Notification bell with no real notifications system feels like SaaS theater</li>
+      </ul>
+    </div>
+    <div class="v-card fix">
+      <h5>Fix</h5>
+      <ul>
+        <li>Month chip lives on every view — but Settings/Rules/Import have no month concept</li>
+        <li>Search input is 240px fixed — it overflows at &lt;1100px</li>
+        <li>"⌘K" hint is on the search but ⌘K isn't bound anywhere visible — verify it works</li>
+        <li>User-row "B" avatar default looks like a placeholder forever</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Sidebar — proposed restructure</h3>
+
+  <div class="mock dual">
+    <div class="side now">
+      <h6>Now — 8 items + toggle + user</h6>
+      <div style="font-size:11px">
+        <div style="color:var(--ink-4);text-transform:uppercase;letter-spacing:.08em;font-size:9px;margin:8px 0 4px">Workspace</div>
+        <div style="padding:5px 0;font-weight:500">▦ Dashboard</div>
+        <div style="padding:5px 0">≡ Transactions <span style="float:right;color:var(--ink-4)">142</span></div>
+        <div style="padding:5px 0">◎ Budgets</div>
+        <div style="padding:5px 0">▭ Accounts</div>
+        <div style="padding:5px 0">▥ Year review</div>
+        <div style="color:var(--ink-4);text-transform:uppercase;letter-spacing:.08em;font-size:9px;margin:8px 0 4px">Automate</div>
+        <div style="padding:5px 0">↥ Import</div>
+        <div style="padding:5px 0">◷ Scheduled <span style="float:right;color:var(--ink-4)">4</span></div>
+        <div style="padding:5px 0">≣ Rules <span style="float:right;color:var(--ink-4)">12</span></div>
+        <div style="padding:5px 0">⚙ Settings</div>
+        <div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px">
+          <div style="padding:5px 0">☾ Dark mode</div>
+          <div style="padding:5px 0;display:flex;align-items:center;gap:6px"><div style="width:18px;height:18px;background:var(--accent-soft);border-radius:5px;color:var(--accent);font-size:9px;display:grid;place-items:center;font-weight:600">B</div>Boreal</div>
+        </div>
+      </div>
+    </div>
+    <div class="side next">
+      <h6>Proposed — 5 items + user menu</h6>
+      <div style="font-size:11px">
+        <div style="padding:6px 8px;background:var(--surf);border:1px solid var(--line);border-radius:6px;margin-bottom:2px;font-weight:500">▦ Overview</div>
+        <div style="padding:6px 8px">≡ Transactions <span style="float:right;color:var(--ink-4)">142</span></div>
+        <div style="padding:6px 8px">◎ Budgets &amp; goals</div>
+        <div style="padding:6px 8px">▭ Accounts</div>
+        <div style="padding:6px 8px">↥ Import <span style="float:right;color:var(--ink-4)">12</span></div>
+        <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
+          <div style="padding:6px 8px;color:var(--ink-3)">⚙ Settings</div>
+          <div style="padding:6px 8px;color:var(--ink-3);display:flex;align-items:center;gap:6px;cursor:pointer"><div style="width:20px;height:20px;background:var(--accent-soft);border-radius:5px;color:var(--accent);font-size:10px;display:grid;place-items:center;font-weight:600">R</div>Razzaq <span style="margin-left:auto;color:var(--ink-4)">⌄</span></div>
+        </div>
+      </div>
+      <div style="font-size:10.5px;color:var(--ink-3);margin-top:14px;line-height:1.5">
+        <b>Merge:</b> Year review → Overview tab "Year".<br>
+        <b>Merge:</b> Rules &amp; Scheduled → Import sub-tabs.<br>
+        <b>Move:</b> Theme toggle into user-menu popup.
+      </div>
+    </div>
+  </div>
+
+  <h3>Topbar — be context-aware</h3>
+  <p>Right now the topbar shows the month chip on every view even though only Dashboard, Transactions, Budgets, and Year actually filter by month. On Settings or Rules the chip is dead UI. The CSS already has <code>.topbar.no-month</code> — use it.</p>
+  <ul class="bul">
+    <li><strong>Hide the month chip</strong> on Settings, Accounts, Import, Schedules, Rules — there's no monthly context there. Free up that real estate for view-specific actions.</li>
+    <li><strong>Promote search to a global command palette</strong> (you have one — ⌘K). On the topbar, the searchbox + the kbd hint should look more clearly clickable; the current readonly input feels broken.</li>
+    <li><strong>Lose the notifications bell</strong> unless you have a real notifications system. A bell with no badge is anxiety-inducing chrome.</li>
+    <li><strong>Add a contextual action button</strong> on the right — "Add transaction" on the Dashboard/Transactions views, "Add account" on Accounts, "Import file" on Import. Currently this lives inside each page header which means it shifts position as you scroll.</li>
+  </ul>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 7.  FAB & TOASTS                                     -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="fab"><span class="num">07 — Chrome</span>FAB, undo toast, bulk dock</h2>
+
+  <p>You have three competing bottom-of-screen surfaces:</p>
+  <ul class="bul">
+    <li><strong>FAB</strong> (mobile only, 48px, bottom-right, ink-1 colored "+") — fine, conventional.</li>
+    <li><strong>Undo toast</strong> (centered, pill-shaped, ink-1 background, "Undo" button + dismiss) — well-designed.</li>
+    <li><strong>Bulk dock</strong> (centered, pill-shaped, ink-1 background, "N selected" + actions) — also well-designed, but visually <em>identical</em> to the undo toast.</li>
+  </ul>
+
+  <p>If a user deletes 5 transactions while having them selected, both show up — same color, same position, same shape, and the CSS even has a special <code>:has()</code> rule to push the toast up when the dock is open. That's a smell.</p>
+
+  <div class="card">
+    <h4 style="margin-top:0">Recommendation</h4>
+    <p style="font-size:13.5px;margin:0">Give them distinct identities: <strong>bulk dock</strong> stays centered &amp; ink-1 (it's a tool), <strong>undo toast</strong> moves to bottom-right corner with a different shape (rounded rectangle, not pill) and a lighter elevation. That way they can co-exist visually without clashing, and a user instantly knows which is which.</p>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 8.  DASHBOARD                                        -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="dashboard"><span class="num">08 — Core</span>Dashboard</h2>
+  <p class="section-lede">The most-visited view, and the one with the most design problems. The render function (app.js #1348) builds 9 distinct sections in a single grid.</p>
+
+  <p class="pull">The dashboard is trying to <em>be</em> the app instead of being the front door to it.</p>
+
+  <div class="verdict">
+    <div class="v-card keep">
+      <h5>Keep</h5>
+      <ul>
+        <li>The narrative headline ("You saved $X · Y% savings rate") — best touch in the app</li>
+        <li>"Best run since March" superlative — when it triggers, it's delightful</li>
+        <li>Budget pacing component with the on-pace marker is genuinely clever</li>
+        <li>Net worth chart with 1M/6M/1Y/All filters works</li>
+        <li>Doughnut + top-5 list combination is a strong "where it went" pattern</li>
+      </ul>
+    </div>
+    <div class="v-card change">
+      <h5>Change</h5>
+      <ul>
+        <li>Aurora hero is too marketing-y for a daily-driver dashboard</li>
+        <li>Two "flow" rows (the 3 KPIs + the doughnut KPIs) double-count info</li>
+        <li>Budgets card shows top 6 — should be top 3 with "See all" CTA</li>
+        <li>Recurring &amp; subscriptions feels orphaned here vs in Schedules</li>
+      </ul>
+    </div>
+    <div class="v-card fix">
+      <h5>Fix</h5>
+      <ul>
+        <li>Cash-flow forecast loads async &amp; flashes "Loading…" on every visit</li>
+        <li>"Insights v2" cards have a radial gradient that varies wildly in tone per insight</li>
+        <li>Goals grid breaks at 2 columns when there's 1 goal (empty right cell)</li>
+        <li>"+ New" goal CTA navigates to Budgets — confusing IA</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Proposed dashboard structure</h3>
+
+  <div class="card">
+    <h4 style="margin-top:0">From 9 modules to 4 zones</h4>
+
+    <p><strong>Zone 1 — The headline</strong> (full width).<br>
+    Keep the comparative headline ("You saved $1,240 · 26% savings rate"). Set it in Fraunces, 32px. This is the answer the user wakes up to.</p>
+
+    <p><strong>Zone 2 — Hero KPI + trend</strong> (full width, flat surface, no aurora).<br>
+    Pick <em>one</em> primary metric: Net Worth. Big number, 14-day spark, "vs last month" delta. Make this feel like the front page of a financial newspaper, not a SaaS dashboard.</p>
+
+    <p><strong>Zone 3 — The 4-card grid</strong> (2x2).<br>
+    Cells:
+    <span class="tag">Spending breakdown</span>
+    <span class="tag">Budget pacing (top 3)</span>
+    <span class="tag">Accounts</span>
+    <span class="tag">Recurring radar</span>
+    <br>One canonical card component, same height, same padding, same H3 style. Each has a "See all →" link in the corner.</p>
+
+    <p><strong>Zone 4 — The trend strip</strong> (full width).<br>
+    A single income vs expenses bar chart, 12 months, with the optional forecast extension. Goals and insights move out of dashboard entirely — see below.</p>
+
+    <h4>Where everything goes</h4>
+    <ul class="bul">
+      <li><strong>Insights</strong> → into a slide-out side panel (notifications dropdown that actually does something), so they don't compete with KPIs for attention.</li>
+      <li><strong>Goals</strong> → tab inside Budgets ("Budgets · Goals"). They belong with budget setting, not the dashboard scan.</li>
+      <li><strong>Cash-flow forecast</strong> → its own "Forecast" tab on the dashboard, or deleted. It's a third trend chart and it duplicates the 12-month bars.</li>
+    </ul>
+  </div>
+
+  <h3>The aurora hero — concrete before/after</h3>
+
+  <div class="mock dual">
+    <div class="side now">
+      <h6>Now</h6>
+      <div style="background:var(--aurora);color:white;padding:18px;border-radius:12px">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;opacity:.7;font-weight:600">Net worth · May</div>
+        <div style="font-size:30px;font-weight:500;letter-spacing:-0.025em;font-variant-numeric:tabular-nums;margin-top:6px">$42,180<span style="font-size:18px;opacity:.7">.45</span></div>
+        <div style="font-size:11px;opacity:.9;margin-top:4px"><b>+$1,260</b> this month · <b>+3.1%</b> vs Apr</div>
+        <svg viewBox="0 0 200 30" style="width:100%;height:30px;margin-top:6px"><polyline fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" points="0,25 25,22 50,18 75,22 100,12 125,16 150,10 175,8 200,2"/></svg>
+      </div>
+      <div style="font-size:11px;color:var(--danger);margin-top:8px"><b>Issues:</b> too saturated, draws the eye away from the actual data, makes net-worth feel "marketing"</div>
+    </div>
+    <div class="side next">
+      <h6>Proposed</h6>
+      <div style="background:var(--surf);border:1px solid var(--line);padding:18px;border-radius:12px">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-4);font-weight:600">Net worth · May 2026</div>
+        <div style="font-size:32px;font-weight:500;letter-spacing:-0.03em;font-variant-numeric:tabular-nums;margin-top:6px;color:var(--ink)" class="serif">$42,180<span style="font-size:18px;color:var(--ink-3)">.45</span></div>
+        <div style="font-size:11px;color:var(--ink-3);margin-top:4px"><b style="color:var(--pos)">+$1,260</b> this month · <b>+3.1%</b> vs Apr · <span style="color:var(--accent)">best month YTD</span></div>
+        <svg viewBox="0 0 200 30" style="width:100%;height:30px;margin-top:6px"><polyline fill="none" stroke="var(--accent)" stroke-width="1.5" points="0,25 25,22 50,18 75,22 100,12 125,16 150,10 175,8 200,2"/><line x1="0" y1="2" x2="200" y2="2" stroke="var(--line-2)" stroke-dasharray="2,2" stroke-width="0.5"/></svg>
+      </div>
+      <div style="font-size:11px;color:var(--pos);margin-top:8px"><b>Why this is better:</b> matches the rest of the app, lets the number do the work, adds one earned superlative</div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 9.  TRANSACTIONS                                     -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="transactions"><span class="num">09 — Core</span>Transactions</h2>
+  <p class="section-lede">The most data-dense view. Table with check / date / desc / category / account / amount. Tools row above with search, filter pills, "Add filter" dash-button, and a Visible/Hidden segmented control. Bulk-dock at bottom when rows selected.</p>
+
+  <div class="verdict">
+    <div class="v-card keep">
+      <h5>Keep</h5>
+      <ul>
+        <li>Filter pill pattern (label · value · ×) is the right pattern for this kind of view</li>
+        <li>The uncategorized banner above the table is great proactive UX</li>
+        <li>Sunken table header with uppercase 11px labels reads cleanly</li>
+        <li>Merchant glyphs in the name cell add useful texture</li>
+        <li>Bulk dock with selection count + chip-style actions is excellent</li>
+        <li>Hidden rows fade to .45 opacity — great visual distinction</li>
+      </ul>
+    </div>
+    <div class="v-card change">
+      <h5>Change</h5>
+      <ul>
+        <li>"Visible / Hidden" segmented control is in the top-right — should be a tab or pill closer to the table</li>
+        <li>Pagination is a "Load more" button — feels like infinite scroll mid-evolution</li>
+        <li>Date column has no grouping — every row shows "May 14, 2026" individually</li>
+        <li>Account column shows as a small bordered chip — easy to miss</li>
+      </ul>
+    </div>
+    <div class="v-card fix">
+      <h5>Fix</h5>
+      <ul>
+        <li>No sticky table header — when you scroll a 200-row table the headers vanish</li>
+        <li>No column-level sort on date or amount</li>
+        <li>The "/" keyboard hint on the search input — verify it works (probably overridden by anything)</li>
+        <li>"Save view" link in <code>.tx-summary</code> exists but no saved-view UI to surface them</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Date grouping — the biggest scannability win</h3>
+  <p>Today every row prints its own date. That's visual noise — 12 rows on the same day = 12 repeated dates. Group by date with a small subheader row, and the table compresses by 30% and reads like a register.</p>
+
+  <div class="mock">
+    <div class="mock-label">Proposed</div>
+    <div style="background:var(--surf);border-radius:10px;border:1px solid var(--line);overflow:hidden;font-size:12px">
+      <div style="display:flex;justify-content:space-between;padding:8px 14px;background:var(--bg-2);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:600;border-bottom:1px solid var(--line)"><span>Today · Wed May 14</span><span style="font-variant-numeric:tabular-nums">−$127.30</span></div>
+      <div class="m-row" style="padding:8px 14px"><div style="width:24px;height:24px;background:var(--bg-2);border-radius:6px;display:grid;place-items:center;font-size:11px">🛒</div><div class="name">Loblaws · <span class="m-pill" style="margin-left:4px;font-size:10px"><span class="px" style="background:var(--pos)"></span>Groceries</span></div><div class="amt">−$112.45</div></div>
+      <div class="m-row" style="padding:8px 14px"><div style="width:24px;height:24px;background:var(--bg-2);border-radius:6px;display:grid;place-items:center;font-size:11px">☕</div><div class="name">Tim Hortons · <span class="m-pill" style="margin-left:4px;font-size:10px"><span class="px" style="background:var(--warn)"></span>Coffee</span></div><div class="amt">−$4.85</div></div>
+      <div class="m-row" style="padding:8px 14px"><div style="width:24px;height:24px;background:var(--bg-2);border-radius:6px;display:grid;place-items:center;font-size:11px">⛽</div><div class="name">Petro-Canada · <span class="m-pill" style="margin-left:4px;font-size:10px"><span class="px" style="background:oklch(58% 0.16 30)"></span>Fuel</span></div><div class="amt">−$60.00</div></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 14px;background:var(--bg-2);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:600;border-bottom:1px solid var(--line);border-top:1px solid var(--line)"><span>Yesterday · Tue May 13</span><span style="font-variant-numeric:tabular-nums;color:var(--pos)">+$2,140.00</span></div>
+      <div class="m-row" style="padding:8px 14px"><div style="width:24px;height:24px;background:var(--bg-2);border-radius:6px;display:grid;place-items:center;font-size:11px">💼</div><div class="name">Payroll deposit · <span class="m-pill" style="margin-left:4px;font-size:10px"><span class="px" style="background:var(--pos)"></span>Salary</span></div><div class="amt" style="color:var(--pos)">+$2,140.00</div></div>
+    </div>
+  </div>
+
+  <ul class="bul">
+    <li><strong>Day headers</strong> with right-aligned net for the day. "Today / Yesterday / Wed May 8" labels.</li>
+    <li><strong>Sticky <code>thead</code></strong> + sticky day headers when scrolling a long list.</li>
+    <li><strong>Drop the account column from the default view.</strong> Promote it into the description cell when it's notable (different from primary), demote to drawer otherwise.</li>
+    <li><strong>Replace "Load more" with cursor pagination</strong> or virtual scrolling. At 200+ rows the click-to-load feels awkward.</li>
+  </ul>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 10.  BUDGETS                                          -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="budgets"><span class="num">10 — Core</span>Budgets</h2>
+  <p class="section-lede">Budget targets per category with a clever pacing component (<code>.budget-v2</code>) — fill bar + on-pace marker + projected total. Plus savings goals as a separate concept.</p>
+
+  <div class="verdict">
+    <div class="v-card keep">
+      <h5>Keep</h5>
+      <ul>
+        <li>The pacing marker on the progress track — best component in the app</li>
+        <li>"On pace" / "Over by $X" / "Likely $Y by month-end" status copy is clear and helpful</li>
+        <li>Green→amber→red fill progression at 100%/110% thresholds</li>
+        <li>"Day 14 / 31" makes the month context concrete</li>
+      </ul>
+    </div>
+    <div class="v-card change">
+      <h5>Change</h5>
+      <ul>
+        <li>Categories without budgets aren't shown at all — no "set a budget for X" prompt</li>
+        <li>Group budgets (Essentials / Lifestyle / Income) referenced in the README aren't visible here</li>
+        <li>Goals share this page but feel like a different feature</li>
+      </ul>
+    </div>
+    <div class="v-card fix">
+      <h5>Fix</h5>
+      <ul>
+        <li>The pace marker is a 2px black bar with a 3px hat — easy to miss on a dense page</li>
+        <li>If a budget is $0 (limit=0), the math divides by zero and the bar shows 0% — should hide the bar entirely</li>
+        <li>No way to set a budget directly from this view — only via Settings → Monthly Budgets</li>
+      </ul>
+    </div>
+  </div>
+
+  <p>The page has the right components but the wrong information architecture. Today it's "list of budgets with progress bars." Better: <strong>"a workspace for setting and watching limits"</strong>.</p>
+
+  <h3>Proposed structure</h3>
+  <ul class="bul">
+    <li><strong>Sub-tabs at the top:</strong> <span class="tag accent">Spending limits</span> <span class="tag">Savings goals</span> <span class="tag">History</span></li>
+    <li><strong>Spending limits</strong> shows three sections: <em>At risk</em> (over pace / projected over), <em>On track</em>, <em>Categories without a budget</em> (with a "+ Set limit" button next to each).</li>
+    <li><strong>Inline edit</strong> on each row — click the $300 budget number to edit it without going to Settings.</li>
+    <li><strong>Visual peak marker</strong> for the pace — make it a small ▼ triangle hanging above the bar so it's instantly readable.</li>
+  </ul>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 11.  ACCOUNTS                                         -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="accounts"><span class="num">11 — Core</span>Accounts</h2>
+  <p class="section-lede">List of registered accounts with live balances + net worth chart. Add/edit account via modal.</p>
+
+  <div class="verdict">
+    <div class="v-card keep">
+      <h5>Keep</h5>
+      <ul>
+        <li>Per-account glyph with first-letter badge in account-specific color is good</li>
+        <li>Net worth chart prominent — answers "is my wealth growing"</li>
+        <li>Account-type categorization (chequing / savings / credit / investment)</li>
+      </ul>
+    </div>
+    <div class="v-card change">
+      <h5>Change</h5>
+      <ul>
+        <li>Negative credit-card balances should look like debt (red), not subtract from net worth visually without explanation</li>
+        <li>No per-account spending breakdown — clicking an account just opens edit</li>
+      </ul>
+    </div>
+    <div class="v-card fix">
+      <h5>Fix</h5>
+      <ul>
+        <li>Account list is undifferentiated by type — TD Chequing and TD Visa visually identical</li>
+        <li>No transfer history view — you have the feature, but no way to see all transfers</li>
+        <li>"Transfer" action exists in the sidebar shortcut — should be on this page first</li>
+      </ul>
+    </div>
+  </div>
+
+  <p>This page is fine but underdeveloped. Two big additions to consider:</p>
+  <ul class="bul">
+    <li><strong>Click an account row → drill-down view</strong> with that account's transactions, monthly balance chart, and a spending breakdown <em>scoped to that account</em>. Without this, users can't answer "what did I spend on my Visa this month?".</li>
+    <li><strong>Group by type</strong> with subtotals — Chequing total, Savings total, Credit total (as debt), Investment total. The current flat list buries the structure.</li>
+    <li><strong>Show credit-card "utilization"</strong> — if balance is −$2,400 and the user has noted a $5,000 limit, show 48% bar. This is the kind of thing serious money apps do.</li>
+  </ul>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 12.  YEAR REVIEW                                      -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="year"><span class="num">12 — Core</span>Year review</h2>
+  <p class="section-lede">Annual income / expenses / net + monthly bars + top 5 categories.</p>
+
+  <p>This is a <em>feature</em> looking for a <em>moment</em>. People look at year review rarely — usually in December or at tax time. Today it's a sibling tab next to Dashboard, which means it competes for attention every day even though it's a once-a-year experience.</p>
+
+  <div class="card">
+    <h4 style="margin-top:0">Recommendation: turn this into "Wrapped"</h4>
+    <p style="margin:0">Move Year Review out of the sidebar. Inside Dashboard, when the calendar rolls over to a new year, surface a one-time "Your 2025, wrapped" banner with a CTA into a <em>generously-designed</em> annual recap — full-bleed, Fraunces title, big numbers, the kind of thing Spotify made famous. Use the diverging year-strip you already have (<code>.year-strip-v2</code>) but at 2x scale. Make it shareable (export as PNG button). Then this view earns its keep and creates a tiny annual marketing moment.</p>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 13.  IMPORT                                           -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="import"><span class="num">13 — Automate</span>Import &amp; CSV wizard</h2>
+  <p class="section-lede">Drag-and-drop zone + supported-banks grid + the multi-step CSV wizard for unknown formats.</p>
+
+  <div class="verdict">
+    <div class="v-card keep">
+      <h5>Keep</h5>
+      <ul>
+        <li>Drop zone with dashed border + accent on hover — clean affordance</li>
+        <li>Multi-step wizard with completed/active checkmarks (<code>.wiz-steps</code>) is well-built</li>
+        <li>YAML auto-save for new bank configs is a great power-user feature</li>
+        <li>The 11-bank pre-detection list is a strong "this just works" moment</li>
+      </ul>
+    </div>
+    <div class="v-card change">
+      <h5>Change</h5>
+      <ul>
+        <li>Bank-grid chips (TD, RBC, etc.) use brand-color glyphs — looks like fake logos</li>
+        <li>The drop zone is too big when not needed (48px padding inside a 1320px page)</li>
+        <li>No mention of file-size limits, supported encodings, or what happens to duplicates</li>
+      </ul>
+    </div>
+    <div class="v-card fix">
+      <h5>Fix</h5>
+      <ul>
+        <li>Wizard step numbers are 20px circles — when you have 4 steps it looks like a stepper for a 30-minute task. Slim them down.</li>
+        <li>No "what happens after import" preview — users drop a CSV blind</li>
+      </ul>
+    </div>
+  </div>
+
+  <p>The import is the most-important conversion flow in the entire product. Anything that increases friction here, costs users. Two structural changes:</p>
+
+  <ul class="bul">
+    <li><strong>Compress the bank grid.</strong> Today it's 11 bank chips with colored badges as a 4-col grid. Show as a single sentence with subtle hover effects: <em>"Auto-detects: Tangerine · Wealthsimple · RBC · TD · CIBC · Scotiabank · BMO · National · Amex · Any OFX/QFX bank."</em> Saves vertical space and reads as a confidence statement.</li>
+    <li><strong>Post-import summary screen.</strong> After dropping a file, show: "We added 47 new transactions from your <strong>RBC Chequing</strong> CSV. 38 were auto-categorized, 9 need review." with two buttons: "Review uncategorized" and "Go to dashboard". Today the import just dumps you back at the dashboard.</li>
+  </ul>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 14.  SCHEDULED                                        -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="schedules"><span class="num">14 — Automate</span>Scheduled transactions</h2>
+  <p class="section-lede">Pre-defined recurring expenses/income. Weekly/biweekly/monthly/yearly with auto-post on due date.</p>
+
+  <ul class="bul">
+    <li><strong>Conceptual overlap with Recurring detection.</strong> The dashboard "Recurring &amp; subscriptions" widget detects merchants you pay every month. The Scheduled page has user-defined schedules. These two features are confusingly similar — a user reasonably asks "if Boreal already detects Netflix, why do I need to schedule it?". Answer: scheduled transactions auto-post before the CSV arrives. But that's not communicated anywhere.</li>
+    <li><strong>Fix.</strong> On the Scheduled page, add a "Detected this month" section at the top that shows the recurring-detector results with a one-click "Convert to schedule" button. This makes the relationship between the two features explicit and gives users a frictionless on-ramp.</li>
+    <li><strong>Visual treatment.</strong> Due-this-week schedules need a stronger visual flag than just a warn-tinted background. Consider a left-edge stripe or a "Posts in 2 days" badge.</li>
+  </ul>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 15.  RULES                                            -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="rules"><span class="num">15 — Automate</span>Rules</h2>
+  <p class="section-lede">Import-time rules: Hide / Label / Pass. Drag-to-reorder priority. Templates for common setups.</p>
+
+  <div class="verdict">
+    <div class="v-card keep">
+      <h5>Keep</h5>
+      <ul>
+        <li>Numbered rule-cards with drag handles is the right pattern for priority</li>
+        <li>"First match wins" is documented in the UI — important</li>
+        <li>Rule templates (Default / Freelancer / Student / Self-Employed / Carpool) — clever onboarding shortcut</li>
+        <li>"Test before saving" — table-stakes UX done right</li>
+      </ul>
+    </div>
+    <div class="v-card change">
+      <h5>Change</h5>
+      <ul>
+        <li>Rules is its own top-level nav item — too prominent for a power-user feature</li>
+        <li>The rule card layout doesn't show condition / action visually distinct</li>
+        <li>No rule-impact preview — "this rule has matched 47 transactions" would be valuable</li>
+      </ul>
+    </div>
+    <div class="v-card fix">
+      <h5>Fix</h5>
+      <ul>
+        <li>Touch-action: none on drag handles — verify it actually works on mobile</li>
+        <li>Drag-over states aren't styled — no insertion line, no shift animation</li>
+      </ul>
+    </div>
+  </div>
+
+  <p><strong>Bury rules inside Import.</strong> They're a power feature that <em>most</em> users will never touch, but the few who do, love them. Move under Import → "Rules" sub-tab. Free up the sidebar slot.</p>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 16.  SETTINGS                                         -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="settings"><span class="num">16 — System</span>Settings</h2>
+  <p class="section-lede">Catch-all: budgets, categories, learned merchants, accounts, schedules cross-link, theme, backup/restore, danger zone.</p>
+
+  <p>This is the kitchen sink. The render function loads <em>five</em> things in parallel before painting (settings + cats + learned + transactions + groups), and the page itself has 8+ sections of settings rows.</p>
+
+  <div class="verdict">
+    <div class="v-card keep">
+      <h5>Keep</h5>
+      <ul>
+        <li><code>.settings-row</code> pattern (label + desc + control on the right) is the right one</li>
+        <li>Grouping rows inside a <code>.settings-group</code> card with borders between gives a clean iOS-settings feel</li>
+        <li>Backup/restore is in the right place</li>
+      </ul>
+    </div>
+    <div class="v-card change">
+      <h5>Change</h5>
+      <ul>
+        <li>Settings page is a flat list of 8 sections with no sub-nav — should be sectioned</li>
+        <li>Some settings (Budgets, Categories) deserve top-level sub-tabs, not a section anchor</li>
+        <li>"My Account" is a separate render function but shares the same view shell</li>
+      </ul>
+    </div>
+    <div class="v-card fix">
+      <h5>Fix</h5>
+      <ul>
+        <li>Loading 5 APIs serially before paint is slow — render the shell, then fill sections</li>
+        <li>No anchors to jump to a specific section (e.g. <code>#categories</code>)</li>
+        <li>Danger zone (delete account) likely doesn't have a confirm-by-typing-email guardrail</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Recommended sub-nav</h3>
+  <p>Convert the flat list into a left-rail sub-nav inside the page:</p>
+  <ul class="bul">
+    <li><strong>General</strong> — display name, theme, language, currency</li>
+    <li><strong>Categories</strong> — the full category manager (currently buried)</li>
+    <li><strong>Budgets</strong> — set/edit budget limits (currently has its own page; merge)</li>
+    <li><strong>Learned merchants</strong> — the auto-categorization memory</li>
+    <li><strong>Import rules</strong> (if not buried under Import view)</li>
+    <li><strong>Data</strong> — export, backup, restore, demo data</li>
+    <li><strong>Account</strong> — email, password, sessions, delete account</li>
+  </ul>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 17.  ADMIN                                            -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="admin"><span class="num">17 — System</span>Admin panel</h2>
+  <p class="section-lede"><code>boreal/templates/admin.html</code> · Standalone page (not part of the SPA), used by you to manage users, see stats, seed demo data.</p>
+
+  <p>This is internal tooling so the bar is lower, but two notes:</p>
+  <ul class="bul">
+    <li><strong>It uses a self-contained stylesheet</strong> — diverges visually from the app within months. Either share <code>style.css</code> or accept the visual drift consciously.</li>
+    <li><strong>"System stats" is a great surface</strong> to invest in — total users, DBs sized, last-active heatmap. As Boreal grows, this is your dashboard.</li>
+  </ul>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 18.  MODALS & DRAWERS                                 -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="modals"><span class="num">18 — Cross-cutting</span>Modals &amp; drawers</h2>
+  <p class="section-lede">You have two overlay patterns: modals (centered card, backdrop blur) and the transaction-edit drawer (right-side slide-in). Plus a separate "drawer-edit" with bespoke styling for the edit experience.</p>
+
+  <div class="verdict">
+    <div class="v-card keep">
+      <h5>Keep</h5>
+      <ul>
+        <li>Right-side drawer for transaction edit is the right pattern (don't lose context)</li>
+        <li>Drawer header with editable name + dot separator + amount type pill</li>
+        <li>Category picker inside drawer with search + grouped options — very nice</li>
+        <li>"Apply to similar" learn-callout — magical when it triggers</li>
+        <li>Expandable "Advanced" section keeps the drawer scannable</li>
+      </ul>
+    </div>
+    <div class="v-card change">
+      <h5>Change</h5>
+      <ul>
+        <li>Modal vs drawer rules aren't consistent — "Add transaction" is a modal, "Edit transaction" is a drawer</li>
+        <li>Modal width 480px, drawer width 480/520px — interchangeable in practice</li>
+        <li>Modal backdrop is <code>oklch(15% .02 240 / 0.4)</code>; drawer backdrop is <code>0.3</code> — minor inconsistency</li>
+      </ul>
+    </div>
+    <div class="v-card fix">
+      <h5>Fix</h5>
+      <ul>
+        <li>No focus trap visible in the code — Tab inside a drawer can escape to the page</li>
+        <li>Drawer animation is transform-only — escape-key handling needs verification</li>
+        <li>Stacking: opening a category picker inside a drawer inside a modal — does z-index hold?</li>
+      </ul>
+    </div>
+  </div>
+
+  <p><strong>Pick one mental model.</strong> Drawer = editing an existing entity (transaction, schedule, rule, account). Modal = creating a new one or a confirmation. This is a 30-minute cleanup that pays off forever.</p>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 19.  MOBILE                                           -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="mobile"><span class="num">19 — Cross-cutting</span>Mobile audit</h2>
+  <p class="section-lede">Two breakpoints (<code>1100px</code>, <code>720px</code>) and a FAB. Functional but not designed-for.</p>
+
+  <div style="display:grid;grid-template-columns:240px 1fr;gap:32px;margin:18px 0;align-items:start">
+    <div class="phone-mock">
+      <div class="screen">
+        <div style="background:var(--bg-2);height:36px;border-radius:8px;padding:8px 10px;display:flex;align-items:center;gap:6px;margin-bottom:10px">
+          <div style="width:18px;height:18px;background:var(--accent-soft);border-radius:4px"></div>
+          <div style="font-weight:600;font-size:10px">Dashboard</div>
+          <div style="margin-left:auto;display:flex;gap:3px">
+            <div style="background:var(--surf);border:1px solid var(--line);border-radius:999px;padding:2px 7px;font-size:9px">May ▾</div>
+          </div>
+        </div>
+        <div style="font-family:Fraunces,serif;font-size:14px;line-height:1.25;letter-spacing:-0.01em;margin-bottom:10px;font-weight:500">You saved <span style="color:var(--pos)">$1,240</span> · 26%</div>
+        <div style="background:var(--surf);border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:6px">
+          <div style="font-size:8px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-4);font-weight:600">Net worth</div>
+          <div style="font-size:18px;font-weight:500;letter-spacing:-0.02em;font-variant-numeric:tabular-nums" class="serif">$42,180</div>
+          <div style="font-size:9px;color:var(--ink-3)">+3.1% vs Apr</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px">
+          <div style="background:var(--surf);border:1px solid var(--line);border-radius:7px;padding:7px"><div style="font-size:8px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.05em;font-weight:600">In</div><div style="font-size:13px;font-weight:500;color:var(--pos)">$4,280</div></div>
+          <div style="background:var(--surf);border:1px solid var(--line);border-radius:7px;padding:7px"><div style="font-size:8px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.05em;font-weight:600">Out</div><div style="font-size:13px;font-weight:500">$3,150</div></div>
+        </div>
+        <div style="background:var(--surf);border:1px solid var(--line);border-radius:7px;padding:8px;margin-bottom:8px">
+          <div style="font-size:10px;font-weight:500;margin-bottom:6px">Where it went</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px"><div style="width:6px;height:6px;background:var(--accent-2);border-radius:1px"></div><div style="flex:1;font-size:10px">Groceries</div><div style="font-size:10px;font-weight:500">$612</div></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px"><div style="width:6px;height:6px;background:var(--warn);border-radius:1px"></div><div style="flex:1;font-size:10px">Dining</div><div style="font-size:10px;font-weight:500">$340</div></div>
+          <div style="display:flex;align-items:center;gap:6px"><div style="width:6px;height:6px;background:oklch(60% 0.1 280);border-radius:1px"></div><div style="flex:1;font-size:10px">Subscriptions</div><div style="font-size:10px;font-weight:500">$148</div></div>
+        </div>
+        <!-- Bottom tab bar -->
+        <div style="background:var(--surf);border-top:1px solid var(--line);position:relative;margin:14px -14px -18px;padding:8px;display:flex;justify-content:space-around">
+          <div style="font-size:8.5px;text-align:center;color:var(--accent);font-weight:600">▦<br>Overview</div>
+          <div style="font-size:8.5px;text-align:center;color:var(--ink-3)">≡<br>Txns</div>
+          <div style="width:30px;height:30px;background:var(--ink);color:var(--bg);border-radius:50%;display:grid;place-items:center;margin-top:-12px;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:14px">+</div>
+          <div style="font-size:8.5px;text-align:center;color:var(--ink-3)">◎<br>Budgets</div>
+          <div style="font-size:8.5px;text-align:center;color:var(--ink-3)">▭<br>You</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Proposed mobile shell</h3>
+      <ul class="bul">
+        <li><strong>Bottom tab bar</strong> at &lt;720px with 4 destinations + a central FAB for "add transaction": <em>Overview / Transactions / + / Budgets / You</em>.</li>
+        <li><strong>Topbar simplifies</strong> to "Page title + month chip + overflow menu (⋯)". Drop the search input — surface via a search icon that expands.</li>
+        <li><strong>Hero KPI compresses</strong> — net worth + 2-row KPI grid (In/Out) — no doughnut, no recurring on mobile dashboard.</li>
+        <li><strong>"Where it went"</strong> is a stacked list, no doughnut. Doughnuts are unreadable below 200px.</li>
+        <li><strong>Transactions table</strong> becomes a card-list: each row is a 2-line card (merchant + category pill / amount + date). The sidebar checkboxes for bulk select stay on swipe-right.</li>
+        <li><strong>Drawer goes full-screen</strong> at &lt;720px — already in CSS, verify it's smooth.</li>
+        <li><strong>Don't try to put the sidebar on mobile</strong> — the icon-rail collapse at 1100px is correct for tablet but wrong for phone. Build a proper mobile nav.</li>
+      </ul>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- 20.  ROADMAP                                          -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <h2 id="roadmap"><span class="num">20 — Plan</span>Prioritized roadmap</h2>
+  <p class="section-lede">Twenty fixes, sorted by impact-per-hour. Effort: <span class="tag" style="background:oklch(94% 0.04 155);color:var(--pos);border:none">S</span> &lt;2h · <span class="tag warn">M</span> half-day · <span class="tag crit">L</span> 1–2 days.</p>
+
+  <table class="roadmap-tbl">
+    <thead>
+      <tr><th>#</th><th>Area</th><th>Fix</th><th style="width:80px">Effort</th><th style="width:80px">Priority</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>01</td><td class="area">Dashboard</td><td>Remove aurora hero; flatten net-worth card to surface + line</td><td><span class="effort s">S</span></td><td><span class="tag crit">P0</span></td></tr>
+      <tr><td>02</td><td class="area">Sidebar</td><td>Collapse to 5 items (merge Year→Overview, Rules→Import)</td><td><span class="effort m">M</span></td><td><span class="tag crit">P0</span></td></tr>
+      <tr><td>03</td><td class="area">Design system</td><td>Pick one KPI component; delete v1 leftovers (.kpi, .recur-row, .insights)</td><td><span class="effort m">M</span></td><td><span class="tag crit">P0</span></td></tr>
+      <tr><td>04</td><td class="area">Landing</td><td>Switch to light theme matching app; replace hero mockup with real screenshot</td><td><span class="effort m">M</span></td><td><span class="tag crit">P0</span></td></tr>
+      <tr><td>05</td><td class="area">Mobile</td><td>Bottom tab bar at &lt;720px; reflow topbar</td><td><span class="effort l">L</span></td><td><span class="tag warn">P1</span></td></tr>
+      <tr><td>06</td><td class="area">Transactions</td><td>Date grouping with day subheaders; sticky thead</td><td><span class="effort m">M</span></td><td><span class="tag warn">P1</span></td></tr>
+      <tr><td>07</td><td class="area">Type</td><td>Add Fraunces display face for hero copy + empty-states</td><td><span class="effort s">S</span></td><td><span class="tag warn">P1</span></td></tr>
+      <tr><td>08</td><td class="area">Topbar</td><td>Hide month chip on views without month context; <code>.no-month</code> class</td><td><span class="effort s">S</span></td><td><span class="tag warn">P1</span></td></tr>
+      <tr><td>09</td><td class="area">Auth</td><td>Extract inline &lt;style&gt; into shared auth.css; add eye toggle; inline forgot-link</td><td><span class="effort s">S</span></td><td><span class="tag warn">P1</span></td></tr>
+      <tr><td>10</td><td class="area">Import</td><td>Post-import summary screen ("we added N transactions")</td><td><span class="effort m">M</span></td><td><span class="tag warn">P1</span></td></tr>
+      <tr><td>11</td><td class="area">Empty states</td><td>Rewrite "No goals yet" → "Set your first goal — vacation, emergency fund, big purchase"</td><td><span class="effort s">S</span></td><td><span class="tag warn">P1</span></td></tr>
+      <tr><td>12</td><td class="area">Accounts</td><td>Click-through to per-account view with that account's txns &amp; balance chart</td><td><span class="effort l">L</span></td><td><span class="tag">P2</span></td></tr>
+      <tr><td>13</td><td class="area">Settings</td><td>Left-rail sub-nav inside the page (General / Categories / Budgets / Data / Account)</td><td><span class="effort m">M</span></td><td><span class="tag">P2</span></td></tr>
+      <tr><td>14</td><td class="area">Year review</td><td>Reframe as "Wrapped" — yearly banner CTA, generous full-bleed layout</td><td><span class="effort l">L</span></td><td><span class="tag">P2</span></td></tr>
+      <tr><td>15</td><td class="area">Schedules</td><td>"Detected this month" section linking to recurring detector with one-click convert</td><td><span class="effort m">M</span></td><td><span class="tag">P2</span></td></tr>
+      <tr><td>16</td><td class="area">Budgets</td><td>Show categories without budgets with inline "+ set limit" CTA</td><td><span class="effort m">M</span></td><td><span class="tag">P2</span></td></tr>
+      <tr><td>17</td><td class="area">Dark mode</td><td>Tone down accent saturation to match light-mode chroma</td><td><span class="effort s">S</span></td><td><span class="tag">P2</span></td></tr>
+      <tr><td>18</td><td class="area">Modals/drawers</td><td>Codify rule: drawer = edit, modal = create/confirm. Migrate add-transaction to drawer</td><td><span class="effort m">M</span></td><td><span class="tag">P2</span></td></tr>
+      <tr><td>19</td><td class="area">Notifications</td><td>Either remove the bell or wire insights/alerts through it properly</td><td><span class="effort m">M</span></td><td><span class="tag">P3</span></td></tr>
+      <tr><td>20</td><td class="area">Admin</td><td>Adopt main style.css; invest in user-activity charts</td><td><span class="effort m">M</span></td><td><span class="tag">P3</span></td></tr>
+    </tbody>
+  </table>
+
+  <hr class="div">
+
+  <h3 style="margin-top:48px">Closing note</h3>
+  <p style="max-width:65ch">Boreal already does more than most paid finance apps and it does it with taste. The work to get from B− to A is mostly subtractive — fewer components, fewer modules per view, one identity instead of two. The CSS is well-named, the JS structure is sane, the design tokens are right. You're closer than you think. Start with P0s; the rest follows.</p>
+
+  <div style="margin-top:48px;padding-top:24px;border-top:1px solid var(--line);font-size:11px;color:var(--ink-4);text-align:center;letter-spacing:.06em;text-transform:uppercase">
+    End of audit · Boreal v1 · May 24, 2026
+  </div>
+
+</main>
+
+</div>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+// Scroll-spy for TOC
+const tocLinks = document.querySelectorAll('.toc a');
+const sections = [...tocLinks].map(a => {
+  const id = a.getAttribute('href').slice(1);
+  return { id, el: document.getElementById(id), link: a };
+}).filter(s => s.el);
+
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      tocLinks.forEach(l => l.classList.remove('is-current'));
+      const found = sections.find(s => s.id === e.target.id);
+      if (found) found.link.classList.add('is-current');
+    }
+  });
+}, { rootMargin: '-40% 0px -55% 0px' });
+
+sections.forEach(s => io.observe(s.el));
+</script>
+
+</body>
+</html>

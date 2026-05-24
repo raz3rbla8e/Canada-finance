@@ -19,6 +19,8 @@ function appConfirm(msg, { title = 'Confirm', danger = false } = {}) {
     const id = 'app-confirm-' + Date.now();
     document.body.insertAdjacentHTML('beforeend', `<div class="modal-back" id="${id}" role="dialog" aria-modal="true">
       <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+        <div class="modal-h"><h3>${esc(title)}</h3></div>
+        <div class="modal-body"><div style="font-size:14px;color:var(--ink-2);line-height:1.5">${esc(msg)}</div></div>
         <div class="modal-foot">
           <button class="btn" id="${id}-no">Cancel</button>
           <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="${id}-yes">${danger ? 'Delete' : 'Confirm'}</button>
@@ -423,8 +425,8 @@ async function openUncategorizedReview() {
       existing.addEventListener('click', () => closeReview());
     }
     const suggestBanner = suggested ? `
-      <div style="background:var(--accent-bg,#e8f0fe);border:1px solid var(--accent,#4285f4)30;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:8px">
-        <span style="font-size:13px;color:var(--accent,#4285f4)">💡 Suggested: <strong>${esc(suggested)}</strong></span>
+      <div style="background:var(--accent-soft);border:1px solid color-mix(in oklch, var(--accent) 25%, transparent);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:13px;color:var(--accent-ink)">💡 Suggested: <strong>${esc(suggested)}</strong></span>
         <button class="btn btn-primary" id="review-accept-suggest" style="margin-left:auto;font-size:12px;padding:4px 14px">Accept</button>
       </div>` : '';
     const modal = existing.querySelector('.modal');
@@ -542,8 +544,16 @@ const SECTION_ICONS = {
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.15-1.43l2-1.55-2-3.46-2.36.85a7 7 0 0 0-2.48-1.43L13.5 2h-3l-.51 2.98a7 7 0 0 0-2.48 1.43l-2.36-.85-2 3.46 2 1.55A7 7 0 0 0 5 12c0 .49.05.96.15 1.43l-2 1.55 2 3.46 2.36-.85a7 7 0 0 0 2.48 1.43L10.5 22h3l.51-2.98a7 7 0 0 0 2.48-1.43l2.36.85 2-3.46-2-1.55c.1-.47.15-.94.15-1.43z"/></svg>',
   account: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
 };
-const MONTH_SCOPED_VIEWS = new Set(['dashboard', 'transactions', 'budgets', 'accounts', 'year']);
-const VIEW_LABELS = { dashboard:'Dashboard', transactions:'Transactions', budgets:'Budgets', accounts:'Accounts', year:'Year review', import:'Import', schedules:'Scheduled', rules:'Rules', settings:'Settings', account:'Account' };
+const MONTH_SCOPED_VIEWS = new Set(['dashboard', 'transactions', 'budgets', 'year']);
+const VIEW_LABELS = { dashboard:'Overview', transactions:'Transactions', budgets:'Budgets & goals', accounts:'Accounts', year:'Year review', import:'Import', schedules:'Scheduled', rules:'Rules', settings:'Settings', account:'Account' };
+
+// Topbar contextual actions per view
+const TOPBAR_ACTIONS = {
+  dashboard: { label: 'Add transaction', action: 'openAddModal' },
+  transactions: { label: 'Add transaction', action: 'openAddModal' },
+  accounts: { label: 'Add account', action: 'openAddAccountModal' },
+  import: { label: 'Import file', action: 'triggerImport' },
+};
 
 function updateTopbar(view) {
   const topbar = document.getElementById('topbar');
@@ -552,7 +562,48 @@ function updateTopbar(view) {
   if (crumb) crumb.textContent = VIEW_LABELS[view] || view;
   if (iconHost) iconHost.innerHTML = SECTION_ICONS[view] || '';
   topbar?.classList.toggle('no-month', !MONTH_SCOPED_VIEWS.has(view));
+  // Contextual action button
+  const actionBtn = document.getElementById('topbar-action-btn');
+  const actionLabel = document.getElementById('topbar-action-label');
+  const exportBtn = document.getElementById('topbar-export-btn');
+  const cfg = TOPBAR_ACTIONS[view];
+  if (actionBtn) {
+    if (cfg) {
+      actionBtn.style.display = '';
+      if (actionLabel) actionLabel.textContent = cfg.label;
+    } else {
+      actionBtn.style.display = 'none';
+    }
+  }
+  if (exportBtn) exportBtn.style.display = (view === 'dashboard' || view === 'transactions') ? '' : 'none';
   updateMonthArrows();
+}
+
+// Topbar action dispatch
+function topbarAction() {
+  const cfg = TOPBAR_ACTIONS[STATE.view];
+  if (!cfg) return;
+  if (cfg.action === 'openAddModal') openAddModal();
+  else if (cfg.action === 'openAddAccountModal') openAccountModal();
+  else if (cfg.action === 'triggerImport') document.getElementById('csv-file')?.click();
+}
+
+// User menu toggle
+function toggleUserMenu() {
+  const menu = document.getElementById('user-menu');
+  if (!menu) return;
+  const isHidden = menu.classList.toggle('hidden');
+  if (!isHidden) {
+    const tile = document.getElementById('user-row-tile');
+    if (tile) {
+      const r = tile.getBoundingClientRect();
+      menu.style.left = r.left + 'px';
+      menu.style.bottom = (window.innerHeight - r.top + 8) + 'px';
+    }
+  }
+}
+function closeUserMenu() {
+  document.getElementById('user-menu')?.classList.add('hidden');
 }
 
 function setMonth(month) {
@@ -644,6 +695,10 @@ function navigateTo(view) {
   document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.view === view);
   });
+  // Update mobile tab bar active state
+  document.querySelectorAll('.tab-item[data-view]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === view);
+  });
   // Update topbar (Case 08)
   updateTopbar(view);
   // Hide month picker on views that don't consume the month
@@ -655,11 +710,12 @@ async function updateNavCounts() {
   const data = await api('/api/counts');
   if (!data) return;
   const txEl = document.getElementById('nav-txn-count');
-  const schedEl = document.getElementById('nav-sched-count');
-  const rulesEl = document.getElementById('nav-rules-count');
+  const importEl = document.getElementById('nav-import-count');
   if (txEl) txEl.textContent = data.transactions || '';
-  if (schedEl) schedEl.textContent = data.schedules || '';
-  if (rulesEl) rulesEl.textContent = data.rules || '';
+  if (importEl) {
+    const total = (data.rules || 0) + (data.schedules || 0);
+    importEl.textContent = total || '';
+  }
 }
 
 function renderView(view) {
@@ -772,6 +828,7 @@ document.addEventListener('keydown', e => {
 
 function closeOverlays() {
   document.getElementById('overlays').innerHTML = '';
+  closeUserMenu();
 }
 
 // ── SVG CHARTS ────────────────────────────────────────────────
@@ -970,13 +1027,14 @@ async function submitAdd() {
 // ══════════════════════════════════════════════════════════════
 // Skeleton placeholder for the dashboard while data loads.
 function dashboardSkeleton() {
-  const kpi = `<div class="kpi"><div class="skel skel-line sm w-50"></div><div class="skel skel-line lg w-70" style="margin-top:10px"></div><div class="skel skel-line sm w-30" style="margin-top:14px"></div></div>`;
+  const fcard = `<div class="f-card"><div class="skel skel-line sm w-30"></div><div class="skel skel-line lg w-50" style="margin-top:8px"></div><div class="skel skel-line sm w-40" style="margin-top:6px"></div></div>`;
   const card = `<div class="card"><div class="skel skel-line w-30"></div><div class="skel skel-block" style="margin-top:14px"></div></div>`;
   return `<div class="page">
-    <div class="page-head"><div><div class="skel skel-line lg w-30"></div><div class="skel skel-line sm w-50" style="margin-top:10px"></div></div></div>
-    <div class="kpi-grid">${kpi}${kpi}${kpi}${kpi}</div>
-    <div class="grid-2" style="margin-bottom:16px">${card}${card}</div>
-    <div class="grid-2" style="margin-bottom:16px">${card}${card}</div>
+    <div style="margin-bottom:18px"><div class="skel skel-line sm w-30"></div><div class="skel skel-line lg w-70" style="margin-top:8px;height:28px"></div></div>
+    <div class="hero-card" style="min-height:120px"><div><div class="skel skel-line sm w-40"></div><div class="skel skel-line lg w-60" style="margin-top:10px;height:36px"></div><div class="skel skel-line sm w-70" style="margin-top:12px"></div></div><div class="skel skel-block" style="height:80px"></div></div>
+    <div class="flow">${fcard}${fcard}${fcard}</div>
+    <div class="grid-2" style="margin-bottom:14px">${card}${card}</div>
+    <div class="grid-2" style="margin-bottom:14px">${card}${card}</div>
   </div>`;
 }
 
@@ -985,7 +1043,7 @@ function transactionsSkeleton() {
   return `<div class="page">
     <div class="page-head"><div><div class="skel skel-line lg w-30"></div><div class="skel skel-line sm w-70" style="margin-top:10px"></div></div></div>
     <div style="display:flex;gap:8px;margin-bottom:14px"><div class="skel skel-line w-30" style="height:32px;border-radius:8px;width:200px"></div><div class="skel skel-line" style="height:32px;border-radius:8px;flex:1"></div></div>
-    <div class="card" style="padding:0;overflow:hidden"><table class="txn-table" style="width:100%"><tbody>${row.repeat(10)}</tbody></table></div>
+    <div class="card" style="padding:0;overflow:hidden"><table class="tbl" style="width:100%"><tbody>${row.repeat(10)}</tbody></table></div>
   </div>`;
 }
 
@@ -1054,7 +1112,7 @@ function settingsSkeleton() {
   const row = `<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)"><div><div class="skel skel-line w-50"></div><div class="skel skel-line sm w-70" style="margin-top:6px"></div></div><div class="skel skel-line" style="width:60px;height:28px;border-radius:6px"></div></div>`;
   return `<div class="page">
     <div class="page-head"><div><div class="skel skel-line lg w-30"></div><div class="skel skel-line sm w-50" style="margin-top:10px"></div></div></div>
-    <div class="grid-2">
+    <div class="settings-layout">
       <div class="card"><div class="skel skel-line w-30" style="margin-bottom:16px"></div>${row.repeat(4)}</div>
       <div class="card"><div class="skel skel-line w-30" style="margin-bottom:16px"></div>${row.repeat(3)}</div>
     </div>
@@ -1092,17 +1150,30 @@ async function init() {
     if (mailEl) mailEl.textContent = me.email || '';
     // Show admin link for admin users
     if (me.is_admin) {
-      const logoutLink = document.querySelector('.user-row a[href="/logout"]');
-      if (logoutLink) {
-        const adminLink = document.createElement('a');
-        adminLink.href = '/admin/';
-        adminLink.title = 'Admin';
-        adminLink.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
-        adminLink.style.cssText = 'color:var(--ink-3);display:flex;align-items:center;transition:color .15s';
-        logoutLink.parentNode.insertBefore(adminLink, logoutLink);
+      const userMenu = document.getElementById('user-menu');
+      if (userMenu) {
+        const sep = userMenu.querySelector('.user-menu-sep');
+        if (sep) {
+          const adminItem = document.createElement('a');
+          adminItem.className = 'user-menu-item';
+          adminItem.href = '/admin/';
+          adminItem.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> Admin';
+          sep.before(adminItem);
+        }
       }
     }
   }
+  // Wire up user menu
+  const userTile = document.getElementById('user-row-tile');
+  if (userTile) userTile.addEventListener('click', toggleUserMenu);
+  // Close user menu on outside click
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('user-menu');
+    const tile = document.getElementById('user-row-tile');
+    if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && !tile?.contains(e.target)) {
+      menu.classList.add('hidden');
+    }
+  });
   // Apply categories
   if (cats) {
     STATE.categories = cats;
@@ -1126,11 +1197,13 @@ async function init() {
   // Apply nav counts immediately
   if (counts) {
     const txEl = document.getElementById('nav-txn-count');
-    const schedEl = document.getElementById('nav-sched-count');
-    const rulesEl = document.getElementById('nav-rules-count');
+    const importEl = document.getElementById('nav-import-count');
     if (txEl) txEl.textContent = counts.transactions || '';
-    if (schedEl) schedEl.textContent = counts.schedules || '';
-    if (rulesEl) rulesEl.textContent = counts.rules || '';
+    // Show rules + schedules count on Import badge
+    if (importEl) {
+      const total = (counts.rules || 0) + (counts.schedules || 0);
+      importEl.textContent = total || '';
+    }
   }
   // Check if DB exists
   if (!db_exists) {
@@ -1140,15 +1213,13 @@ async function init() {
   }
   // Render initial view
   navigateTo('dashboard');
-  // Load alert badge
-  refreshAlertsBadge();
 }
 
 function renderOnboarding(c) {
   c.innerHTML = `<div class="page"><div class="onboarding">
     <div class="brand-mark-lg"><svg viewBox="0 0 512 512" width="32" height="32" fill="none"><polygon points="256,80 196,180 316,180" fill="currentColor"/><polygon points="256,140 176,260 336,260" fill="currentColor"/><polygon points="256,210 156,340 356,340" fill="currentColor"/><rect x="240" y="340" width="32" height="52" rx="4" fill="currentColor" opacity="0.7"/></svg></div>
-    <h1>Welcome to Boreal.</h1>
-    <p class="lede">A personal finance dashboard for Canadians. Drop in a bank export, and you'll see your money in 30 seconds — private, simple, no tracking.</p>
+    <h1 class="serif">Let's see where the money actually went.</h1>
+    <p class="lede">Drop in a bank export, and you'll see your money in 30 seconds — private, simple, no tracking.</p>
     <div class="onb-cards">
       <div class="onb-card" onclick="navigateTo('import')">
         <div class="ic">${icon('upload',18)}</div>
@@ -1160,10 +1231,10 @@ function renderOnboarding(c) {
         <h3>Try sample data</h3>
         <p>Explore the app with a fully-populated demo — transactions, accounts, budgets, goals.</p>
       </div>
-      <div class="onb-card" onclick="navigateTo('dashboard')">
+      <div class="onb-card" onclick="navigateTo('accounts')">
         <div class="ic">${icon('edit',18)}</div>
-        <h3>Start blank</h3>
-        <p>Add transactions manually, set up accounts and budgets as you go.</p>
+        <h3>Set up my accounts</h3>
+        <p>Start by adding your bank accounts, then enter transactions manually as you go.</p>
       </div>
     </div>
     <div style="margin-top:32px;font-size:12px;color:var(--ink-3)">Your data is stored securely in your personal database</div>
@@ -1183,7 +1254,7 @@ document.addEventListener('keydown', (e) => {
   if (document.querySelector('.modal-back')) return;
 
   if (e.altKey && !e.ctrlKey && !e.metaKey) {
-    const map = { '1':'dashboard', '2':'transactions', '3':'budgets', '4':'accounts', '5':'import', '6':'settings' };
+    const map = { '1':'dashboard', '2':'transactions', '3':'budgets', '4':'accounts', '5':'import', '0':'settings' };
     if (map[e.key]) { e.preventDefault(); navigateTo(map[e.key]); }
   }
   if (e.key === 'n' && !e.altKey && !e.ctrlKey && !e.metaKey && STATE.view === 'transactions') {
@@ -1364,7 +1435,7 @@ async function _renderDashboard(c) {
   if (!summary) {
     c.innerHTML = `<div class="page">${renderEmptyState({
       title: 'Pull in your first month',
-      body: 'Drag a CSV or OFX from any supported bank \u2014 Boreal will detect the format and categorize 80% of your transactions on import.',
+      body: 'Drag a CSV or OFX from any supported bank — Boreal will detect the format and categorize 80\u0025 of your transactions on import.',
       primary: { label: 'Import file', onclick: "navigateTo('import')" },
       secondary: { label: 'Add manually', onclick: 'openAddModal()' },
       iconKey: 'upload',
@@ -1378,35 +1449,33 @@ async function _renderDashboard(c) {
   const savingsRate = income > 0 ? (net / income * 100) : 0;
   const totalBalance = (accounts || []).reduce((s,a) => s + (a.balance||0), 0);
   const nwData = (netWorth || []).map(d => ({ m: d.month, v: d.net_worth }));
-  // Find net worth for selected month and its predecessor
   const nwIdx = month ? nwData.findIndex(d => d.m === month) : nwData.length - 1;
   const currentNW = nwIdx >= 0 ? nwData[nwIdx].v : totalBalance;
   const prevNW = nwIdx >= 1 ? nwData[nwIdx - 1].v : (nwData.length >= 2 ? nwData[nwData.length - 2].v : totalBalance);
   const deltaNW = prevNW ? ((currentNW - prevNW) / Math.abs(prevNW) * 100) : 0;
   const byCat = summary.by_category || [];
-  const topCats = byCat.filter(x => x.total > 0).sort((a,b) => b.total - a.total).slice(0, 6);
+  const topCats = byCat.filter(x => x.total > 0).sort((a,b) => b.total - a.total).slice(0, 5);
   const totalExp = topCats.reduce((s,x) => s + x.total, 0);
   const budgets = summary.budgets || [];
   const recList = recurring?.recurring || (Array.isArray(recurring) ? recurring : []);
   const subTotal = recList.reduce((s, r) => s + (r.avg_amount || 0), 0);
   const subCount = recList.length;
   const trendHistory = (trends || []).map(t => { const [y,mo] = (t.month||'').split('-').map(Number); return { m: mo ? new Date(y,mo-1,15).toLocaleString('en-CA',{month:'short'}) : t.month, income: t.income, expenses: t.expenses }; });
-  // Calculate deltas vs previous month (from summary API, relative to selected month)
   const prevIncome = summary.prev_income || 0;
   const prevExpenses = summary.prev_expenses || 0;
   const incomeDelta = prevIncome ? ((income - prevIncome) / prevIncome * 100) : 0;
   const expDelta = prevExpenses ? ((expenses - prevExpenses) / prevExpenses * 100) : 0;
   const prevMonthName = summary.prev_month ? new Date(summary.prev_month + '-15').toLocaleString('en-CA', {month: 'short'}) : 'last month';
 
-  // Build comparative headline (Case 03)
+  // Build comparative headline
   let headlineText;
   if (net >= 0) {
-    headlineText = `You saved <span style="color:var(--pos);font-variant-numeric:tabular-nums">${fmtCurrency(net,true)}</span> \u00b7 ${savingsRate.toFixed(0)}% savings rate`;
+    headlineText = `You saved <span class="pos">${fmtCurrency(net,true)}</span> · ${savingsRate.toFixed(0)}% savings rate`;
   } else {
-    headlineText = `You spent <span style="color:var(--danger);font-variant-numeric:tabular-nums">${fmtCurrency(Math.abs(net),true)}</span> more than you earned`;
+    headlineText = `You spent <span class="neg">${fmtCurrency(Math.abs(net),true)}</span> more than you earned`;
     if (Array.isArray(trends) && trends.length > 1) {
       const prevNet = (trends[trends.length-2]?.income||0) - (trends[trends.length-2]?.expenses||0);
-      if (prevNet < net) headlineText += ` \u00b7 but improving from ${new Date(trends[trends.length-2].month+'-15').toLocaleString('en-CA',{month:'short'})}`;
+      if (prevNet < net) headlineText += ` · but improving from ${new Date(trends[trends.length-2].month+'-15').toLocaleString('en-CA',{month:'short'})}`;
     }
   }
   if (net > 0 && Array.isArray(trends) && trends.length > 2) {
@@ -1415,129 +1484,84 @@ async function _renderDashboard(c) {
     if (!lastBetter && historicalSavings.length) {
       const oldest = historicalSavings[0].m;
       const oldestName = new Date(oldest + '-15').toLocaleString('en-CA', { month: 'short' });
-      headlineText = `You saved <span style="color:var(--pos);font-variant-numeric:tabular-nums">${fmtCurrency(net, true)}</span> \u2014 your best run since ${oldestName}`;
+      headlineText = `You saved <span class="pos">${fmtCurrency(net, true)}</span> — your best run since ${oldestName}`;
     }
   }
 
-  // Insights v2 (Case 10)
-  let insightsHTML = '';
-  if (summary.insights && summary.insights.length) {
-    const top = summary.insights.slice(0, 2);
-    insightsHTML = `<div class="insights-v2">${top.map(i => {
-      const tone = i.tone || 'accent';
-      const tag = i.tag || ({ warn: 'Spike', pos: 'Streak', danger: 'Alert', accent: 'Notable' }[tone]) || 'Notable';
-      const compare = (i.compare && i.compare.a && i.compare.b) ? i.compare : null;
-      const actions = (i.actions && i.actions.length) ? i.actions : (
-        i.category
-          ? [{ label: 'See transactions', action: 'filter-cat', value: i.category, primary: true }]
-          : []
-      );
-      return `<div class="insight-v2 tone-${esc(tone)}">
-        <div class="top-row">
-          <span class="tag">${esc(tag)}</span>
-          <span class="date-mini">${esc(i.period || 'This month')}</span>
-        </div>
-        <h5>${i.title}</h5>
-        ${compare ? `<div class="compare-bar">
-          <span class="lbl">${esc(compare.a.label)}</span>
-          <div class="bar"><div class="fil" style="width:${Math.min(compare.a.pct || 60, 100)}%"></div></div>
-          <span class="amt">${fmtCurrency(compare.a.value, true)}</span>
-          <span class="lbl">${esc(compare.b.label)}</span>
-          <div class="bar"><div class="fil toned" style="width:${Math.min(compare.b.pct || 90, 100)}%"></div></div>
-          <span class="amt" style="color:var(--insight-fg)">${fmtCurrency(compare.b.value, true)}</span>
-        </div>` : ''}
-        ${actions.length ? `<div class="actions">
-          ${actions.map(a => `<button class="${a.primary ? 'primary' : ''}" data-insight-action="${esc(a.action)}" data-value="${esc(a.value || '')}">${esc(a.label)}</button>`).join('')}
-          <button data-insight-action="dismiss" data-insight-id="${esc(i.id || '')}">Dismiss</button>
-        </div>` : ''}
-      </div>`;
-    }).join('')}</div>`;
-  }
+  // Group accounts by type for dashboard card
+  const acctsByType = {};
+  (accounts || []).forEach(a => {
+    const type = a.account_type || 'Other';
+    if (!acctsByType[type]) acctsByType[type] = [];
+    acctsByType[type].push(a);
+  });
 
-  // Build page
+  // Build page — 4-zone layout per End Goal
   c.innerHTML = `<div class="page">
-    <div class="page-head">
-      <div>
-        <div class="page-sub" style="font-size:13px;color:var(--ink-3);margin-bottom:4px">${new Date(month+'-15').toLocaleString('en-CA',{month:'long',year:'numeric'})}</div>
-        <div class="page-title" style="font-size:22px;font-weight:500;letter-spacing:-0.015em">${headlineText}</div>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn" onclick="window.location.href='/api/export?month=${month||''}'">${icon('download',14)} Export</button>
-        <button class="btn btn-primary" onclick="openAddModal()">${icon('plus',14)} Add transaction</button>
-      </div>
+    <!-- ZONE 1 — Narrative headline -->
+    <div style="margin-bottom:18px">
+      <div class="page-eyebrow">${new Date(month+'-15').toLocaleString('en-CA',{month:'long',year:'numeric'})}</div>
+      <div class="page-h1">${headlineText}</div>
     </div>
 
-    ${insightsHTML}
-
-    <!-- TIER 1 — Hero -->
-    <div class="dash-hero">
+    <!-- ZONE 2 — Hero KPI -->
+    <div class="hero-card">
       <div>
-        <div class="h-label">Net worth \u00b7 ${new Date(month+'-15').toLocaleString('en-CA',{month:'short'})}</div>
+        <div class="h-label">Net worth · ${new Date(month+'-15').toLocaleString('en-CA',{month:'short'})}</div>
         <div class="h-value">${fmtCurrencyHTML(currentNW)}</div>
         <div class="h-delta">
-          <strong>${currentNW - prevNW >= 0 ? '+' : ''}${fmtCurrency(currentNW - prevNW, true)}</strong> this month \u00b7
-          <strong>${deltaNW >= 0 ? '+' : ''}${Math.abs(deltaNW).toFixed(1)}%</strong> vs ${prevMonthName}
+          <span class="${currentNW - prevNW >= 0 ? 'pos' : ''}">${currentNW - prevNW >= 0 ? '+' : ''}${fmtCurrency(currentNW - prevNW, true)}</span> this month ·
+          <span class="lozenge">${deltaNW >= 0 ? '↑' : '↓'} ${Math.abs(deltaNW).toFixed(1)}%</span>
         </div>
       </div>
-      <div class="h-chart">${svgSparkline(nwData.map(d=>d.v), 480, 80, 'rgba(255,255,255,0.9)')}</div>
+      <div class="h-chart">${svgSparkline(nwData.map(d=>d.v), 480, 80, 'var(--accent)')}</div>
     </div>
 
-    <!-- TIER 2 — Flow -->
-    <div class="dash-flow">
+    <!-- Flow row (In / Out / Recurring) -->
+    <div class="flow">
       <div class="f-card">
         <div class="lbl">In</div>
         <div class="val" style="color:var(--pos)">${fmtCurrencyHTML(income)}</div>
-        <div class="delta ${incomeDelta >= 0 ? 'up' : 'dn'}">${incomeDelta >= 0 ? '+' : ''}${incomeDelta.toFixed(1)}% vs ${prevMonthName}</div>
+        <div class="dlt">${incomeDelta >= 0 ? '+' : ''}${incomeDelta.toFixed(1)}% vs ${prevMonthName}</div>
       </div>
       <div class="f-card">
         <div class="lbl">Out</div>
         <div class="val">${fmtCurrencyHTML(expenses)}</div>
-        <div class="delta ${expDelta <= 0 ? 'up' : 'dn'}">${expDelta >= 0 ? '+' : ''}${expDelta.toFixed(1)}% vs ${prevMonthName}</div>
+        <div class="dlt">${expDelta >= 0 ? '+' : ''}${expDelta.toFixed(1)}% vs ${prevMonthName}</div>
       </div>
       <div class="f-card">
         <div class="lbl">Recurring</div>
         <div class="val">${fmtCurrencyHTML(subTotal)}</div>
-        <div class="delta muted">${subCount} subs \u00b7 ${expenses > 0 ? (subTotal/expenses*100).toFixed(0)+'% of spend' : '\u2014'}</div>
+        <div class="dlt">${subCount} subs · ${expenses > 0 ? (subTotal/expenses*100).toFixed(0)+'% of spend' : '—'}</div>
       </div>
     </div>
 
-    <!-- TIER 3 — Detail grid -->
-    <div class="grid-2" style="margin-bottom:16px">
+    <!-- ZONE 3 — 2×2 card grid -->
+    <div class="grid-2" style="margin-bottom:14px">
+      <!-- Where it went -->
       <div class="card">
-        <div class="card-h">
-          <h3>Net worth trend</h3>
-          <div style="display:flex;gap:4px" id="nw-filters">
-            <button class="filter-chip" data-months="1">1M</button>
-            <button class="filter-chip" data-months="6">6M</button>
-            <button class="filter-chip active" data-months="12">1Y</button>
-            <button class="filter-chip" data-months="0">All</button>
-          </div>
-        </div>
-        ${nwData.length >= 2 ? `<div style="font-size:12px;color:var(--ink-3);margin-bottom:6px">
-          <span style="color:${totalBalance - nwData[0].v >= 0 ? 'var(--pos)' : 'var(--danger)'};font-weight:500">${totalBalance - nwData[0].v >= 0 ? '+' : ''}${fmtCurrency(totalBalance - nwData[0].v, true)}</span> this period
-        </div>` : ''}
-        <div id="nw-chart-container">${svgNetWorthChart(nwData)}</div>
-      </div>
-      <div class="card">
-        <div class="card-h"><h3>Where it went</h3><button class="muted-link" onclick="navigateTo('budgets')">See all \u2192</button></div>
-        <div style="display:flex;align-items:center;gap:18px">
-          ${svgDoughnut(topCats.map(x => ({ value: x.total, color: catColor(x.category) })), 140)}
-          <div style="flex:1">${topCats.slice(0,5).map(x => {
+        <div class="card-h"><h3>Where it went</h3><button class="muted-link" onclick="navigateTo('transactions')">See all →</button></div>
+        ${topCats.length ? `<div style="display:flex;align-items:center;gap:22px">
+          ${svgDoughnut(topCats.map(x => ({ value: x.total, color: catColor(x.category) })), 130)}
+          <div style="flex:1">${topCats.map(x => {
             const pct = totalExp ? (x.total/totalExp*100) : 0;
             return `<div class="cat-row"><span class="label"><span class="dot" style="background:${catColor(x.category)}"></span>${esc(x.category)}</span><span><span class="amt">${fmtCurrency(x.total,true)}</span><span class="pct">${pct.toFixed(0)}%</span></span></div>`;
           }).join('')}</div>
-        </div>
+        </div>` : '<div style="color:var(--ink-3);font-size:13px">No spending this month</div>'}
+      </div>
+
+      <!-- Budget pacing (top 3) -->
+      <div class="card">
+        <div class="card-h"><h3>Budget pacing</h3><button class="muted-link" onclick="navigateTo('budgets')">See all →</button></div>
+        ${budgets.length ? budgets.slice(0,3).map(renderBudgetV2).join('') : '<div style="color:var(--ink-3);font-size:13px">No budgets set — <button class="muted-link" onclick="navigateTo(\'budgets\')" style="color:var(--accent)">create one</button></div>'}
       </div>
     </div>
 
-    <div class="grid-2" style="margin-bottom:16px">
+    <div class="grid-2" style="margin-bottom:14px">
+      <!-- Accounts -->
       <div class="card">
-        <div class="card-h"><h3>Budgets</h3><button class="muted-link" onclick="navigateTo('budgets')">Manage \u2192</button></div>
-        ${budgets.length ? budgets.slice(0,6).map(renderBudgetV2).join('') : '<div style="color:var(--ink-3);font-size:13px">No budgets set yet</div>'}
-      </div>
-      <div class="card">
-        <div class="card-h"><h3>Accounts</h3><button class="muted-link" onclick="navigateTo('accounts')">Manage \u2192</button></div>
-        ${(accounts||[]).map(a => { const ac = acctColor(a); return `<div class="acct-row">
+        <div class="card-h"><h3>Accounts</h3><button class="muted-link" onclick="navigateTo('accounts')">See all →</button></div>
+        ${(accounts||[]).slice(0,5).map(a => { const ac = acctColor(a); return `<div class="acct-row">
           <div class="left">
             <div class="acct-glyph" style="background:${ac}18;color:${ac};border-color:${ac}40">${esc((a.name||'?')[0])}</div>
             <div><div class="name">${esc(a.name)}</div><div class="type">${esc(a.account_type||'')}</div></div>
@@ -1549,64 +1573,29 @@ async function _renderDashboard(c) {
           <span style="font-weight:600;font-size:15px;font-variant-numeric:tabular-nums">${fmtCurrency(totalBalance)}</span>
         </div>
       </div>
-    </div>
 
-    <div class="grid-2" style="margin-bottom:16px">
+      <!-- Recurring radar -->
       <div class="card">
-        <div class="card-h"><h3>Recurring & subscriptions</h3><span style="font-size:12px;color:var(--ink-3)">${recList.length} detected</span></div>
-        ${recList.slice(0, 5).map(r => {
-          const history = (r.history && r.history.length)
-            ? r.history.slice(-6)
-            : new Array(6).fill(0).map((_, i) => ({
-                amount: (i < 3 && r.price_changed) ? (r.avg_amount * 0.92) : r.avg_amount,
-              }));
-          const minH = Math.min(...history.map(h => h.amount));
-          const maxH = Math.max(...history.map(h => h.amount));
-          const range = maxH - minH || 1;
-          const lastAmt = history[history.length - 1].amount;
-          const oldAmt = history[0].amount;
-          const delta = lastAmt - oldAmt;
+        <div class="card-h"><h3>Recurring</h3><span style="font-size:12px;color:var(--ink-3)">${recList.length} detected</span></div>
+        ${recList.slice(0, 4).map(r => {
           const catC = catColor(r.category || 'Uncategorized');
-          return `<div class="recur-v2">
+          return `<div class="rec">
             ${merchantGlyph(r.name, catC)}
             <div>
-              <div class="nm-row"><span class="nm">${esc(r.name)}</span><span class="freq-tag">${esc(r.frequency || 'Monthly')}</span></div>
-              <div class="next">${r.next_date ? `Next ${fmtDate(r.next_date)} \u00b7 ` : ''}${history.length} mo history</div>
+              <div class="nm">${esc(r.name)}</div>
+              <div class="meta">${esc(r.frequency || 'Monthly')}${r.next_date ? ' · Next ' + fmtDate(r.next_date) : ''}</div>
             </div>
-            <div class="trail">
-              ${history.map((h, i) => {
-                const isLast = i === history.length - 1;
-                const heightPct = 30 + ((h.amount - minH) / range) * 50;
-                const cls = isLast ? 'now-bar' : (h.amount > oldAmt * 1.02 ? 'up' : '');
-                return `<span class="${cls}" style="height:${heightPct.toFixed(0)}%"></span>`;
-              }).join('')}
-            </div>
-            <div class="amt-block">
-              <div class="amt">${fmtCurrency(lastAmt)}</div>
-              <div class="amt-delta ${Math.abs(delta) < 0.5 ? 'muted' : ''}">
-                ${Math.abs(delta) < 0.5 ? 'no change' : `${delta > 0 ? '\u2191' : '\u2193'} ${fmtCurrency(Math.abs(delta), true)} since start`}
-              </div>
-            </div>
+            <div class="amt">${fmtCurrency(r.avg_amount)}</div>
           </div>`;
-        }).join('') || '<div style="color:var(--ink-3);font-size:13px">No recurring transactions detected yet</div>'}
-        ${recList.length > 5 ? `<button class="muted-link" style="display:block;width:100%;text-align:center;padding:10px 0;margin-top:4px;font-size:13px" onclick="navigateTo('schedules');setTimeout(()=>{const el=document.getElementById('detected-recurring');if(el)el.scrollIntoView({behavior:'smooth',block:'start'})},400)">View all ${recList.length} →</button>` : ''}
-      </div>
-      <div class="card">
-        <div class="card-h"><h3>Savings goals</h3><button class="muted-link" onclick="navigateTo('budgets')">+ New</button></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          ${(goals||[]).map(g => {
-            const pct = g.target_amount ? (g.current_amount/g.target_amount*100) : 0;
-            return `<div class="goal"><div class="goal-h"><div class="goal-n">${esc(g.name)}</div><div class="goal-amt">${fmtCurrency(g.current_amount,true)} / ${fmtCurrency(g.target_amount,true)}</div></div>
-              <div class="progress"><div class="fill" style="width:${pct}%;background:var(--accent)"></div></div>
-              <div class="goal-pct"><span>${pct.toFixed(0)}% complete</span><span>${fmtCurrency(g.target_amount-g.current_amount,true)} to go</span></div></div>`;
-          }).join('') || '<div style="color:var(--ink-3);font-size:13px;grid-column:span 2">No goals yet</div>'}
-        </div>
+        }).join('') || '<div style="color:var(--ink-3);font-size:13px">No recurring detected yet</div>'}
+        ${recList.length > 4 ? `<button class="muted-link" style="display:block;width:100%;text-align:center;padding:8px 0;margin-top:4px" onclick="navigateTo('schedules')">View all ${recList.length} →</button>` : ''}
       </div>
     </div>
 
+    <!-- ZONE 4 — Trend strip -->
     <div class="card">
       <div class="card-h">
-        <h3>Income vs expenses, last 12 months</h3>
+        <h3>Income vs expenses</h3>
         <div style="display:flex;gap:12px;font-size:12px;color:var(--ink-3)">
           <span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:var(--pos)"></span>Income</span>
           <span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:var(--ink-2)"></span>Expenses</span>
@@ -1614,43 +1603,7 @@ async function _renderDashboard(c) {
       </div>
       ${svgSpendBars(trendHistory)}
     </div>
-
-    <div class="card" id="forecast-card">
-      <div class="card-h"><h3>Cash-flow forecast</h3><span style="font-size:12px;color:var(--ink-3)">Loading\u2026</span></div>
-    </div>
   </div>`;
-
-  // Load forecast async (non-blocking)
-  loadForecastCard();
-
-  // Net worth time range filter
-  document.querySelectorAll('#nw-filters .filter-chip').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('#nw-filters .filter-chip').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const months = parseInt(btn.dataset.months);
-      const filtered = months === 0 ? nwData : nwData.slice(-months);
-      const container = document.getElementById('nw-chart-container');
-      if (container) container.innerHTML = svgNetWorthChart(filtered);
-    });
-  });
-
-  // Wire insight actions (Case 10)
-  document.querySelectorAll('[data-insight-action]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const action = btn.dataset.insightAction;
-      if (action === 'filter-cat') {
-        window.__pendingTxCatFilter = btn.dataset.value;
-        navigateTo('transactions');
-      } else if (action === 'set-budget') {
-        window.__pendingBudgetCategory = btn.dataset.value;
-        navigateTo('budgets');
-      } else if (action === 'dismiss') {
-        api('/api/insights/dismiss', 'POST', { id: btn.dataset.insightId });
-        btn.closest('.insight-v2')?.remove();
-      }
-    });
-  });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1694,15 +1647,13 @@ async function _renderTransactions(c) {
       </div>
     </div>
 
-    ${uncatCount > 0 ? `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:10px;margin-bottom:14px">
-      <div style="flex:1;display:flex;align-items:center;gap:10px">
-        ${icon('tag',16)}
-        <div>
-          <div style="font-size:13.5px;font-weight:600;color:var(--ink-1)">${uncatCount} uncategorized transaction${uncatCount!==1?'s':''}</div>
-          <div style="font-size:12px;color:var(--ink-3)">Review them quickly to keep your data accurate</div>
-        </div>
+    ${uncatCount > 0 ? `<div class="unc-banner">
+      <div class="unc-icon">${icon('tag',16)}</div>
+      <div class="unc-body">
+        <div class="unc-title">${uncatCount} transaction${uncatCount!==1?'s':''} need review</div>
+        <div class="unc-desc">Categorize them once and Boreal remembers the merchant forever.</div>
       </div>
-      <button class="btn btn-primary" onclick="openUncategorizedReview()" style="white-space:nowrap">${icon('chev_r',12)} Review now</button>
+      <button class="btn btn-primary" onclick="openUncategorizedReview()" style="white-space:nowrap">Review now →</button>
     </div>` : ''}
 
     <div class="tx-tools">
@@ -1726,12 +1677,11 @@ async function _renderTransactions(c) {
 
     <!-- Bulk dock mounted dynamically — see updateBulkBar() -->
 
-    <div class="card" style="padding:0;overflow:hidden">
+    <div class="card flush" style="padding:0;overflow:hidden">
       <table class="tbl" id="tx-table">
         <thead>
           <tr>
             <th class="check"><input type="checkbox" id="tx-check-all"></th>
-            <th>Date</th>
             <th>Description</th>
             <th>Category</th>
             <th>Account</th>
@@ -1934,25 +1884,46 @@ async function _renderTransactions(c) {
 
   function renderRows(list) {
     if (!list.length) {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:48px 16px;color:var(--ink-3)">
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:48px 16px;color:var(--ink-3)">
         <div style="font-size:14px;margin-bottom:8px">No transactions${(searchInput?.value||'').trim() ? ' match your search' : ' this month'}</div>
         <div style="font-size:13px">${(searchInput?.value||'').trim() ? 'Try a different search term' : 'Import a bank statement or <a href="#" onclick="openAddModal();return false" style="color:var(--accent)">add one manually</a>'}</div>
       </td></tr>`;
       return;
     }
-    tbody.innerHTML = list.map(t => {
+    // Group by date for day headers
+    const today = new Date().toISOString().slice(0,10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+    let html = '';
+    let lastDate = null;
+    list.forEach(t => {
+      const d = (t.date || '').slice(0, 10);
+      if (d !== lastDate) {
+        // Calculate day net
+        const dayTxns = list.filter(x => (x.date||'').slice(0,10) === d);
+        const dayNet = dayTxns.reduce((s, x) => s + (x.type === 'Income' ? (x.amount||0) : -(x.amount||0)), 0);
+        let dateLabel;
+        if (d === today) dateLabel = 'Today';
+        else if (d === yesterday) dateLabel = 'Yesterday';
+        else {
+          const dt = new Date(d + 'T12:00:00');
+          dateLabel = dt.toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' });
+        }
+        html += `<tr class="day-group"><td colspan="3"><span class="day-label">${dateLabel}</span></td><td colspan="2"><span class="day-net${dayNet >= 0 ? ' pos' : ''}">${dayNet >= 0 ? '+' : ''}${fmtCurrency(Math.abs(dayNet), true)}</span></td></tr>`;
+        lastDate = d;
+      }
       const amt = t.amount || 0;
       const isInc = t.type === 'Income';
+      const isUncat = !t.category || t.category === 'UNCATEGORIZED';
       const displayAmt = isInc ? `+${fmtCurrency(Math.abs(amt))}` : `−${fmtCurrency(Math.abs(amt))}`;
-      return `<tr data-id="${t.id}" class="${txSelected.has(t.id)?'selected':''}${t.hidden?' hidden-row':''}" style="cursor:pointer">
+      html += `<tr data-id="${t.id}" class="${txSelected.has(t.id)?'selected':''}${t.hidden?' hidden-row':''}${isUncat?' needs-review':''}" style="cursor:pointer">
         <td><input type="checkbox" class="tx-check" data-id="${t.id}" ${txSelected.has(t.id)?'checked':''}></td>
-        <td style="color:var(--ink-3);font-size:12.5px;white-space:nowrap">${fmtDate(t.date)}</td>
-        <td><div class="name-cell">${merchantGlyph(t.name)}<div><div style="font-weight:500">${esc(t.name)}</div>${t.notes?`<div style="font-size:11.5px;color:var(--ink-3)">${esc(t.notes)}</div>`:''}</div></div></td>
+        <td><div class="name-cell">${merchantGlyph(t.name)}<div><div style="font-weight:450">${esc(t.name)}</div><div style="font-size:11.5px;color:var(--ink-3)">${t.account ? `<span class="acct-tag">${esc(t.account)}</span>` : ''}${t.notes ? ' '+esc(t.notes) : ''}</div></div></div></td>
         <td>${catPill(t.category)}</td>
         <td><span class="acct-tag">${esc(t.account || '')}</span></td>
-        <td class="amt ${isInc?'amount-pos':'amount-neg'}" style="text-align:right;font-variant-numeric:tabular-nums">${displayAmt}</td>
+        <td class="amt ${isInc?'amount-pos':'amount-neg'}" style="text-align:right;font-variant-numeric:tabular-nums">${displayAmt}${!isInc && amt > 0 ? `<div style="font-size:11px;color:var(--ink-4);font-weight:400">${fmtDate(t.date)}</div>` : `<div style="font-size:11px;color:var(--ink-4);font-weight:400">${fmtDate(t.date)}</div>`}</td>
       </tr>`;
-    }).join('');
+    });
+    tbody.innerHTML = html;
   }
 
   function getFiltered() {
@@ -2550,9 +2521,16 @@ async function _renderBudgets(c) {
         <div class="page-sub">${fmtCurrency(totalSpent,true)} of ${fmtCurrency(totalBudget,true)} spent · ${pctAll.toFixed(0)}% of budgets used</div>
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" id="add-budget-btn">${icon('plus',14)} New budget</button>
+        <button class="btn btn-primary" id="add-budget-btn">${icon('plus',14)} <span id="add-budget-label">New budget</span></button>
       </div>
     </div>
+
+    <div class="tabs" id="budget-tabs">
+      <button class="tab active" data-tab="spending">Spending limits</button>
+      <button class="tab" data-tab="goals">Savings goals</button>
+    </div>
+
+    <div id="budget-panel-spending">
 
     <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
       <div class="kpi">
@@ -2611,6 +2589,10 @@ async function _renderBudgets(c) {
       }).join('') || '<div style="color:var(--ink-3);font-size:13px;grid-column:span 2">No budgets set yet. Click "New budget" to add one.</div>'}
     </div>
 
+    </div><!-- /budget-panel-spending -->
+
+    <div id="budget-panel-goals" style="display:none">
+
     <div class="section-h">
       <h2>Savings goals</h2>
       <p>Stash money toward specific targets</p>
@@ -2650,7 +2632,26 @@ async function _renderBudgets(c) {
         </div>
       </div>
     </div>
+
+    </div><!-- /budget-panel-goals -->
   </div>`;
+
+  // Sub-tab switching
+  document.querySelectorAll('#budget-tabs .tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('#budget-tabs .tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const panel = tab.dataset.tab;
+      document.getElementById('budget-panel-spending').style.display = panel === 'spending' ? '' : 'none';
+      document.getElementById('budget-panel-goals').style.display = panel === 'goals' ? '' : 'none';
+      // Update button label
+      const label = document.getElementById('add-budget-label');
+      if (label) label.textContent = panel === 'goals' ? 'New goal' : 'New budget';
+      // Update button handler
+      const btn = document.getElementById('add-budget-btn');
+      if (btn) btn.onclick = () => panel === 'goals' ? openGoalModal() : openBudgetModal();
+    });
+  });
 
   document.getElementById('add-budget-btn')?.addEventListener('click', () => openBudgetModal());
   document.getElementById('add-goal-card')?.addEventListener('click', () => openGoalModal());
@@ -2870,9 +2871,6 @@ async function _renderAccounts(c) {
             </span>` : ''}
           </div>
         </div>
-        <div style="display:flex;gap:4px">
-          <button class="filter-chip">3M</button>
-          <button class="filter-chip">6M</button>
         <div style="display:flex;gap:4px" id="acct-nw-filters">
           <button class="filter-chip" data-months="3">3M</button>
           <button class="filter-chip" data-months="6">6M</button>
@@ -2884,30 +2882,44 @@ async function _renderAccounts(c) {
     </div>
 
     <div class="section-h"><h2>Your accounts</h2><p>Click any account to see details and edit</p></div>
-    <div class="card" style="padding:0;overflow:hidden">
-      ${list.length ? list.map((a, i) => {
-        const pct = (Math.abs(a.balance||0) / maxBalance) * 100;
-        const ac = acctColor(a);
-        const isDebt = (a.balance||0) < 0;
-        return `<div style="display:grid;grid-template-columns:auto 1fr auto auto auto;gap:16px;padding:16px 20px;align-items:center;${i < list.length-1 ? 'border-bottom:1px solid var(--line-1)' : ''};cursor:pointer" onclick="editAccount(${a.id})">
-          <div class="acct-glyph" style="width:40px;height:40px;background:${ac}15;color:${ac};border-color:${ac}30;font-size:15px;font-weight:600">${esc((a.name||'?')[0])}</div>
-          <div>
-            <div style="font-weight:500;font-size:14.5px">${esc(a.name)}</div>
-            <div style="font-size:12px;color:var(--ink-3);margin-top:2px">${esc(a.account_type||'chequing')} · Opening ${fmtCurrency(a.opening_balance||0,true)}</div>
+    ${list.length ? (() => {
+      const typeLabels = {chequing:'Chequing',savings:'Savings',credit:'Credit',investment:'Investment',other:'Other'};
+      const typeOrder = ['chequing','savings','credit','investment','other'];
+      const grouped = {};
+      list.forEach(a => { const t = a.account_type || 'other'; (grouped[t] = grouped[t] || []).push(a); });
+      return typeOrder.filter(t => grouped[t]).map(t => {
+        const accts = grouped[t];
+        const subtotal = accts.reduce((s,a) => s + (a.display_balance ?? a.balance ?? 0), 0);
+        return `<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
+          <div class="acct-group-hdr">
+            <span>${typeLabels[t] || t}</span>
+            <span style="font-variant-numeric:tabular-nums">${fmtCurrency(subtotal,true)}</span>
           </div>
-          <div style="width:160px">
-            <div class="progress"><div class="fill" style="width:${pct}%;background:${isDebt ? 'var(--danger)' : ac}"></div></div>
-          </div>
-          <div style="text-align:right;min-width:110px">
-            <div style="font-weight:600;font-size:15px;font-variant-numeric:tabular-nums;color:${a.is_debt ? 'var(--danger)' : 'var(--ink-1)'}">${a.is_debt ? '−' : ''}${fmtCurrency(Math.abs(a.display_balance ?? a.balance ?? 0))}</div>
-            <div style="font-size:11px;color:var(--ink-3)">${a.is_debt ? 'owed' : (a.account_type === 'investment' ? 'value' : 'balance')}</div>
-          </div>
-          <div style="display:flex;gap:4px">
-            <button class="icon-btn" onclick="event.stopPropagation();editAccount(${a.id})">${icon('edit',13)}</button>
-          </div>
+          ${accts.map((a, i) => {
+            const pct = (Math.abs(a.balance||0) / maxBalance) * 100;
+            const ac = acctColor(a);
+            const isDebt = (a.balance||0) < 0;
+            return `<div style="display:grid;grid-template-columns:auto 1fr auto auto auto;gap:16px;padding:16px 20px;align-items:center;${i < accts.length-1 ? 'border-bottom:1px solid var(--line-1)' : ''};cursor:pointer" onclick="editAccount(${a.id})">
+              <div class="acct-glyph" style="width:40px;height:40px;background:${ac}15;color:${ac};border-color:${ac}30;font-size:15px;font-weight:600">${esc((a.name||'?')[0])}</div>
+              <div>
+                <div style="font-weight:500;font-size:14.5px">${esc(a.name)}</div>
+                <div style="font-size:12px;color:var(--ink-3);margin-top:2px">Opening ${fmtCurrency(a.opening_balance||0,true)}</div>
+              </div>
+              <div style="width:160px">
+                <div class="progress"><div class="fill" style="width:${pct}%;background:${isDebt ? 'var(--danger)' : ac}"></div></div>
+              </div>
+              <div style="text-align:right;min-width:110px">
+                <div style="font-weight:600;font-size:15px;font-variant-numeric:tabular-nums;color:${a.is_debt ? 'var(--danger)' : 'var(--ink-1)'}">${a.is_debt ? '−' : ''}${fmtCurrency(Math.abs(a.display_balance ?? a.balance ?? 0))}</div>
+                <div style="font-size:11px;color:var(--ink-3)">${a.is_debt ? 'owed' : (a.account_type === 'investment' ? 'value' : 'balance')}</div>
+              </div>
+              <div style="display:flex;gap:4px">
+                <button class="icon-btn" onclick="event.stopPropagation();editAccount(${a.id})">${icon('edit',13)}</button>
+              </div>
+            </div>`;
+          }).join('')}
         </div>`;
-      }).join('') : '<div style="padding:20px;text-align:center;color:var(--ink-3)">No accounts yet</div>'}
-    </div>
+      }).join('');
+    })() : '<div class="card" style="padding:20px;text-align:center;color:var(--ink-3)">No accounts yet</div>'}
   </div>`;
 
   document.getElementById('add-acct-btn')?.addEventListener('click', () => openAccountModal());
@@ -3417,6 +3429,12 @@ async function _renderImport(c) {
       </div>
     </div>
 
+    <div class="tabs" id="import-tabs">
+      <button class="tab active" data-tab="upload">Drop files</button>
+      <button class="tab" data-tab="data">Data management</button>
+    </div>
+
+    <div id="import-panel-upload">
     <div class="dropzone" id="csv-drop">
       <div style="width:56px;height:56px;border-radius:16px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;margin:0 auto">
         ${icon('upload',24)}
@@ -3442,11 +3460,9 @@ async function _renderImport(c) {
         <span>${esc(b.n)}</span>
       </div>`).join('')}
     </div>
+    </div><!-- /import-panel-upload -->
 
-    <div class="section-h" style="margin-top:24px">
-      <h2>Data management</h2>
-    </div>
-
+    <div id="import-panel-data" style="display:none">
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
       <div class="card" style="padding:16px">
         <div style="font-size:14px;font-weight:500;margin-bottom:4px">Export all transactions</div>
@@ -3460,6 +3476,7 @@ async function _renderImport(c) {
         <button class="btn btn-sm" id="restore-btn">${icon('upload',14)} Upload</button>
       </div>
     </div>
+    </div><!-- /import-panel-data -->
   </div>`;
 
   const dropZone = document.getElementById('csv-drop');
@@ -3471,6 +3488,17 @@ async function _renderImport(c) {
   dropZone?.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
   dropZone?.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('hover'); handleFiles(e.dataTransfer.files); });
   fileInput?.addEventListener('change', () => { if (fileInput.files.length) handleFiles(fileInput.files); });
+
+  // Import tab switching
+  document.querySelectorAll('#import-tabs .tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('#import-tabs .tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const panel = tab.dataset.tab;
+      document.getElementById('import-panel-upload').style.display = panel === 'upload' ? '' : 'none';
+      document.getElementById('import-panel-data').style.display = panel === 'data' ? '' : 'none';
+    });
+  });
 
   document.getElementById('import-restore-btn')?.addEventListener('click', () => document.getElementById('restore-file')?.click());
   document.getElementById('restore-btn')?.addEventListener('click', () => document.getElementById('restore-file')?.click());
@@ -4148,9 +4176,20 @@ async function _renderSettings(c) {
       </div>
     </div>
 
-    <div class="grid-2">
-      <!-- LEFT COLUMN -->
+    <div class="settings-layout">
+      <!-- SETTINGS RAIL -->
+      <nav class="settings-rail" id="settings-rail">
+        <button class="settings-rail-item active" data-section="set-general">General</button>
+        <button class="settings-rail-item" data-section="set-data">Data</button>
+        <button class="settings-rail-item" data-section="set-groups">Category groups</button>
+        <button class="settings-rail-item" data-section="set-merchants">Merchants</button>
+        <button class="settings-rail-item" data-section="set-categories">Categories</button>
+        <button class="settings-rail-item" data-section="set-about">About</button>
+      </nav>
+
+      <!-- SETTINGS CONTENT -->
       <div>
+        <div id="set-general">
         <div class="section-h" style="margin-top:0"><h2>General</h2></div>
         <div class="settings-group">
           <div class="settings-row">
@@ -4176,7 +4215,9 @@ async function _renderSettings(c) {
             </select>
           </div>
         </div>
+        </div><!-- /set-general -->
 
+        <div id="set-data">
         <div class="section-h"><h2>Data</h2></div>
         <div class="settings-group">
           <div class="settings-row">
@@ -4201,11 +4242,10 @@ async function _renderSettings(c) {
             <button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger-soft)" id="reset-btn">Reset</button>
           </div>
         </div>
-      </div>
+        </div><!-- /set-data -->
 
-      <!-- RIGHT COLUMN -->
-      <div>
-        <div class="section-h" style="margin-top:0"><h2>Category groups</h2><p>${groupList.length} groups</p></div>
+        <div id="set-groups">
+        <div class="section-h"><h2>Category groups</h2><p>${groupList.length} groups</p></div>
         <div class="card" style="padding:14px;margin-bottom:20px">
           <div style="display:flex;flex-direction:column;gap:14px">
             ${groupList.map(g => {
@@ -4233,7 +4273,9 @@ async function _renderSettings(c) {
           </div>
           <button class="btn btn-sm" style="border-style:dashed;margin-top:14px" id="add-group-btn">${icon('plus',12)} Add group</button>
         </div>
+        </div><!-- /set-groups -->
 
+        <div id="set-merchants">
         <div class="section-h"><h2>Learned merchants</h2><p>${learnedList.length} merchants</p></div>
         <div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">
           ${learnedList.length ? `<table class="tbl">
@@ -4245,7 +4287,9 @@ async function _renderSettings(c) {
             </tr>`).join('')}</tbody>
           </table>` : '<div style="padding:16px;color:var(--ink-3);font-size:13px">No learned merchants yet</div>'}
         </div>
+        </div><!-- /set-merchants -->
 
+        <div id="set-categories">
         <div class="section-h"><h2>Custom categories</h2><p>${catList.length} categories</p></div>
         <div class="card" style="padding:14px;margin-bottom:20px">
           <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -4262,7 +4306,9 @@ async function _renderSettings(c) {
             <button class="btn btn-sm" style="border-style:dashed" id="add-cat-btn">${icon('plus',12)} Add category</button>
           </div>
         </div>
+        </div><!-- /set-categories -->
 
+        <div id="set-about">
         <div class="section-h"><h2>About Boreal</h2></div>
         <div class="card" style="padding:16px;font-size:13px;color:var(--ink-2)">
           <div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">
@@ -4280,9 +4326,20 @@ async function _renderSettings(c) {
             <div style="display:flex;justify-content:space-between"><span style="color:var(--ink-3)">External requests</span><span class="mono" style="color:var(--pos)">0</span></div>
           </div>
         </div>
-      </div>
-    </div>
+        </div><!-- /set-about -->
+      </div><!-- /settings content -->
+    </div><!-- /settings-layout -->
   </div>`;
+
+  // Rail scroll-to + highlight
+  document.querySelectorAll('#settings-rail .settings-rail-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.section);
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.querySelectorAll('#settings-rail .settings-rail-item').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
 
   document.getElementById('set-theme')?.addEventListener('change', async (e) => {
     applyTheme(e.target.value);

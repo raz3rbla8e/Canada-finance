@@ -1,0 +1,1397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Boreal — End Goal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════
+   BOREAL v2 — refined tokens. Same DNA, edited.
+   ════════════════════════════════════════════════════════════ */
+:root{
+  --bg:           oklch(98.8% 0.004 95);
+  --bg-2:         oklch(96.5% 0.006 95);
+  --surf:         oklch(100% 0 0);
+  --surf-tint:    oklch(99% 0.005 165);
+  --line:         oklch(91% 0.008 95);
+  --line-2:       oklch(85% 0.01 95);
+  --line-strong:  oklch(76% 0.012 95);
+  --ink:          oklch(18% 0.015 240);
+  --ink-2:        oklch(38% 0.012 240);
+  --ink-3:        oklch(52% 0.012 240);
+  --ink-4:        oklch(68% 0.008 240);
+  --accent:       oklch(38% 0.075 165);
+  --accent-2:     oklch(48% 0.09 165);
+  --accent-soft:  oklch(94% 0.025 165);
+  --accent-fg:    oklch(99% 0.005 165);
+  --pos:          oklch(48% 0.13 155);
+  --pos-soft:     oklch(94% 0.04 155);
+  --warn:         oklch(60% 0.16 65);
+  --warn-soft:    oklch(95% 0.045 80);
+  --danger:       oklch(58% 0.18 28);
+  --danger-soft:  oklch(96% 0.025 28);
+
+  --font-sans:"Inter Tight","Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --font-display:"Fraunces",Georgia,serif;
+  --font-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+
+  --r1:6px; --r2:10px; --r3:14px; --r4:20px;
+  --shadow-sm:0 1px 0 0 oklch(92% 0.006 95);
+  --shadow-md:0 1px 2px -1px oklch(70% 0.01 240/.08),0 2px 4px -2px oklch(70% 0.01 240/.05);
+  --shadow-lg:0 6px 32px -8px oklch(60% 0.02 240/.20);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;letter-spacing:-0.005em;font-feature-settings:"cv11" 1,"ss01" 1}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+.serif{font-family:var(--font-display);font-feature-settings:"ss01" 1}
+.mono{font-family:var(--font-mono)}
+.num{font-variant-numeric:tabular-nums}
+
+/* ════════════════════════════════════════════════════════════
+   APP SHELL
+   ════════════════════════════════════════════════════════════ */
+.app{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:100vh}
+
+/* ── Sidebar ── */
+.sidebar{background:var(--bg);border-right:1px solid var(--line);padding:18px 12px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh;overflow-y:auto}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 8px 22px}
+.brand-mark{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,oklch(42% 0.09 165) 0%,oklch(48% 0.11 200) 45%,oklch(55% 0.13 230) 100%);display:grid;place-items:center;color:white;box-shadow:inset 0 1px 0 oklch(100% 0 0 / 0.18),0 1px 2px oklch(0% 0 0 / 0.12);flex-shrink:0}
+.brand-mark svg{width:16px;height:16px}
+.brand-name{font-weight:600;font-size:15px;letter-spacing:-0.01em}
+
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:var(--ink-2);font-weight:450;font-size:13.5px;text-align:left;position:relative;transition:background .12s,color .12s;width:100%}
+.nav-item:hover{background:var(--bg-2);color:var(--ink)}
+.nav-item.active{background:var(--surf);color:var(--ink);box-shadow:var(--shadow-sm),0 0 0 1px var(--line);font-weight:500}
+.nav-item .ico{width:16px;height:16px;flex-shrink:0;opacity:.85}
+.nav-item .ct{margin-left:auto;font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.nav-item.active .ct{color:var(--accent-2)}
+
+.sb-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:1px}
+.sb-foot .nav-item{color:var(--ink-3)}
+.user-tile{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;cursor:pointer;margin-top:2px}
+.user-tile:hover{background:var(--bg-2)}
+.avatar{width:28px;height:28px;border-radius:8px;background:oklch(85% 0.05 165);color:var(--accent);display:grid;place-items:center;font-size:12px;font-weight:600;flex-shrink:0}
+.user-info{flex:1;min-width:0}
+.user-name{font-size:13px;font-weight:500;color:var(--ink)}
+.user-mail{font-size:11px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-tile .chev{color:var(--ink-4)}
+
+/* ── Main ── */
+.main{min-width:0;background:var(--bg)}
+
+/* ── Topbar ── */
+.topbar{height:54px;padding:0 28px;display:flex;align-items:center;gap:16px;border-bottom:1px solid var(--line);background:oklch(98.8% 0.004 95 / 0.85);position:sticky;top:0;z-index:10;backdrop-filter:blur(10px)}
+.crumb{display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:500;color:var(--ink);letter-spacing:-0.01em}
+.crumb .ic{width:22px;height:22px;border-radius:6px;background:var(--bg-2);display:grid;place-items:center;color:var(--ink-2)}
+.crumb .ic svg{width:13px;height:13px}
+
+.month-chip{display:none;align-items:center;border:1px solid var(--line);border-radius:999px;background:var(--surf);overflow:hidden;font-size:12.5px;margin-left:8px}
+.topbar.show-month .month-chip{display:inline-flex}
+.month-chip button{padding:5px 10px;color:var(--ink-3)}
+.month-chip button:hover{background:var(--bg-2);color:var(--ink)}
+.month-chip .val{padding:5px 14px;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums;border-left:1px solid var(--line);border-right:1px solid var(--line);font-size:12.5px}
+.spacer{flex:1}
+
+.search{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surf);border-radius:8px;padding:5px 10px;width:220px;color:var(--ink-3);cursor:pointer;font-size:12.5px;transition:border-color .12s}
+.search:hover{border-color:var(--line-strong)}
+.search svg{width:13px;height:13px}
+.search .ph{flex:1}
+.kbd{font-family:var(--font-mono);font-size:10px;color:var(--ink-3);padding:1px 5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;background:var(--bg)}
+
+.tb-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;border:1px solid var(--line-2);background:var(--surf);color:var(--ink);font-size:13px;font-weight:500;transition:background .12s,border-color .12s}
+.tb-btn:hover{background:var(--bg-2);border-color:var(--line-strong)}
+.tb-btn.primary{background:var(--ink);color:var(--bg);border-color:transparent}
+.tb-btn.primary:hover{opacity:.92;background:var(--ink)}
+.tb-btn svg{width:13px;height:13px}
+
+/* ── Page ── */
+.page{padding:24px 28px 80px;max-width:1280px}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:22px;gap:24px}
+.page-eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:600;margin-bottom:6px}
+.page-h1{font-family:var(--font-display);font-size:32px;line-height:1.1;letter-spacing:-0.025em;font-weight:500;color:var(--ink)}
+.page-h1 .accent{color:var(--accent-2)}
+.page-h1 .neg{color:var(--danger)}
+.page-h1 .pos{color:var(--pos)}
+.page-sub{font-size:13px;color:var(--ink-3);margin-top:4px}
+
+/* ════════════════════════════════════════════════════════════
+   CARD — the canonical surface
+   ════════════════════════════════════════════════════════════ */
+.card{background:var(--surf);border:1px solid var(--line);border-radius:14px;padding:20px 22px}
+.card.flush{padding:0;overflow:hidden}
+.card-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.card-h h3{font-size:13px;font-weight:500;color:var(--ink-2);letter-spacing:-0.005em}
+.card-h .meta{font-size:12px;color:var(--ink-3)}
+.see-all{font-size:12px;color:var(--ink-3);display:inline-flex;align-items:center;gap:3px}
+.see-all:hover{color:var(--accent)}
+
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid-2-wide{display:grid;grid-template-columns:1.4fr 1fr;gap:14px}
+
+/* ════════════════════════════════════════════════════════════
+   HERO KPI — the new dashboard front door
+   ════════════════════════════════════════════════════════════ */
+.hero-card{background:var(--surf);border:1px solid var(--line);border-radius:16px;padding:24px 28px;display:grid;grid-template-columns:1fr 1.3fr;gap:32px;align-items:center;margin-bottom:14px;position:relative;overflow:hidden}
+.hero-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--accent-2),transparent 80%)}
+.hero-card .h-label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.hero-card .h-value{font-family:var(--font-display);font-size:44px;font-weight:500;letter-spacing:-0.03em;font-variant-numeric:tabular-nums;margin:6px 0 6px;line-height:1;color:var(--ink)}
+.hero-card .h-value .cents{font-size:22px;color:var(--ink-3);font-weight:400}
+.hero-card .h-delta{font-size:12.5px;color:var(--ink-3);display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.hero-card .h-delta strong{color:var(--ink);font-weight:500}
+.hero-card .h-delta .pos{color:var(--pos);font-weight:500}
+.hero-card .h-delta .lozenge{display:inline-flex;align-items:center;gap:5px;padding:2px 8px 2px 7px;background:var(--accent-soft);color:var(--accent);border-radius:999px;font-size:11px;font-weight:500}
+.hero-card .h-chart{height:90px}
+
+/* ── Flow row (the three supporting metrics) ── */
+.flow{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+.f-card{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.f-card .lbl{font-size:11px;color:var(--ink-3);font-weight:500;text-transform:uppercase;letter-spacing:.05em}
+.f-card .val{font-size:22px;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;margin-top:4px;line-height:1.1}
+.f-card .val.pos{color:var(--pos)}
+.f-card .dlt{font-size:11.5px;margin-top:4px;font-variant-numeric:tabular-nums;color:var(--ink-3)}
+.f-card .dlt .up{color:var(--pos)}
+.f-card .dlt .dn{color:var(--warn)}
+
+/* ════════════════════════════════════════════════════════════
+   BREAKDOWN — donut + list
+   ════════════════════════════════════════════════════════════ */
+.breakdown{display:flex;align-items:center;gap:22px}
+.bd-list{flex:1;display:flex;flex-direction:column;gap:0}
+.bd-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}
+.bd-row:last-child{border-bottom:none}
+.bd-row .swatch{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.bd-row .nm{flex:1;color:var(--ink)}
+.bd-row .amt{font-variant-numeric:tabular-nums;font-weight:500}
+.bd-row .pct{font-size:11.5px;color:var(--ink-3);margin-left:10px;min-width:34px;text-align:right}
+
+/* ════════════════════════════════════════════════════════════
+   BUDGET PACING — kept, with cleaner pace marker
+   ════════════════════════════════════════════════════════════ */
+.bgt{margin-bottom:16px}
+.bgt:last-child{margin-bottom:4px}
+.bgt-row{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:7px}
+.bgt-name{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:500}
+.bgt-name .swatch{width:8px;height:8px;border-radius:2px}
+.bgt-amts{font-variant-numeric:tabular-nums;font-size:12px;color:var(--ink-3)}
+.bgt-amts strong{color:var(--ink);font-weight:500}
+.bgt-track{position:relative;height:6px;background:var(--bg-2);border-radius:999px;overflow:visible}
+.bgt-fill{position:absolute;left:0;top:0;bottom:0;background:var(--accent-2);border-radius:999px;transition:width .4s cubic-bezier(.2,.7,.2,1)}
+.bgt-fill.warn{background:var(--warn)}
+.bgt-fill.danger{background:var(--danger)}
+.bgt-pace{position:absolute;top:-5px;width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid var(--ink);transform:translateX(-4px)}
+.bgt-foot{display:flex;justify-content:space-between;margin-top:6px;font-size:11.5px;color:var(--ink-3)}
+.bgt-foot .status{font-weight:500}
+.bgt-foot .status.ok{color:var(--pos)}
+.bgt-foot .status.over{color:var(--warn)}
+.bgt-foot .status.crit{color:var(--danger)}
+
+/* ════════════════════════════════════════════════════════════
+   ACCOUNT ROW
+   ════════════════════════════════════════════════════════════ */
+.acct{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line);cursor:pointer;transition:padding .12s}
+.acct:hover{padding-left:6px}
+.acct:last-child{border-bottom:none}
+.acct .left{display:flex;align-items:center;gap:12px}
+.acct .glyph{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:14px;font-weight:600}
+.acct .name{font-size:13.5px;font-weight:500;color:var(--ink);line-height:1.25}
+.acct .type{font-size:11.5px;color:var(--ink-3);margin-top:1px}
+.acct .bal{font-size:14.5px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--ink)}
+.acct .bal.neg{color:var(--danger)}
+.acct-subtotal{display:flex;justify-content:space-between;align-items:baseline;padding:8px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);font-weight:600}
+.acct-subtotal .v{font-size:13px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;text-transform:none;letter-spacing:0}
+
+/* ════════════════════════════════════════════════════════════
+   RECURRING RADAR
+   ════════════════════════════════════════════════════════════ */
+.rec{display:grid;grid-template-columns:32px 1fr auto;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.rec:last-child{border-bottom:none}
+.rec .gl{width:30px;height:30px;border-radius:8px;background:var(--bg-2);border:1px solid var(--line);display:grid;place-items:center;font-size:13px}
+.rec .nm{font-size:13px;font-weight:500;color:var(--ink)}
+.rec .meta{font-size:11.5px;color:var(--ink-3);margin-top:1px}
+.rec .amt{font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--ink);text-align:right}
+.rec .amt small{display:block;font-size:11px;color:var(--ink-3);font-weight:400;margin-top:1px}
+.rec .amt small.up{color:var(--warn)}
+
+/* ════════════════════════════════════════════════════════════
+   TRANSACTIONS TABLE — date grouped
+   ════════════════════════════════════════════════════════════ */
+.tx-tools{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.tx-tools .search{flex:1;max-width:320px;min-width:200px}
+.fpill{display:inline-flex;align-items:center;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--surf);font-size:12.5px;overflow:hidden;color:var(--ink)}
+.fpill:hover{border-color:var(--line-strong)}
+.fpill > .lbl{padding:0 8px 0 10px;color:var(--ink-3);font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.fpill > .val{padding:0 10px 0 8px;color:var(--ink);font-weight:500;border-left:1px solid var(--line);height:100%;display:inline-flex;align-items:center;gap:6px}
+.fpill.add{border-style:dashed;color:var(--ink-3);padding:0 10px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;height:30px;margin-left:auto}
+.seg button{padding:0 12px;font-size:12px;color:var(--ink-3);display:inline-flex;align-items:center;gap:5px}
+.seg button.on{background:var(--bg-2);color:var(--ink);font-weight:500}
+.seg button + button{border-left:1px solid var(--line)}
+
+.tbl-wrap{background:var(--surf);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.tbl-thead{display:grid;grid-template-columns:38px 1fr 130px 110px;gap:16px;padding:11px 16px;background:var(--bg-2);border-bottom:1px solid var(--line);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:600;position:sticky;top:54px;z-index:5}
+.tbl-thead .right{text-align:right}
+.day-group{position:sticky;top:88px;background:var(--surf-tint);border-bottom:1px solid var(--line);border-top:1px solid var(--line);padding:7px 16px;display:flex;justify-content:space-between;align-items:baseline;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-2);font-weight:600;z-index:4}
+.day-group .net{font-variant-numeric:tabular-nums;font-size:12px;color:var(--ink-3);font-weight:500;text-transform:none;letter-spacing:0}
+.day-group .net.pos{color:var(--pos)}
+.day-group .day{display:flex;align-items:center;gap:8px}
+.day-group .day .dt{color:var(--ink-3);font-weight:400}
+
+.tx-row{display:grid;grid-template-columns:38px 1fr 130px 110px;gap:16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center;font-size:13px;transition:background .12s;cursor:pointer}
+.tx-row:hover{background:var(--bg-2)}
+.tx-row:last-child{border-bottom:none}
+.tx-row .chk{display:flex;align-items:center;justify-content:center;color:var(--ink-3)}
+.tx-row .chk input{accent-color:var(--accent)}
+.tx-row .desc{display:flex;align-items:center;gap:10px;min-width:0}
+.tx-row .gl{width:28px;height:28px;border-radius:8px;background:var(--bg-2);border:1px solid var(--line);display:grid;place-items:center;font-size:13px;flex-shrink:0}
+.tx-row .name{font-size:13.5px;color:var(--ink);font-weight:450;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx-row .sub{font-size:11.5px;color:var(--ink-3);margin-top:1px;display:flex;align-items:center;gap:6px}
+.tx-row .sub .acct{padding:1px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg);font-size:10.5px}
+.cat-pill{display:inline-flex;align-items:center;gap:5px;padding:2px 8px 2px 7px;border-radius:5px;font-size:11.5px;font-weight:500;background:var(--bg-2);color:var(--ink-2);border:1px solid var(--line)}
+.cat-pill .dot{width:6px;height:6px;border-radius:2px}
+.tx-row .amt{text-align:right;font-variant-numeric:tabular-nums;font-weight:500;color:var(--ink)}
+.tx-row .amt.pos{color:var(--pos)}
+.tx-row .amt small{display:block;font-size:11px;color:var(--ink-4);font-weight:400;margin-top:1px}
+
+/* Uncategorized banner */
+.unc-banner{display:flex;align-items:center;gap:12px;padding:11px 16px;background:var(--accent-soft);border:1px solid color-mix(in oklch,var(--accent) 25%,transparent);border-radius:12px;margin-bottom:14px}
+.unc-banner .ttl{font-size:13.5px;font-weight:600;color:var(--accent)}
+.unc-banner .desc{font-size:12px;color:var(--ink-2)}
+.unc-banner .left{display:flex;align-items:center;gap:10px;flex:1}
+.unc-banner .ic{width:32px;height:32px;border-radius:8px;background:var(--accent);color:white;display:grid;place-items:center}
+
+/* ════════════════════════════════════════════════════════════
+   BUDGETS PAGE — tabs + grouped sections
+   ════════════════════════════════════════════════════════════ */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:22px}
+.tab{padding:9px 16px;font-size:13.5px;color:var(--ink-3);border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:500;transition:color .12s}
+.tab:hover{color:var(--ink)}
+.tab.active{color:var(--ink);border-bottom-color:var(--ink)}
+
+.bgt-section{margin-bottom:32px}
+.bgt-section-h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+.bgt-section-h h3{font-size:14px;font-weight:600;color:var(--ink);letter-spacing:-0.005em;display:flex;align-items:center;gap:8px}
+.bgt-section-h h3 .ct{font-family:var(--font-mono);font-size:11px;color:var(--ink-3);font-weight:500;background:var(--bg-2);padding:1px 7px;border-radius:5px}
+.bgt-section-h p{font-size:12px;color:var(--ink-3)}
+.bgt-card{background:var(--surf);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:8px}
+
+.empty-cat{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border:1px dashed var(--line-2);border-radius:10px;margin-bottom:6px}
+.empty-cat .nm{font-size:13px;color:var(--ink-2);display:flex;align-items:center;gap:8px}
+.empty-cat .nm .swatch{width:8px;height:8px;border-radius:2px}
+.empty-cat .nm .spent{color:var(--ink-3);font-size:11.5px;margin-left:6px;font-variant-numeric:tabular-nums}
+.empty-cat .set{font-size:12px;color:var(--accent);font-weight:500;display:flex;align-items:center;gap:3px}
+
+/* Goal card */
+.goal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.goal-card{background:var(--surf);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+.goal-card h4{font-size:14px;font-weight:500;letter-spacing:-0.005em;margin-bottom:2px}
+.goal-card .goal-emoji{font-size:22px;margin-bottom:8px}
+.goal-card .progress{height:6px;background:var(--bg-2);border-radius:999px;overflow:hidden;margin:14px 0 8px}
+.goal-card .progress .fill{height:100%;background:var(--accent-2);border-radius:999px}
+.goal-card .stats{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.goal-card .stats strong{color:var(--ink);font-weight:500}
+.goal-card.add-goal{border-style:dashed;display:grid;place-items:center;text-align:center;cursor:pointer;color:var(--ink-3)}
+.goal-card.add-goal:hover{border-color:var(--accent);color:var(--accent)}
+.goal-card.add-goal .plus{font-size:24px;margin-bottom:4px}
+
+/* ════════════════════════════════════════════════════════════
+   MOBILE PREVIEW
+   ════════════════════════════════════════════════════════════ */
+.mobile-toggle{position:fixed;bottom:20px;right:20px;background:var(--ink);color:var(--bg);padding:10px 16px 10px 14px;border-radius:999px;font-size:12.5px;font-weight:500;display:inline-flex;align-items:center;gap:8px;box-shadow:var(--shadow-lg);z-index:80;cursor:pointer}
+.mobile-toggle svg{width:14px;height:14px}
+.mobile-back{position:fixed;inset:0;background:oklch(15% 0.02 240 / 0.5);backdrop-filter:blur(8px);z-index:90;display:none;align-items:center;justify-content:center;padding:24px}
+.mobile-back.open{display:flex}
+.phone{width:340px;background:#0a0d11;border-radius:38px;padding:10px;box-shadow:0 24px 80px oklch(0% 0 0 / .4)}
+.phone .screen{background:var(--bg);border-radius:28px;overflow:hidden;height:680px;display:flex;flex-direction:column;position:relative}
+.phone .status{height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:11px;font-weight:600;color:var(--ink)}
+.phone .ph-top{padding:6px 16px 12px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);background:var(--bg)}
+.phone .ph-top .ic{width:26px;height:26px;background:var(--bg-2);border-radius:7px;display:grid;place-items:center;color:var(--ink-2)}
+.phone .ph-top .ic svg{width:14px;height:14px}
+.phone .ph-top .ttl{font-size:14.5px;font-weight:600}
+.phone .ph-top .mo{margin-left:auto;background:var(--surf);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:11.5px;color:var(--ink-2)}
+.phone .ph-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.phone .ph-body::-webkit-scrollbar{display:none}
+.phone .head-copy{font-family:var(--font-display);font-size:18px;letter-spacing:-0.015em;line-height:1.2;font-weight:500;margin-bottom:4px}
+.phone .head-copy .pos{color:var(--pos)}
+.phone .hero-m{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:14px}
+.phone .hero-m .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:600}
+.phone .hero-m .v{font-family:var(--font-display);font-size:26px;font-weight:500;letter-spacing:-0.025em;font-variant-numeric:tabular-nums;margin-top:4px;line-height:1}
+.phone .hero-m .d{font-size:11px;color:var(--ink-3);margin-top:4px}
+.phone .hero-m .d .pos{color:var(--pos);font-weight:500}
+.phone .flow-m{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.phone .flow-m .f{background:var(--surf);border:1px solid var(--line);border-radius:10px;padding:10px}
+.phone .flow-m .f .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);font-weight:600}
+.phone .flow-m .f .v{font-size:18px;font-weight:500;font-variant-numeric:tabular-nums;margin-top:2px}
+.phone .flow-m .f .v.pos{color:var(--pos)}
+.phone .ph-card{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:14px}
+.phone .ph-card h5{font-size:12px;font-weight:500;color:var(--ink-2);margin-bottom:10px}
+.phone .ph-card .row{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;border-bottom:1px solid var(--line)}
+.phone .ph-card .row:last-child{border-bottom:none}
+.phone .ph-card .row .nm{flex:1}
+.phone .ph-card .row .am{font-variant-numeric:tabular-nums;font-weight:500}
+.phone .ph-card .row .sw{width:7px;height:7px;border-radius:2px}
+.phone .tabbar{height:64px;border-top:1px solid var(--line);background:var(--bg);display:flex;justify-content:space-around;padding:8px 0;position:relative}
+.phone .tabbar .tb{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:9.5px;color:var(--ink-3);font-weight:500;padding:0 8px}
+.phone .tabbar .tb.on{color:var(--accent)}
+.phone .tabbar .tb svg{width:18px;height:18px}
+.phone .tabbar .fab{width:46px;height:46px;background:var(--ink);color:var(--bg);border-radius:50%;display:grid;place-items:center;margin-top:-18px;box-shadow:0 6px 16px oklch(0% 0 0 / .15)}
+.mobile-back .close-ph{position:absolute;top:24px;right:24px;background:var(--surf);width:36px;height:36px;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:var(--ink)}
+
+/* ════════════════════════════════════════════════════════════
+   VIEW SWITCHER
+   ════════════════════════════════════════════════════════════ */
+.view{display:none}
+.view.active{display:block}
+
+/* Section header */
+.section-h{display:flex;align-items:baseline;justify-content:space-between;margin:22px 0 12px}
+.section-h h2{font-size:15px;font-weight:600;letter-spacing:-0.005em;color:var(--ink);display:flex;align-items:center;gap:8px}
+.section-h h2 .ct{font-family:var(--font-mono);font-size:11px;color:var(--ink-3);font-weight:500;background:var(--bg-2);padding:1px 7px;border-radius:5px}
+
+/* annotation badges */
+.note-dot{position:absolute;background:var(--accent);color:white;font-size:10px;font-weight:600;padding:1px 6px 1.5px;border-radius:999px;font-family:var(--font-mono);line-height:1.3;letter-spacing:0;pointer-events:none}
+
+/* ════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ════════════════════════════════════════════════════════════ */
+@media(max-width:1100px){
+  .app{grid-template-columns:60px 1fr}
+  .sidebar{padding:14px 6px;align-items:center}
+  .brand{padding:6px 4px 18px;justify-content:center}.brand>div:last-child{display:none}
+  .nav-item{justify-content:center;padding:9px}.nav-item>span:not(.ct){display:none}.nav-item .ct{display:none}
+  .user-tile .user-info,.user-tile .chev{display:none}
+  .grid-2,.grid-2-wide{grid-template-columns:1fr}
+  .hero-card{grid-template-columns:1fr;gap:14px;padding:18px 20px}
+}
+@media(max-width:720px){
+  .page{padding:16px 14px 80px}
+  .flow{grid-template-columns:1fr}
+}
+
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ════════ SIDEBAR ════════ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 512 512" fill="none">
+          <polygon points="256,80 196,180 316,180" fill="currentColor"/>
+          <polygon points="256,140 176,260 336,260" fill="currentColor"/>
+          <polygon points="256,210 156,340 356,340" fill="currentColor"/>
+          <rect x="240" y="340" width="32" height="52" rx="4" fill="currentColor" opacity="0.7"/>
+        </svg>
+      </div>
+      <div class="brand-name">Boreal</div>
+    </div>
+
+    <button class="nav-item active" data-view="overview">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      <span>Overview</span>
+    </button>
+    <button class="nav-item" data-view="transactions">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+      <span>Transactions</span>
+      <span class="ct">142</span>
+    </button>
+    <button class="nav-item" data-view="budgets">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>
+      <span>Budgets &amp; goals</span>
+    </button>
+    <button class="nav-item" data-view="accounts">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 1 0-4h12"/><circle cx="17" cy="13" r="1.2"/></svg>
+      <span>Accounts</span>
+    </button>
+    <button class="nav-item" data-view="import">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4M12 3v12M7 8l5-5 5 5"/></svg>
+      <span>Import</span>
+      <span class="ct">12</span>
+    </button>
+
+    <div class="sb-foot">
+      <button class="nav-item" data-view="settings">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.15-1.43l2-1.55-2-3.46-2.36.85a7 7 0 0 0-2.48-1.43L13.5 2h-3l-.51 2.98a7 7 0 0 0-2.48 1.43l-2.36-.85-2 3.46 2 1.55A7 7 0 0 0 5 12c0 .49.05.96.15 1.43l-2 1.55 2 3.46 2.36-.85a7 7 0 0 0 2.48 1.43L10.5 22h3l.51-2.98a7 7 0 0 0 2.48-1.43l2.36.85 2-3.46-2-1.55c.1-.47.15-.94.15-1.43z"/></svg>
+        <span>Settings</span>
+      </button>
+      <div class="user-tile">
+        <div class="avatar">R</div>
+        <div class="user-info">
+          <div class="user-name">Razzaq</div>
+          <div class="user-mail"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="cbb9aab1b1aaba8baeb3aaa6bba7aee5a8a4a6">[email&#160;protected]</a></div>
+        </div>
+        <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ════════ MAIN ════════ -->
+  <main class="main">
+
+    <!-- ════ Topbar ════ -->
+    <div class="topbar show-month" id="topbar">
+      <div class="crumb">
+        <div class="ic" id="crumb-ic"></div>
+        <span id="crumb-text">Overview</span>
+      </div>
+      <div class="month-chip">
+        <button>‹</button>
+        <button class="val">May 2026</button>
+        <button>›</button>
+      </div>
+
+      <div class="spacer"></div>
+
+      <button class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        <span class="ph">Search transactions, merchants…</span>
+        <span class="kbd">⌘K</span>
+      </button>
+
+      <button class="tb-btn" id="export-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export
+      </button>
+      <button class="tb-btn primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        Add transaction
+      </button>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════ -->
+    <!-- VIEW: OVERVIEW (Dashboard)                          -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <section class="view active" id="view-overview">
+      <div class="page">
+
+        <div class="page-head">
+          <div>
+            <div class="page-eyebrow">May 2026 · 18 days into month</div>
+            <h1 class="page-h1 serif">You saved <span class="pos">$1,240.55</span> <span style="color:var(--ink-3);font-weight:400">·</span> 29% savings rate</h1>
+            <div class="page-sub">Best run since February — and you're already on track to beat last month.</div>
+          </div>
+        </div>
+
+        <!-- HERO: Net worth -->
+        <div class="hero-card">
+          <div>
+            <div class="h-label">Net worth · May</div>
+            <div class="h-value serif">$42,180<span class="cents">.45</span></div>
+            <div class="h-delta">
+              <span><span class="pos">+$1,260</span> this month</span>
+              <span><strong>+3.1%</strong> vs Apr</span>
+              <span class="lozenge">▲ Best YTD</span>
+            </div>
+          </div>
+          <div class="h-chart">
+            <svg viewBox="0 0 480 90" style="width:100%;height:100%;display:block">
+              <defs>
+                <linearGradient id="nw-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="var(--accent-2)" stop-opacity="0.18"/>
+                  <stop offset="100%" stop-color="var(--accent-2)" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <line x1="0" y1="20" x2="480" y2="20" stroke="var(--line)" stroke-dasharray="2,3" stroke-width="0.5"/>
+              <line x1="0" y1="50" x2="480" y2="50" stroke="var(--line)" stroke-dasharray="2,3" stroke-width="0.5"/>
+              <path d="M0,72 L40,68 L80,64 L120,60 L160,52 L200,55 L240,46 L280,40 L320,34 L360,28 L400,22 L440,16 L480,10 L480,90 L0,90 Z" fill="url(#nw-fill)"/>
+              <polyline points="0,72 40,68 80,64 120,60 160,52 200,55 240,46 280,40 320,34 360,28 400,22 440,16 480,10" fill="none" stroke="var(--accent-2)" stroke-width="1.8"/>
+              <circle cx="480" cy="10" r="3.5" fill="var(--accent-2)"/>
+              <circle cx="480" cy="10" r="6.5" fill="var(--accent-2)" opacity="0.18"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- FLOW: In / Out / Recurring -->
+        <div class="flow">
+          <div class="f-card">
+            <div class="lbl">In</div>
+            <div class="val pos num">$4,280.00</div>
+            <div class="dlt"><span class="up">+8.4%</span> vs Apr · 2 deposits</div>
+          </div>
+          <div class="f-card">
+            <div class="lbl">Out</div>
+            <div class="val num">$3,039.45</div>
+            <div class="dlt"><span class="up">−2.1%</span> vs Apr · 87 expenses</div>
+          </div>
+          <div class="f-card">
+            <div class="lbl">Recurring</div>
+            <div class="val num">$648.20</div>
+            <div class="dlt">8 subs · 21% of spend</div>
+          </div>
+        </div>
+
+        <!-- 2x2: where it went / budgets / accounts / recurring -->
+        <div class="grid-2" style="margin-bottom:14px">
+          <div class="card">
+            <div class="card-h">
+              <h3>Where it went</h3>
+              <a class="see-all">See all →</a>
+            </div>
+            <div class="breakdown">
+              <!-- Donut -->
+              <svg viewBox="0 0 140 140" style="width:130px;height:130px;flex-shrink:0">
+                <circle cx="70" cy="70" r="50" fill="none" stroke="var(--bg-2)" stroke-width="18"/>
+                <circle cx="70" cy="70" r="50" fill="none" stroke="oklch(48% 0.09 165)" stroke-width="18" stroke-dasharray="78 314" stroke-dashoffset="0" transform="rotate(-90 70 70)"/>
+                <circle cx="70" cy="70" r="50" fill="none" stroke="oklch(58% 0.16 65)" stroke-width="18" stroke-dasharray="56 314" stroke-dashoffset="-78" transform="rotate(-90 70 70)"/>
+                <circle cx="70" cy="70" r="50" fill="none" stroke="oklch(60% 0.12 280)" stroke-width="18" stroke-dasharray="42 314" stroke-dashoffset="-134" transform="rotate(-90 70 70)"/>
+                <circle cx="70" cy="70" r="50" fill="none" stroke="oklch(58% 0.14 30)" stroke-width="18" stroke-dasharray="32 314" stroke-dashoffset="-176" transform="rotate(-90 70 70)"/>
+                <circle cx="70" cy="70" r="50" fill="none" stroke="oklch(55% 0.1 215)" stroke-width="18" stroke-dasharray="106 314" stroke-dashoffset="-208" transform="rotate(-90 70 70)"/>
+                <text x="70" y="64" text-anchor="middle" font-size="10" fill="var(--ink-3)" font-family="var(--font-sans)" letter-spacing="0.5">SPENT</text>
+                <text x="70" y="80" text-anchor="middle" font-size="15" fill="var(--ink)" font-weight="600" font-family="var(--font-sans)" font-variant-numeric="tabular-nums">$3,039</text>
+              </svg>
+              <div class="bd-list">
+                <div class="bd-row"><span class="swatch" style="background:oklch(48% 0.09 165)"></span><span class="nm">Groceries</span><span class="amt num">$748</span><span class="pct">25%</span></div>
+                <div class="bd-row"><span class="swatch" style="background:oklch(58% 0.16 65)"></span><span class="nm">Dining</span><span class="amt num">$534</span><span class="pct">18%</span></div>
+                <div class="bd-row"><span class="swatch" style="background:oklch(60% 0.12 280)"></span><span class="nm">Subscriptions</span><span class="amt num">$402</span><span class="pct">13%</span></div>
+                <div class="bd-row"><span class="swatch" style="background:oklch(58% 0.14 30)"></span><span class="nm">Fuel</span><span class="amt num">$306</span><span class="pct">10%</span></div>
+                <div class="bd-row"><span class="swatch" style="background:oklch(55% 0.1 215)"></span><span class="nm">Everything else</span><span class="amt num">$1,049</span><span class="pct">34%</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">
+              <h3>Budget pacing</h3>
+              <a class="see-all" onclick="navTo('budgets')">Manage →</a>
+            </div>
+            <div class="bgt">
+              <div class="bgt-row">
+                <div class="bgt-name"><span class="swatch" style="background:oklch(48% 0.09 165)"></span>Groceries</div>
+                <div class="bgt-amts"><strong>$748</strong> of $900 · 13 days left</div>
+              </div>
+              <div class="bgt-track">
+                <div class="bgt-fill" style="width:83%"></div>
+                <div class="bgt-pace" style="left:58%"></div>
+              </div>
+              <div class="bgt-foot">
+                <span class="status over">↑ Over pace · likely $1,140 by month-end</span>
+                <span>Day 18 / 31</span>
+              </div>
+            </div>
+            <div class="bgt">
+              <div class="bgt-row">
+                <div class="bgt-name"><span class="swatch" style="background:oklch(58% 0.16 65)"></span>Dining out</div>
+                <div class="bgt-amts"><strong>$534</strong> of $500 · 13 days left</div>
+              </div>
+              <div class="bgt-track">
+                <div class="bgt-fill danger" style="width:100%"></div>
+                <div class="bgt-pace" style="left:58%"></div>
+              </div>
+              <div class="bgt-foot">
+                <span class="status crit">↑ Over by $34 — and rising</span>
+                <span>Day 18 / 31</span>
+              </div>
+            </div>
+            <div class="bgt">
+              <div class="bgt-row">
+                <div class="bgt-name"><span class="swatch" style="background:oklch(60% 0.12 280)"></span>Subscriptions</div>
+                <div class="bgt-amts"><strong>$402</strong> of $450 · 13 days left</div>
+              </div>
+              <div class="bgt-track">
+                <div class="bgt-fill" style="width:89%"></div>
+                <div class="bgt-pace" style="left:58%"></div>
+              </div>
+              <div class="bgt-foot">
+                <span class="status ok">✓ Likely $450 by month-end</span>
+                <span>Day 18 / 31</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:14px">
+          <div class="card">
+            <div class="card-h">
+              <h3>Accounts</h3>
+              <a class="see-all" onclick="navTo('accounts')">Manage →</a>
+            </div>
+            <div class="acct-subtotal" style="border-bottom:1px solid var(--line);padding-bottom:6px">
+              <span>Cash &amp; savings</span>
+              <span class="v num">$31,420.18</span>
+            </div>
+            <div class="acct">
+              <div class="left">
+                <div class="glyph" style="background:oklch(94% 0.04 165);color:var(--accent);border:1px solid oklch(86% 0.04 165)">T</div>
+                <div><div class="name">TD Chequing</div><div class="type">Chequing · ••3421</div></div>
+              </div>
+              <div class="bal num">$3,840.20</div>
+            </div>
+            <div class="acct">
+              <div class="left">
+                <div class="glyph" style="background:oklch(94% 0.05 230);color:oklch(45% 0.15 230);border:1px solid oklch(86% 0.05 230)">W</div>
+                <div><div class="name">Wealthsimple Cash</div><div class="type">Savings · 4.0% APY</div></div>
+              </div>
+              <div class="bal num">$8,580.00</div>
+            </div>
+            <div class="acct">
+              <div class="left">
+                <div class="glyph" style="background:oklch(94% 0.05 130);color:oklch(40% 0.13 130);border:1px solid oklch(86% 0.05 130)">Q</div>
+                <div><div class="name">Questrade TFSA</div><div class="type">Investment</div></div>
+              </div>
+              <div class="bal num">$18,999.98</div>
+            </div>
+            <div class="acct-subtotal" style="border-top:1px solid var(--line);padding-top:12px;margin-top:6px">
+              <span>Credit</span>
+              <span class="v num" style="color:var(--danger)">−$2,612.78</span>
+            </div>
+            <div class="acct">
+              <div class="left">
+                <div class="glyph" style="background:oklch(96% 0.025 28);color:var(--danger);border:1px solid oklch(86% 0.05 28)">A</div>
+                <div><div class="name">Amex Cobalt</div><div class="type">Credit · 52% util</div></div>
+              </div>
+              <div class="bal num neg">−$2,612.78</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">
+              <h3>Recurring radar</h3>
+              <span class="meta">8 detected · $648/mo</span>
+            </div>
+            <div class="rec">
+              <div class="gl">N</div>
+              <div>
+                <div class="nm">Netflix Standard</div>
+                <div class="meta">Monthly · last 12 mo</div>
+              </div>
+              <div class="amt num">$17.99 <small class="up">↑ $1.50 since Mar</small></div>
+            </div>
+            <div class="rec">
+              <div class="gl">S</div>
+              <div>
+                <div class="nm">Spotify Premium</div>
+                <div class="meta">Monthly · steady</div>
+              </div>
+              <div class="amt num">$10.99 <small>no change</small></div>
+            </div>
+            <div class="rec">
+              <div class="gl">B</div>
+              <div>
+                <div class="nm">Bell Mobility</div>
+                <div class="meta">Monthly · next May 28</div>
+              </div>
+              <div class="amt num">$85.00 <small>no change</small></div>
+            </div>
+            <div class="rec">
+              <div class="gl">F</div>
+              <div>
+                <div class="nm">Fitness Plus</div>
+                <div class="meta">Monthly · paused?</div>
+              </div>
+              <div class="amt num" style="color:var(--ink-3)">$22.99 <small>skipped this month</small></div>
+            </div>
+            <div style="text-align:center;margin-top:8px"><a class="see-all" onclick="navTo('budgets')">View all 8 →</a></div>
+          </div>
+        </div>
+
+        <!-- Trend strip -->
+        <div class="card">
+          <div class="card-h">
+            <h3>Income vs expenses · last 12 months</h3>
+            <div style="display:flex;gap:12px;font-size:11.5px;color:var(--ink-3)">
+              <span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:2px;background:var(--pos)"></span>Income</span>
+              <span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:2px;background:var(--ink-2)"></span>Expenses</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:10px;height:140px">
+            <!-- 12 month bars - script populates -->
+            <div id="trend-bars" style="display:contents"></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════ -->
+    <!-- VIEW: TRANSACTIONS                                   -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <section class="view" id="view-transactions">
+      <div class="page">
+
+        <div class="page-head">
+          <div>
+            <div class="page-eyebrow">May 2026</div>
+            <h1 class="page-h1 serif">142 transactions</h1>
+            <div class="page-sub"><span style="color:var(--pos);font-weight:500">$4,280 in</span> · <span>$3,039 out</span> · 9 still need review</div>
+          </div>
+        </div>
+
+        <!-- Uncategorized banner -->
+        <div class="unc-banner">
+          <div class="left">
+            <div class="ic">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+            </div>
+            <div>
+              <div class="ttl">9 transactions need review</div>
+              <div class="desc">Categorize them once and Boreal remembers the merchant forever.</div>
+            </div>
+          </div>
+          <button class="tb-btn primary" style="background:var(--accent);border-color:var(--accent)">Review now →</button>
+        </div>
+
+        <!-- Tools -->
+        <div class="tx-tools">
+          <button class="search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+            <span class="ph">Find a merchant, amount, note…</span>
+            <span class="kbd">/</span>
+          </button>
+          <button class="fpill"><span class="lbl">Category</span><span class="val"><span style="width:8px;height:8px;border-radius:2px;background:oklch(48% 0.09 165)"></span>Groceries</span></button>
+          <button class="fpill add">+ Add filter</button>
+          <div class="seg">
+            <button class="on">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              Visible
+            </button>
+            <button>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              Hidden
+            </button>
+          </div>
+        </div>
+
+        <!-- Date-grouped table -->
+        <div class="tbl-wrap">
+          <div class="tbl-thead">
+            <div><input type="checkbox" style="accent-color:var(--accent)"></div>
+            <div>Description</div>
+            <div>Category</div>
+            <div class="right">Amount</div>
+          </div>
+
+          <div class="day-group">
+            <span class="day">Today <span class="dt">· Sun May 24</span></span>
+            <span class="net">−$67.30 net</span>
+          </div>
+          <div class="tx-row">
+            <div class="chk"><input type="checkbox"></div>
+            <div class="desc">
+              <div class="gl">☕</div>
+              <div><div class="name">Tim Hortons</div><div class="sub">2 charges · <span class="acct">TD Visa</span></div></div>
+            </div>
+            <div><span class="cat-pill"><span class="dot" style="background:oklch(58% 0.16 65)"></span>Coffee</span></div>
+            <div class="amt">−$9.70 <small>2× $4.85</small></div>
+          </div>
+          <div class="tx-row">
+            <div class="chk"><input type="checkbox"></div>
+            <div class="desc">
+              <div class="gl">🍴</div>
+              <div><div class="name">Sushi Shou</div><div class="sub"><span class="acct">Amex</span></div></div>
+            </div>
+            <div><span class="cat-pill"><span class="dot" style="background:oklch(58% 0.16 65)"></span>Dining</span></div>
+            <div class="amt">−$57.60</div>
+          </div>
+
+          <div class="day-group">
+            <span class="day">Yesterday <span class="dt">· Sat May 23</span></span>
+            <span class="net">−$184.40 net</span>
+          </div>
+          <div class="tx-row">
+            <div class="chk"><input type="checkbox"></div>
+            <div class="desc">
+              <div class="gl">🛒</div>
+              <div><div class="name">Loblaws #1042</div><div class="sub">Weekly · <span class="acct">TD Chequing</span></div></div>
+            </div>
+            <div><span class="cat-pill"><span class="dot" style="background:oklch(48% 0.09 165)"></span>Groceries</span></div>
+            <div class="amt">−$112.45</div>
+          </div>
+          <div class="tx-row">
+            <div class="chk"><input type="checkbox"></div>
+            <div class="desc">
+              <div class="gl">⛽</div>
+              <div><div class="name">Petro-Canada</div><div class="sub"><span class="acct">TD Visa</span></div></div>
+            </div>
+            <div><span class="cat-pill"><span class="dot" style="background:oklch(58% 0.14 30)"></span>Fuel</span></div>
+            <div class="amt">−$71.95</div>
+          </div>
+
+          <div class="day-group">
+            <span class="day">Fri May 22</span>
+            <span class="net pos">+$2,128.05 net</span>
+          </div>
+          <div class="tx-row">
+            <div class="chk"><input type="checkbox"></div>
+            <div class="desc">
+              <div class="gl" style="background:var(--pos-soft);border-color:transparent">💼</div>
+              <div><div class="name">Payroll deposit · ACME Inc</div><div class="sub">Biweekly · <span class="acct">TD Chequing</span></div></div>
+            </div>
+            <div><span class="cat-pill" style="background:var(--pos-soft);border-color:transparent;color:var(--pos)"><span class="dot" style="background:var(--pos)"></span>Salary</span></div>
+            <div class="amt pos">+$2,140.00</div>
+          </div>
+          <div class="tx-row">
+            <div class="chk"><input type="checkbox"></div>
+            <div class="desc">
+              <div class="gl" style="background:var(--accent-soft);border-color:transparent">N</div>
+              <div><div class="name">Netflix.com</div><div class="sub">Monthly recurring · <span class="acct">Amex</span></div></div>
+            </div>
+            <div><span class="cat-pill"><span class="dot" style="background:oklch(60% 0.12 280)"></span>Subscriptions</span></div>
+            <div class="amt">−$17.99</div>
+          </div>
+          <div class="tx-row" style="background:oklch(99% 0.015 165)">
+            <div class="chk"><input type="checkbox"></div>
+            <div class="desc">
+              <div class="gl" style="background:var(--accent-soft);color:var(--accent);border-color:transparent">?</div>
+              <div><div class="name">SQ *MAPLE & VINE</div><div class="sub" style="color:var(--accent)"><span class="acct" style="background:var(--accent);color:white;border-color:transparent">Needs review</span></div></div>
+            </div>
+            <div><span class="cat-pill" style="background:var(--accent-soft);color:var(--accent);border-color:transparent">↳ Suggest</span></div>
+            <div class="amt">−$24.00</div>
+          </div>
+
+          <div class="day-group">
+            <span class="day">Thu May 21</span>
+            <span class="net">−$48.95 net</span>
+          </div>
+          <div class="tx-row">
+            <div class="chk"><input type="checkbox"></div>
+            <div class="desc">
+              <div class="gl">🛒</div>
+              <div><div class="name">Costco Wholesale</div><div class="sub"><span class="acct">TD Visa</span></div></div>
+            </div>
+            <div><span class="cat-pill"><span class="dot" style="background:oklch(48% 0.09 165)"></span>Groceries</span></div>
+            <div class="amt">−$48.95</div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:12px;color:var(--ink-3)">
+          <span>Showing <strong style="color:var(--ink);font-weight:500">8 of 142</strong> · <a style="color:var(--accent);cursor:pointer">Save this view</a></span>
+          <button class="tb-btn">Load more transactions</button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════ -->
+    <!-- VIEW: BUDGETS                                        -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <section class="view" id="view-budgets">
+      <div class="page">
+
+        <div class="page-head">
+          <div>
+            <div class="page-eyebrow">May 2026 · 13 days left</div>
+            <h1 class="page-h1 serif">3 budgets on track <span style="color:var(--ink-3);font-weight:400">·</span> <span class="neg">2 at risk</span></h1>
+            <div class="page-sub">Set limits for what matters, watch them daily, stop worrying.</div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active">Spending limits</button>
+          <button class="tab">Savings goals</button>
+          <button class="tab">History</button>
+        </div>
+
+        <!-- At risk -->
+        <div class="bgt-section">
+          <div class="bgt-section-h">
+            <h3>At risk <span class="ct">2</span></h3>
+            <p>Over pace or already past the limit — review these first.</p>
+          </div>
+          <div class="bgt-card">
+            <div class="bgt">
+              <div class="bgt-row">
+                <div class="bgt-name"><span class="swatch" style="background:oklch(58% 0.16 65)"></span>Dining out</div>
+                <div class="bgt-amts"><strong>$534</strong> of $500 · 13 days left</div>
+              </div>
+              <div class="bgt-track">
+                <div class="bgt-fill danger" style="width:100%"></div>
+                <div class="bgt-pace" style="left:58%"></div>
+              </div>
+              <div class="bgt-foot">
+                <span class="status crit">↑ Over by $34 already — projecting $920 by month-end</span>
+                <span>Day 18 / 31</span>
+              </div>
+            </div>
+            <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
+            <div class="bgt">
+              <div class="bgt-row">
+                <div class="bgt-name"><span class="swatch" style="background:oklch(48% 0.09 165)"></span>Groceries</div>
+                <div class="bgt-amts"><strong>$748</strong> of $900 · 13 days left</div>
+              </div>
+              <div class="bgt-track">
+                <div class="bgt-fill warn" style="width:83%"></div>
+                <div class="bgt-pace" style="left:58%"></div>
+              </div>
+              <div class="bgt-foot">
+                <span class="status over">↑ Over pace · likely $1,140 by month-end</span>
+                <span>Day 18 / 31</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- On track -->
+        <div class="bgt-section">
+          <div class="bgt-section-h">
+            <h3>On track <span class="ct">3</span></h3>
+            <p>Doing fine — no action needed.</p>
+          </div>
+          <div class="bgt-card">
+            <div class="bgt">
+              <div class="bgt-row">
+                <div class="bgt-name"><span class="swatch" style="background:oklch(60% 0.12 280)"></span>Subscriptions</div>
+                <div class="bgt-amts"><strong>$402</strong> of $450 · 13 days left</div>
+              </div>
+              <div class="bgt-track">
+                <div class="bgt-fill" style="width:89%"></div>
+                <div class="bgt-pace" style="left:58%"></div>
+              </div>
+              <div class="bgt-foot">
+                <span class="status ok">✓ Likely $450 by month-end</span>
+                <span>Day 18 / 31</span>
+              </div>
+            </div>
+            <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
+            <div class="bgt">
+              <div class="bgt-row">
+                <div class="bgt-name"><span class="swatch" style="background:oklch(58% 0.14 30)"></span>Fuel &amp; transit</div>
+                <div class="bgt-amts"><strong>$162</strong> of $300 · 13 days left</div>
+              </div>
+              <div class="bgt-track">
+                <div class="bgt-fill" style="width:54%"></div>
+                <div class="bgt-pace" style="left:58%"></div>
+              </div>
+              <div class="bgt-foot">
+                <span class="status ok">✓ Under pace — should land at $278</span>
+                <span>Day 18 / 31</span>
+              </div>
+            </div>
+            <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
+            <div class="bgt">
+              <div class="bgt-row">
+                <div class="bgt-name"><span class="swatch" style="background:oklch(55% 0.1 215)"></span>Shopping</div>
+                <div class="bgt-amts"><strong>$78</strong> of $200 · 13 days left</div>
+              </div>
+              <div class="bgt-track">
+                <div class="bgt-fill" style="width:39%"></div>
+                <div class="bgt-pace" style="left:58%"></div>
+              </div>
+              <div class="bgt-foot">
+                <span class="status ok">✓ Plenty of room</span>
+                <span>Day 18 / 31</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- No budget yet -->
+        <div class="bgt-section">
+          <div class="bgt-section-h">
+            <h3>No budget yet <span class="ct">3</span></h3>
+            <p>You're spending in these categories — but no limit. Set one in one click.</p>
+          </div>
+          <div class="empty-cat">
+            <div class="nm">
+              <span class="swatch" style="background:oklch(58% 0.15 340)"></span>
+              Entertainment
+              <span class="spent">$184 spent this month</span>
+            </div>
+            <button class="set">+ Set limit</button>
+          </div>
+          <div class="empty-cat">
+            <div class="nm">
+              <span class="swatch" style="background:oklch(60% 0.1 100)"></span>
+              Personal care
+              <span class="spent">$62 spent this month</span>
+            </div>
+            <button class="set">+ Set limit</button>
+          </div>
+          <div class="empty-cat">
+            <div class="nm">
+              <span class="swatch" style="background:oklch(55% 0.12 50)"></span>
+              Gifts &amp; donations
+              <span class="spent">$40 spent this month</span>
+            </div>
+            <button class="set">+ Set limit</button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════ -->
+    <!-- VIEW: ACCOUNTS                                       -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <section class="view" id="view-accounts">
+      <div class="page">
+
+        <div class="page-head">
+          <div>
+            <div class="page-eyebrow">Net worth · May 2026</div>
+            <h1 class="page-h1 serif">$42,180<span style="color:var(--ink-3);font-weight:400">.45</span></h1>
+            <div class="page-sub"><span style="color:var(--pos);font-weight:500">+$1,260 (+3.1%)</span> vs last month · highest since you opened your Wealthsimple account</div>
+          </div>
+        </div>
+
+        <!-- Net worth chart -->
+        <div class="card" style="margin-bottom:24px">
+          <div class="card-h">
+            <h3>Net worth trend</h3>
+            <div style="display:flex;gap:4px">
+              <button class="fpill" style="height:26px;font-size:11.5px">1M</button>
+              <button class="fpill" style="height:26px;font-size:11.5px">6M</button>
+              <button class="fpill" style="height:26px;font-size:11.5px;background:var(--ink);color:var(--bg);border-color:var(--ink)">1Y</button>
+              <button class="fpill" style="height:26px;font-size:11.5px">All</button>
+            </div>
+          </div>
+          <svg viewBox="0 0 720 180" style="width:100%;height:180px;display:block">
+            <defs>
+              <linearGradient id="nw-fill-2" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="var(--accent-2)" stop-opacity="0.16"/>
+                <stop offset="100%" stop-color="var(--accent-2)" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <line x1="40" y1="20" x2="720" y2="20" stroke="var(--line)" stroke-dasharray="2,3" stroke-width="0.6"/>
+            <line x1="40" y1="60" x2="720" y2="60" stroke="var(--line)" stroke-dasharray="2,3" stroke-width="0.6"/>
+            <line x1="40" y1="100" x2="720" y2="100" stroke="var(--line)" stroke-dasharray="2,3" stroke-width="0.6"/>
+            <line x1="40" y1="140" x2="720" y2="140" stroke="var(--line)" stroke-dasharray="2,3" stroke-width="0.6"/>
+            <text x="36" y="22" font-size="10" fill="var(--ink-4)" text-anchor="end">$45k</text>
+            <text x="36" y="62" font-size="10" fill="var(--ink-4)" text-anchor="end">$40k</text>
+            <text x="36" y="102" font-size="10" fill="var(--ink-4)" text-anchor="end">$35k</text>
+            <text x="36" y="142" font-size="10" fill="var(--ink-4)" text-anchor="end">$30k</text>
+            <path d="M50,135 L106,128 L162,124 L218,118 L274,109 L330,113 L386,98 L442,90 L498,80 L554,70 L610,58 L666,48 L720,38 L720,165 L50,165 Z" fill="url(#nw-fill-2)"/>
+            <polyline points="50,135 106,128 162,124 218,118 274,109 330,113 386,98 442,90 498,80 554,70 610,58 666,48 720,38" fill="none" stroke="var(--accent-2)" stroke-width="2"/>
+            <circle cx="720" cy="38" r="4" fill="var(--accent-2)"/>
+            <text x="50" y="178" font-size="10" fill="var(--ink-3)">Jun '25</text>
+            <text x="385" y="178" font-size="10" fill="var(--ink-3)" text-anchor="middle">Dec</text>
+            <text x="720" y="178" font-size="10" fill="var(--ink-3)" text-anchor="end">May '26</text>
+          </svg>
+        </div>
+
+        <!-- Account groups -->
+        <div class="section-h">
+          <h2>Cash &amp; savings <span class="ct">$12,420.20</span></h2>
+          <p style="font-size:12px;color:var(--ink-3)">Liquid · earning interest where possible</p>
+        </div>
+        <div class="card flush">
+          <div class="acct" style="padding:16px 22px">
+            <div class="left">
+              <div class="glyph" style="background:oklch(94% 0.04 165);color:var(--accent);border:1px solid oklch(86% 0.04 165)">T</div>
+              <div><div class="name">TD Chequing</div><div class="type">Chequing · ••3421 · 0% APY</div></div>
+            </div>
+            <div class="bal num">$3,840.20</div>
+          </div>
+          <div class="acct" style="padding:16px 22px">
+            <div class="left">
+              <div class="glyph" style="background:oklch(94% 0.05 230);color:oklch(45% 0.15 230);border:1px solid oklch(86% 0.05 230)">W</div>
+              <div><div class="name">Wealthsimple Cash</div><div class="type">Savings · 4.0% APY · earning $28.60/mo</div></div>
+            </div>
+            <div class="bal num">$8,580.00</div>
+          </div>
+        </div>
+
+        <div class="section-h">
+          <h2>Investments <span class="ct">$18,999.98</span></h2>
+          <p style="font-size:12px;color:var(--ink-3)">Long-term · not part of monthly spending</p>
+        </div>
+        <div class="card flush">
+          <div class="acct" style="padding:16px 22px">
+            <div class="left">
+              <div class="glyph" style="background:oklch(94% 0.05 130);color:oklch(40% 0.13 130);border:1px solid oklch(86% 0.05 130)">Q</div>
+              <div><div class="name">Questrade TFSA</div><div class="type">Investment · 11.2% YTD</div></div>
+            </div>
+            <div class="bal num">$18,999.98</div>
+          </div>
+        </div>
+
+        <div class="section-h">
+          <h2 style="color:var(--danger)">Credit &amp; debt <span class="ct" style="background:var(--danger-soft);color:var(--danger)">−$2,612.78</span></h2>
+          <p style="font-size:12px;color:var(--ink-3)">Outstanding balances · subtracted from net worth</p>
+        </div>
+        <div class="card flush">
+          <div class="acct" style="padding:16px 22px">
+            <div class="left">
+              <div class="glyph" style="background:oklch(96% 0.025 28);color:var(--danger);border:1px solid oklch(86% 0.05 28)">A</div>
+              <div>
+                <div class="name">Amex Cobalt</div>
+                <div class="type">Credit card · $5,000 limit · 52% utilization</div>
+                <div style="margin-top:6px;width:200px;height:4px;background:var(--bg-2);border-radius:999px;overflow:hidden"><div style="width:52%;height:100%;background:var(--warn);border-radius:999px"></div></div>
+              </div>
+            </div>
+            <div class="bal num neg">−$2,612.78</div>
+          </div>
+        </div>
+
+        <div style="margin-top:32px;display:flex;gap:10px">
+          <button class="tb-btn primary">+ Add account</button>
+          <button class="tb-btn">↔ Record a transfer</button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════ -->
+    <!-- VIEW: IMPORT                                         -->
+    <!-- ════════════════════════════════════════════════════ -->
+    <section class="view" id="view-import">
+      <div class="page">
+
+        <div class="page-head">
+          <div>
+            <div class="page-eyebrow">Import · last sync 2 days ago</div>
+            <h1 class="page-h1 serif">Drop in your bank export.</h1>
+            <div class="page-sub">Auto-detects: Tangerine · Wealthsimple · RBC · TD · CIBC · Scotiabank · BMO · National · Amex · OFX/QFX from any bank.</div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active">Drop files</button>
+          <button class="tab">Rules <span style="color:var(--ink-3);margin-left:4px">12</span></button>
+          <button class="tab">History</button>
+        </div>
+
+        <!-- Compact drop zone -->
+        <div style="background:var(--surf);border:2px dashed var(--line-2);border-radius:16px;padding:48px 32px;text-align:center;margin-bottom:24px;transition:all .2s;cursor:pointer">
+          <div style="width:56px;height:56px;border-radius:16px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;margin:0 auto 14px">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <h3 style="font-size:18px;font-weight:500;letter-spacing:-0.015em;margin-bottom:4px">Drop your CSV, OFX, or QFX</h3>
+          <p style="font-size:13px;color:var(--ink-3);margin-bottom:14px">Or <span style="color:var(--accent);font-weight:500;text-decoration:underline">browse files</span> — multiple at once is fine.</p>
+          <p style="font-size:11.5px;color:var(--ink-4)">Duplicates are skipped automatically · your data never leaves your machine</p>
+        </div>
+
+        <!-- Recent imports -->
+        <div class="section-h">
+          <h2>Recent imports</h2>
+        </div>
+        <div class="card flush">
+          <div style="display:grid;grid-template-columns:28px 1fr 100px 100px 90px;gap:14px;padding:14px 22px;border-bottom:1px solid var(--line);align-items:center">
+            <div style="width:28px;height:28px;border-radius:7px;background:var(--pos-soft);color:var(--pos);display:grid;place-items:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <div>
+              <div style="font-size:13.5px;font-weight:500">td_chequing_may2026.csv</div>
+              <div style="font-size:11.5px;color:var(--ink-3)">TD Chequing · May 22, 2026 at 9:14 AM</div>
+            </div>
+            <div style="font-size:12px;color:var(--ink-3);text-align:right">47 new</div>
+            <div style="font-size:12px;color:var(--ink-3);text-align:right">38 auto-cat</div>
+            <div style="text-align:right"><a style="font-size:12px;color:var(--accent);cursor:pointer">View →</a></div>
+          </div>
+          <div style="display:grid;grid-template-columns:28px 1fr 100px 100px 90px;gap:14px;padding:14px 22px;border-bottom:1px solid var(--line);align-items:center">
+            <div style="width:28px;height:28px;border-radius:7px;background:var(--pos-soft);color:var(--pos);display:grid;place-items:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <div>
+              <div style="font-size:13.5px;font-weight:500">amex-2026-05.csv</div>
+              <div style="font-size:11.5px;color:var(--ink-3)">Amex Cobalt · May 22, 2026 at 9:13 AM</div>
+            </div>
+            <div style="font-size:12px;color:var(--ink-3);text-align:right">22 new</div>
+            <div style="font-size:12px;color:var(--ink-3);text-align:right">19 auto-cat</div>
+            <div style="text-align:right"><a style="font-size:12px;color:var(--accent);cursor:pointer">View →</a></div>
+          </div>
+          <div style="display:grid;grid-template-columns:28px 1fr 100px 100px 90px;gap:14px;padding:14px 22px;align-items:center">
+            <div style="width:28px;height:28px;border-radius:7px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></div>
+            <div>
+              <div style="font-size:13.5px;font-weight:500">vancity_apr.csv <span style="font-size:10px;color:var(--accent);background:var(--accent-soft);padding:1px 5px;border-radius:4px;font-weight:500;margin-left:6px">UNKNOWN FORMAT</span></div>
+              <div style="font-size:11.5px;color:var(--ink-3)">Saved config · Apr 18, 2026</div>
+            </div>
+            <div style="font-size:12px;color:var(--ink-3);text-align:right">18 new</div>
+            <div style="font-size:12px;color:var(--ink-3);text-align:right">12 auto-cat</div>
+            <div style="text-align:right"><a style="font-size:12px;color:var(--accent);cursor:pointer">View →</a></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Placeholder views for completeness -->
+    <section class="view" id="view-settings">
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <div class="page-eyebrow">Settings</div>
+            <h1 class="page-h1 serif">Make Boreal yours.</h1>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:200px 1fr;gap:32px;margin-top:8px">
+          <div style="display:flex;flex-direction:column;gap:2px;font-size:13px">
+            <button class="nav-item active">General</button>
+            <button class="nav-item">Categories</button>
+            <button class="nav-item">Learned merchants</button>
+            <button class="nav-item">Data &amp; backup</button>
+            <button class="nav-item">Account</button>
+            <button class="nav-item" style="color:var(--danger)">Danger zone</button>
+          </div>
+          <div>
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0">
+                <div><div style="font-size:13.5px;font-weight:500">Display name</div><div style="font-size:11.5px;color:var(--ink-3)">Shown in the sidebar</div></div>
+                <input value="Razzaq" style="background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px;width:200px;font-family:inherit">
+              </div>
+              <hr style="border:none;border-top:1px solid var(--line);margin:14px -22px;width:calc(100% + 44px)">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0">
+                <div><div style="font-size:13.5px;font-weight:500">Theme</div><div style="font-size:11.5px;color:var(--ink-3)">Light, dark, or follow system</div></div>
+                <div class="seg" style="height:28px"><button class="on">Light</button><button>Dark</button><button>System</button></div>
+              </div>
+              <hr style="border:none;border-top:1px solid var(--line);margin:14px -22px;width:calc(100% + 44px)">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0">
+                <div><div style="font-size:13.5px;font-weight:500">Currency</div><div style="font-size:11.5px;color:var(--ink-3)">Default for new accounts</div></div>
+                <select style="background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px;width:120px;font-family:inherit">
+                  <option>CAD</option>
+                  <option>USD</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+</div>
+
+<!-- ════════ Mobile preview toggle ════════ -->
+<button class="mobile-toggle" onclick="document.getElementById('mobile-modal').classList.add('open')">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="3"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+  See on mobile
+</button>
+
+<div class="mobile-back" id="mobile-modal">
+  <button class="close-ph" onclick="document.getElementById('mobile-modal').classList.remove('open')">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </button>
+  <div class="phone">
+    <div class="screen">
+      <div class="status">
+        <span class="num">9:41</span>
+        <span style="display:flex;gap:5px;align-items:center"><span style="font-size:9px">●●●●●</span> <span style="font-size:9px">5G</span> <span style="display:inline-block;width:18px;height:9px;border:1px solid var(--ink);border-radius:2px;position:relative"><span style="position:absolute;inset:1px;background:var(--ink);width:80%;border-radius:1px"></span></span></span>
+      </div>
+      <div class="ph-top">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></div>
+        <div class="ttl">Overview</div>
+        <div class="mo">May ▾</div>
+      </div>
+      <div class="ph-body">
+        <div class="head-copy">You saved <span class="pos">$1,240</span> · 29%</div>
+        <div class="hero-m">
+          <div class="lbl">Net worth · May</div>
+          <div class="v serif">$42,180<span style="font-size:14px;color:var(--ink-3);font-weight:400">.45</span></div>
+          <div class="d"><span class="pos">+$1,260</span> · +3.1% vs Apr</div>
+          <svg viewBox="0 0 240 30" style="width:100%;height:30px;margin-top:6px"><polyline points="0,25 30,22 60,18 90,22 120,12 150,16 180,10 210,8 240,2" fill="none" stroke="var(--accent-2)" stroke-width="1.8"/></svg>
+        </div>
+        <div class="flow-m">
+          <div class="f"><div class="lbl">In</div><div class="v pos num">$4,280</div></div>
+          <div class="f"><div class="lbl">Out</div><div class="v num">$3,039</div></div>
+        </div>
+        <div class="ph-card">
+          <h5>Where it went</h5>
+          <div class="row"><div class="sw" style="background:oklch(48% 0.09 165)"></div><div class="nm">Groceries</div><div class="am">$748</div></div>
+          <div class="row"><div class="sw" style="background:oklch(58% 0.16 65)"></div><div class="nm">Dining</div><div class="am">$534</div></div>
+          <div class="row"><div class="sw" style="background:oklch(60% 0.12 280)"></div><div class="nm">Subscriptions</div><div class="am">$402</div></div>
+          <div class="row"><div class="sw" style="background:oklch(58% 0.14 30)"></div><div class="nm">Fuel</div><div class="am">$306</div></div>
+        </div>
+        <div class="ph-card">
+          <h5>2 budgets need attention</h5>
+          <div style="margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span style="font-weight:500">Dining</span><span class="num"><strong>$534</strong> / $500</span></div>
+            <div style="height:5px;background:var(--bg-2);border-radius:999px;overflow:hidden"><div style="width:100%;height:100%;background:var(--danger)"></div></div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span style="font-weight:500">Groceries</span><span class="num"><strong>$748</strong> / $900</span></div>
+            <div style="height:5px;background:var(--bg-2);border-radius:999px;overflow:hidden"><div style="width:83%;height:100%;background:var(--warn)"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tb on">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+          Overview
+        </div>
+        <div class="tb">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+          Txns
+        </div>
+        <div class="tb">
+          <div class="fab"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></div>
+        </div>
+        <div class="tb">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/></svg>
+          Budgets
+        </div>
+        <div class="tb">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg>
+          You
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+// ── View nav ──
+function navTo(view){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('view-'+view)?.classList.add('active');
+  document.querySelectorAll(`.nav-item[data-view="${view}"]`).forEach(n=>n.classList.add('active'));
+
+  const crumbText = {
+    overview:'Overview',
+    transactions:'Transactions',
+    budgets:'Budgets &amp; goals',
+    accounts:'Accounts',
+    import:'Import',
+    settings:'Settings'
+  }[view] || view;
+
+  const icons = {
+    overview:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
+    transactions:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>',
+    budgets:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/></svg>',
+    accounts:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 1 0-4h12"/></svg>',
+    import:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4M12 3v12M7 8l5-5 5 5"/></svg>',
+    settings:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.15-1.43l2-1.55-2-3.46-2.36.85a7 7 0 0 0-2.48-1.43L13.5 2h-3l-.51 2.98a7 7 0 0 0-2.48 1.43l-2.36-.85-2 3.46 2 1.55A7 7 0 0 0 5 12c0 .49.05.96.15 1.43l-2 1.55 2 3.46 2.36-.85a7 7 0 0 0 2.48 1.43L10.5 22h3l.51-2.98a7 7 0 0 0 2.48-1.43l2.36.85 2-3.46-2-1.55c.1-.47.15-.94.15-1.43z"/></svg>'
+  };
+
+  document.getElementById('crumb-text').innerHTML = crumbText;
+  document.getElementById('crumb-ic').innerHTML = icons[view] || '';
+
+  // Show/hide month chip based on view context
+  const tb = document.getElementById('topbar');
+  if (view === 'accounts' || view === 'import' || view === 'settings') {
+    tb.classList.remove('show-month');
+  } else {
+    tb.classList.add('show-month');
+  }
+
+  window.scrollTo({top:0, behavior:'instant'});
+}
+
+document.querySelectorAll('.nav-item[data-view]').forEach(btn=>{
+  btn.addEventListener('click', ()=>navTo(btn.dataset.view));
+});
+
+// ── Render trend bars ──
+const trends = [
+  {m:'Jun', inc:4200, exp:3100},
+  {m:'Jul', inc:4180, exp:3340},
+  {m:'Aug', inc:4250, exp:3260},
+  {m:'Sep', inc:4200, exp:3480},
+  {m:'Oct', inc:4310, exp:3120},
+  {m:'Nov', inc:4280, exp:3540},
+  {m:'Dec', inc:4900, exp:3920},
+  {m:'Jan', inc:4280, exp:3210},
+  {m:'Feb', inc:4280, exp:2980},
+  {m:'Mar', inc:4280, exp:3320},
+  {m:'Apr', inc:3950, exp:3105},
+  {m:'May', inc:4280, exp:3039, cur:true},
+];
+const max = Math.max(...trends.map(t => Math.max(t.inc, t.exp)));
+const barsHTML = trends.map(t => {
+  const incH = (t.inc / max) * 100;
+  const expH = (t.exp / max) * 100;
+  return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:0">
+    <div style="display:flex;align-items:flex-end;gap:3px;height:120px;width:100%;justify-content:center">
+      <div style="background:var(--pos);width:38%;height:${incH}%;border-radius:3px 3px 0 0;min-height:2px;opacity:${t.cur?1:0.85}"></div>
+      <div style="background:var(--ink-2);width:38%;height:${expH}%;border-radius:3px 3px 0 0;min-height:2px;opacity:${t.cur?1:0.7}"></div>
+    </div>
+    <div style="font-size:10.5px;color:${t.cur?'var(--ink)':'var(--ink-3)'};font-weight:${t.cur?'600':'400'};margin-top:6px">${t.m}</div>
+  </div>`;
+}).join('');
+document.getElementById('trend-bars').innerHTML = barsHTML;
+</script>
+
+</body>
+</html>

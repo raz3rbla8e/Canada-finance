@@ -3,7 +3,7 @@ import os
 import sqlite3
 
 from flask import Blueprint, render_template, jsonify, current_app, request
-from flask_login import login_required
+from flask_login import login_required, current_user
 
 from boreal.config import DB_PATH, SAMPLE_DATA_DIR, BANKS_DIR
 
@@ -11,8 +11,9 @@ main_bp = Blueprint("main", __name__)
 
 
 @main_bp.route("/")
-@login_required
 def index():
+    if not current_user.is_authenticated:
+        return render_template("landing.html")
     return render_template("index.html")
 
 
