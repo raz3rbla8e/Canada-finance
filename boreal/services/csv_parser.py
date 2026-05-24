@@ -8,6 +8,7 @@ import yaml
 from boreal.config import BANKS_DIR
 from boreal.services.helpers import parse_date, safe_abs_float
 from boreal.services.categorization import categorize
+from boreal.services.auto_detect import auto_detect_columns, build_virtual_config
 
 
 def load_bank_configs() -> list:
@@ -114,11 +115,12 @@ def parse_with_config(text: str, config: dict, learned: dict) -> list:
         text = "".join(lines[skip:])
 
     no_header = config.get("no_header", False)
+    delimiter = config.get("_delimiter", ",")
     if no_header:
         col_names = config.get("column_names", [])
-        reader = csv.DictReader(io.StringIO(text), fieldnames=col_names)
+        reader = csv.DictReader(io.StringIO(text), fieldnames=col_names, delimiter=delimiter)
     else:
-        reader = csv.DictReader(io.StringIO(text))
+        reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
     if not reader.fieldnames:
         return txns
 
@@ -195,7 +197,19 @@ def parse_with_config(text: str, config: dict, learned: dict) -> list:
                     continue
                 # Normalize Unicode minus signs (\u2212, \u2013, \u2014) to ASCII
                 cleaned_amt = raw_amt.replace("\u2212", "-").replace("\u2013", "-").replace("\u2014", "-")
-                amt_val = float(re.sub(r"[,$\s]", "", cleaned_amt))
+                # Handle accounting format: (123.45) = -123.45
+                if "(" in cleaned_amt and ")" in cleaned_amt:
+                    cleaned_amt = "-" + cleaned_amt.replace("(", "").replace(")", "")
+                cleaned_amt = re.sub(r"[$€£¥₹\s]", "", cleaned_amt)
+                # Handle European comma-decimal: 1.234,56 → 1234.56
+                if "," in cleaned_amt and "." in cleaned_amt:
+                    if cleaned_amt.rfind(",") > cleaned_amt.rfind("."):
+                        cleaned_amt = cleaned_amt.replace(".", "").replace(",", ".")
+                cleaned_amt = cleaned_amt.replace(",", "")
+                try:
+                    amt_val = float(cleaned_amt)
+                except ValueError:
+                    continue
                 if amt_val == 0:
                     continue
 
@@ -251,8 +265,9 @@ def _make_txn(dt, tx_type, desc, amount, account, learned, default_income_cat):
             "amount": amount, "account": account, "notes": "", "source": "csv"}
 
 
-def parse_csv_text(text: str, learned: dict = None) -> tuple:
-    """Detect bank from CSV header using YAML configs, then parse."""
+def parse_csv_text(text: str, learned: dict = None, account_label: str = None) -> tuple:
+    """Detect bank from CSV header using YAML configs, then parse.
+    Falls back to intelligent auto-detection if no YAML matches."""
     if learned is None:
         learned = {}
     first_line = text.splitlines()[0] if text.strip() else ""
@@ -261,4 +276,13 @@ def parse_csv_text(text: str, learned: dict = None) -> tuple:
     if config:
         txns = parse_with_config(text, config, learned)
         return txns, config.get("name", bank_name)
-    return [], "unknown"
+
+    # ── Auto-detection fallback ──
+    detection = auto_detect_columns(text)
+    if detection.get("error") or detection.get("confidence", 0) < 0.3:
+        return [], "unknown"
+
+    label = account_label or "Imported Account"
+    virtual_config = build_virtual_config(detection, account_label=label)
+    txns = parse_with_config(text, virtual_config, learned)
+    return txns, "Auto-detected"

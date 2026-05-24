@@ -13,6 +13,7 @@ from boreal.services.categorization import load_learned_dict
 from boreal.services.csv_parser import (
     load_bank_configs, detect_bank_config, parse_with_config,
 )
+from boreal.services.auto_detect import auto_detect_columns, build_virtual_config
 from boreal.services.rules_engine import save_transactions, detect_transfer_pairs
 
 import_export_bp = Blueprint("import_export", __name__)
@@ -55,9 +56,34 @@ def api_import():
                 "last_verified": config.get("last_verified", ""),
             })
         else:
+            # ── Auto-detection fallback ──
+            account_label = request.form.get("account_label", "").strip()
+            detection = auto_detect_columns(text)
+            if detection.get("error") or detection.get("confidence", 0) < 0.3:
+                results.append({
+                    "file": f.filename, "bank": "unknown", "added": 0, "dupes": 0,
+                    "last_verified": "",
+                })
+                continue
+            label = account_label or "Imported Account"
+            virtual_config = build_virtual_config(detection, account_label=label)
+            txns = parse_with_config(text, virtual_config, learned)
+            added, dupes, transfers = save_transactions(txns)
             results.append({
-                "file": f.filename, "bank": "unknown", "added": 0, "dupes": 0,
+                "file": f.filename, "bank": "Auto-detected",
+                "added": added, "dupes": dupes,
+                "transfers_detected": len(transfers),
                 "last_verified": "",
+                "auto_detected": True,
+                "detection": {
+                    "date_col": detection.get("date_col"),
+                    "desc_col": detection.get("desc_col"),
+                    "amount_col": detection.get("amount_col"),
+                    "debit_col": detection.get("debit_col"),
+                    "credit_col": detection.get("credit_col"),
+                    "confidence": detection.get("confidence", 0),
+                    "warnings": detection.get("warnings", []),
+                },
             })
     # After all files imported, detect cross-account transfer pairs
     pairs = detect_transfer_pairs(db)
@@ -145,11 +171,18 @@ def api_transfer_unlink():
 
 @import_export_bp.route("/api/detect-csv", methods=["POST"])
 def api_detect_csv():
-    """Detect bank from CSV; if unknown, return headers + preview rows."""
+    """Detect bank from CSV; if unknown, auto-detect columns and return preview."""
     f = request.files.get("file")
     if not f:
         return jsonify({"error": "No file provided"}), 400
-    text = f.read().decode("utf-8-sig")
+    raw = f.read()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("latin-1")
+        except UnicodeDecodeError:
+            return jsonify({"error": "Unsupported file encoding"}), 400
     lines = text.splitlines()
     if not lines:
         return jsonify({"error": "Empty file"}), 400
@@ -158,16 +191,39 @@ def api_detect_csv():
     if config:
         return jsonify({"detected": True, "bank": config.get("name", bank_name),
                         "config_name": bank_name})
-    # Unknown — return headers + preview rows
-    reader = csv.DictReader(io.StringIO(text))
-    headers = reader.fieldnames or []
+    # ── No YAML match — run intelligent auto-detection ──
+    detection = auto_detect_columns(text)
+    # Build preview rows from the detected structure
+    header_row = detection.get("header_row", 0)
+    csv_body = "\n".join(lines[header_row:])
+    delim = detection.get("delimiter", ",")
+    reader = csv.DictReader(io.StringIO(csv_body), delimiter=delim)
+    headers = reader.fieldnames or detection.get("headers", [])
     preview = []
     for i, row in enumerate(reader):
-        if i >= 5:
+        if i >= 10:
             break
         preview.append(dict(row))
-    return jsonify({"detected": False, "headers": headers, "preview": preview,
-                    "raw_text": text})
+    # Normalize the detection result into an "inferred" dict the frontend expects
+    inferred = {
+        "date_column": detection.get("date_col"),
+        "description_column": detection.get("desc_col"),
+        "amount_column": detection.get("amount_col"),
+        "debit_column": detection.get("debit_col"),
+        "credit_column": detection.get("credit_col"),
+        "amount_mode": "debit_credit" if (detection.get("debit_col") and detection.get("credit_col")) else "single",
+        "date_format": detection.get("date_format", "%Y-%m-%d"),
+        "amount_sign": detection.get("amount_sign", "standard"),
+        "confidence": detection.get("confidence", 0),
+        "warnings": detection.get("warnings", []),
+    }
+    return jsonify({
+        "detected": False,
+        "headers": headers,
+        "preview": preview,
+        "raw_text": text,
+        "inferred": inferred,
+    })
 
 
 @import_export_bp.route("/api/save-bank-config", methods=["POST"])
@@ -239,7 +295,12 @@ def api_preview_parse():
                     config, bank_name = cfg, name
                     break
         if not config:
-            return jsonify({"error": "Could not detect bank format", "transactions": [], "total": 0}), 400
+            # ── Auto-detection fallback for preview ──
+            detection = auto_detect_columns(text)
+            if detection.get("error") or detection.get("confidence", 0) < 0.3:
+                return jsonify({"error": "Could not detect bank format", "transactions": [], "total": 0}), 400
+            account_label = request.form.get("account_label", "").strip() or "Imported Account"
+            config = build_virtual_config(detection, account_label=account_label)
         learned = load_learned_dict(get_db())
         txns = parse_with_config(text, config, learned)
         return jsonify({"transactions": txns[:50], "total": len(txns), "count": len(txns)})
@@ -269,6 +330,62 @@ def api_preview_parse():
         config["columns"]["credit"] = mapping.get("credit_column", "")
     txns = parse_with_config(text, config, {})
     return jsonify({"transactions": txns[:50], "total": len(txns), "count": len(txns)})
+
+
+@import_export_bp.route("/api/import-mapped", methods=["POST"])
+def api_import_mapped():
+    """Import transactions from raw CSV text using a user-confirmed column mapping."""
+    d = request.json
+    if not d:
+        return jsonify({"error": "No data provided"}), 400
+    text = d.get("raw_text", "")
+    mapping = d.get("mapping", {})
+    if not text or not mapping:
+        return jsonify({"error": "Missing raw_text or mapping"}), 400
+
+    # Build a temporary config from the confirmed mapping
+    config = {
+        "columns": {
+            "date": mapping.get("date_column", ""),
+            "description": mapping.get("description_column", ""),
+        },
+        "date_formats": [mapping.get("date_format", "%Y-%m-%d")],
+        "account_label": mapping.get("bank_name", "Unknown Bank"),
+    }
+    if mapping.get("amount_mode") == "single":
+        config["columns"]["amount"] = mapping.get("amount_column", "")
+        config["amount_sign"] = mapping.get("amount_sign", "standard")
+    else:
+        config["columns"]["debit"] = mapping.get("debit_column", "")
+        config["columns"]["credit"] = mapping.get("credit_column", "")
+
+    db = get_db()
+    learned = load_learned_dict(db)
+    txns = parse_with_config(text, config, learned)
+    if not txns:
+        return jsonify({"error": "No transactions parsed", "added": 0, "dupes": 0}), 400
+
+    added, dupes, transfers = save_transactions(txns)
+    pairs = detect_transfer_pairs(db)
+    transfer_pairs = []
+    for p in pairs:
+        transfer_pairs.append({
+            "source": {
+                "id": p["source"]["id"], "date": p["source"]["date"],
+                "name": p["source"]["name"], "amount": p["source"]["amount"],
+                "account": p["source"]["account"],
+            },
+            "match": {
+                "id": p["match"]["id"], "date": p["match"]["date"],
+                "name": p["match"]["name"], "amount": p["match"]["amount"],
+                "account": p["match"]["account"],
+            },
+        })
+    return jsonify({
+        "added": added, "dupes": dupes,
+        "transfers_detected": len(transfers),
+        "transfer_pairs": transfer_pairs,
+    })
 
 
 @import_export_bp.route("/api/export")

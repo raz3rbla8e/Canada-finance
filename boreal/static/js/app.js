@@ -201,6 +201,7 @@ const ICONS = {
   sliders: '<path d="M4 6h12M4 12h7M4 18h16"/><circle cx="19" cy="6" r="2"/><circle cx="14" cy="12" r="2"/><circle cx="8" cy="18" r="2"/>',
   tag: '<path d="M20 12V5h-7L3 15l6 6 11-9z"/><circle cx="15" cy="9" r="1.2"/>',
   bookmark: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
+  sparkle: '<path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/>',
 };
 function icon(name, size=16) {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="icon">${ICONS[name]||''}</svg>`;
@@ -3542,93 +3543,384 @@ async function _renderImport(c) {
     const wizard = document.getElementById('csv-wizard');
     wizard.style.display = 'block';
 
-    const bankName = detect.bank || detect.detected_bank || '';
-    const previewFd = new FormData();
-    previewFd.append('file', file);
-    if (bankName) previewFd.append('bank', bankName);
-    const prevRes = await authFetch('/api/preview-parse', { method: 'POST', body: previewFd, headers: { 'X-CSRF-Token': _csrfToken } });
-    if (!prevRes) { wizard.style.display='none'; showToast('Failed to preview CSV'); return; }
-    if (!prevRes.ok) { const err = await prevRes.json().catch(() => ({})); wizard.style.display='none'; showToast(err.error || 'Failed to preview CSV'); return; }
-    const preview = await prevRes.json();
-    const rows = preview.transactions || preview.rows || [];
-    const totalCount = preview.total || preview.count || rows.length;
+    // ── Known bank: preview and import directly ──
+    if (detect.detected) {
+      const bankName = detect.bank || '';
+      const previewFd = new FormData();
+      previewFd.append('file', file);
+      if (bankName) previewFd.append('bank', bankName);
+      const prevRes = await authFetch('/api/preview-parse', { method: 'POST', body: previewFd, headers: { 'X-CSRF-Token': _csrfToken } });
+      if (!prevRes || !prevRes.ok) { const err = prevRes ? await prevRes.json().catch(() => ({})) : {}; wizard.style.display='none'; showToast(err.error || 'Failed to preview CSV'); return; }
+      const preview = await prevRes.json();
+      const rows = preview.transactions || [];
+      const totalCount = preview.total || rows.length;
 
-    wizard.innerHTML = `<div class="card" style="margin-top:20px">
-      <div class="card-h">
-        <h3>CSV import — ${esc(file.name)}</h3>
-        <span class="cat-pill">${bankName ? esc(bankName) : 'Unknown bank'}</span>
-      </div>
-      ${bankName ? '' : `<div style="margin-bottom:12px">
-        <label style="font-size:12px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:4px">Select bank format</label>
-        <select id="wiz-bank" style="padding:6px 10px;border:1px solid var(--line-1);border-radius:8px;background:var(--bg-surface);font-size:13px">
-          <option value="">Auto-detect</option>
-          ${(detect.available_banks||[]).map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('')}
-        </select>
-      </div>`}
-      <div style="margin-bottom:12px">
-        <label style="font-size:12px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:4px">Account</label>
-        <input type="text" id="wiz-account" placeholder="e.g. TD Chequing" value="${esc(detect.suggested_account||'')}" style="padding:6px 10px;border:1px solid var(--line-1);border-radius:8px;background:var(--bg-surface);font-size:13px;width:100%;box-sizing:border-box">
-      </div>
-      <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
-        <table class="tbl">
-          <thead><tr><th>Date</th><th>Description</th><th class="right">Amount</th><th>Category</th></tr></thead>
-          <tbody>${rows.slice(0,20).map(r => `<tr>
-            <td style="color:var(--ink-3)">${fmtDate(r.date)}</td>
-            <td>${esc(r.name||r.description||'')}</td>
-            <td class="right mono" style="color:${(r.amount||0)>0?'var(--pos)':'var(--ink-1)'}">${fmtCurrency(r.amount||0)}</td>
-            <td>${catPill(r.category||'Uncategorized')}</td>
-          </tr>`).join('')}</tbody>
-        </table>
-      </div>
-      <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">${totalCount} transactions found${totalCount>20?' (showing first 20)':''}</div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" id="wiz-import">${icon('check',14)} Import ${totalCount} transactions</button>
-        <button class="btn" id="wiz-cancel">Cancel</button>
-      </div>
-    </div>`;
+      wizard.innerHTML = `<div class="card" style="margin-top:20px">
+        <div class="card-h">
+          <h3>CSV import — ${esc(file.name)}</h3>
+          <span class="cat-pill">${esc(bankName)}</span>
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:12px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:4px">Account</label>
+          <input type="text" id="wiz-account" placeholder="e.g. TD Chequing" value="" style="padding:6px 10px;border:1px solid var(--line-1);border-radius:8px;background:var(--bg-surface);font-size:13px;width:100%;box-sizing:border-box">
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
+          <table class="tbl">
+            <thead><tr><th>Date</th><th>Description</th><th class="right">Amount</th><th>Category</th></tr></thead>
+            <tbody>${rows.slice(0,20).map(r => `<tr>
+              <td style="color:var(--ink-3)">${fmtDate(r.date)}</td>
+              <td>${esc(r.name||'')}</td>
+              <td class="right mono" style="color:${(r.amount||0)>0?'var(--pos)':'var(--ink-1)'}">${fmtCurrency(r.amount||0)}</td>
+              <td>${catPill(r.category||'Uncategorized')}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+        <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">${totalCount} transactions found${totalCount>20?' (showing first 20)':''}</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" id="wiz-import">${icon('check',14)} Import ${totalCount} transactions</button>
+          <button class="btn" id="wiz-cancel">Cancel</button>
+        </div>
+      </div>`;
 
-    document.getElementById('wiz-cancel')?.addEventListener('click', () => { wizard.style.display='none'; wizard.innerHTML=''; });
+      document.getElementById('wiz-cancel')?.addEventListener('click', () => { wizard.style.display='none'; wizard.innerHTML=''; });
+      document.getElementById('wiz-import')?.addEventListener('click', () => doImport(file, bankName, wizard));
+      return;
+    }
 
-    document.getElementById('wiz-import')?.addEventListener('click', async () => {
-      const importFd = new FormData();
-      importFd.append('file', file);
-      const bank = document.getElementById('wiz-bank')?.value || bankName;
-      if (bank) importFd.append('bank', bank);
-      const acct = document.getElementById('wiz-account')?.value;
-      if (acct) importFd.append('account', acct);
+    // ── Unknown bank: intelligent auto-parse wizard ──
+    const headers = detect.headers || [];
+    const rawPreview = detect.preview || [];
+    const rawText = detect.raw_text || '';
+    const inferred = detect.inferred || {};
+
+    showAutoParseWizard(file, headers, rawPreview, rawText, inferred, wizard);
+  }
+
+  function showAutoParseWizard(file, headers, rawPreview, rawText, inferred, wizard) {
+    const confPct = Math.round((inferred.confidence || 0) * 100);
+    const confColor = confPct >= 70 ? 'var(--pos)' : confPct >= 40 ? 'var(--warn, orange)' : 'var(--neg, #e74c3c)';
+    const confLabel = confPct >= 70 ? 'High confidence' : confPct >= 40 ? 'Medium confidence' : 'Low confidence';
+
+    function optionList(selectedCol, excludeCols) {
+      return headers.map(h => {
+        const disabled = excludeCols.includes(h) ? 'disabled' : '';
+        const sel = h === selectedCol ? 'selected' : '';
+        return `<option value="${esc(h)}" ${sel} ${disabled}>${esc(h)}</option>`;
+      }).join('');
+    }
+
+    function renderWizard() {
+      const dateCol = document.getElementById('ap-date')?.value || inferred.date_column || '';
+      const descCol = document.getElementById('ap-desc')?.value || inferred.description_column || '';
+      const amtMode = document.getElementById('ap-amt-mode')?.value || inferred.amount_mode || 'single';
+      const amtCol = document.getElementById('ap-amount')?.value || inferred.amount_column || '';
+      const debitCol = document.getElementById('ap-debit')?.value || inferred.debit_column || '';
+      const creditCol = document.getElementById('ap-credit')?.value || inferred.credit_column || '';
+
+      const usedCols = [dateCol, descCol];
+      if (amtMode === 'single') usedCols.push(amtCol);
+      else { usedCols.push(debitCol); usedCols.push(creditCol); }
+
+      wizard.innerHTML = `<div class="card" style="margin-top:20px">
+        <div class="card-h">
+          <h3>CSV import — ${esc(file.name)}</h3>
+          <span class="cat-pill" style="background:color-mix(in srgb, ${confColor} 15%, transparent);color:${confColor}">Auto-detected · ${confLabel}</span>
+        </div>
+
+        <div style="background:var(--bg-inset, var(--bg-surface));border:1px solid var(--line-1);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+            ${icon('sparkle',15)} Does this column mapping look right?
+          </div>
+          <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">We analyzed your CSV and guessed the columns. Adjust if needed.</div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:11px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:3px">Date column</label>
+              <select id="ap-date" class="ap-sel" style="width:100%;padding:6px 10px;border:1px solid var(--line-1);border-radius:8px;background:var(--bg-surface);font-size:13px">
+                <option value="">— Select —</option>
+                ${optionList(inferred.date_column, [])}
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:3px">Description column</label>
+              <select id="ap-desc" class="ap-sel" style="width:100%;padding:6px 10px;border:1px solid var(--line-1);border-radius:8px;background:var(--bg-surface);font-size:13px">
+                <option value="">— Select —</option>
+                ${optionList(inferred.description_column, [])}
+              </select>
+            </div>
+          </div>
+
+          <div style="margin-top:10px">
+            <label style="font-size:11px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:3px">Amount type</label>
+            <div style="display:flex;gap:12px;margin-bottom:8px">
+              <label style="font-size:13px;display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="radio" name="ap-amt-mode" value="single" ${amtMode === 'single' ? 'checked' : ''}> Single amount column
+              </label>
+              <label style="font-size:13px;display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="radio" name="ap-amt-mode" value="debit_credit" ${amtMode === 'debit_credit' ? 'checked' : ''}> Separate debit / credit
+              </label>
+            </div>
+          </div>
+
+          <div id="ap-amount-fields" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px">
+            ${amtMode === 'single' ? `
+              <div>
+                <label style="font-size:11px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:3px">Amount column</label>
+                <select id="ap-amount" class="ap-sel" style="width:100%;padding:6px 10px;border:1px solid var(--line-1);border-radius:8px;background:var(--bg-surface);font-size:13px">
+                  <option value="">— Select —</option>
+                  ${optionList(inferred.amount_column, [])}
+                </select>
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:3px">Amount sign</label>
+                <select id="ap-sign" style="width:100%;padding:6px 10px;border:1px solid var(--line-1);border-radius:8px;background:var(--bg-surface);font-size:13px">
+                  <option value="standard" ${(inferred.amount_sign||'standard') === 'standard' ? 'selected' : ''}>Standard (negative = expense)</option>
+                  <option value="inverted" ${inferred.amount_sign === 'inverted' ? 'selected' : ''}>Inverted (positive = expense)</option>
+                </select>
+              </div>
+            ` : `
+              <div>
+                <label style="font-size:11px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:3px">Debit column</label>
+                <select id="ap-debit" class="ap-sel" style="width:100%;padding:6px 10px;border:1px solid var(--line-1);border-radius:8px;background:var(--bg-surface);font-size:13px">
+                  <option value="">— Select —</option>
+                  ${optionList(inferred.debit_column, [])}
+                </select>
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:3px">Credit column</label>
+                <select id="ap-credit" class="ap-sel" style="width:100%;padding:6px 10px;border:1px solid var(--line-1);border-radius:8px;background:var(--bg-surface);font-size:13px">
+                  <option value="">— Select —</option>
+                  ${optionList(inferred.credit_column, [])}
+                </select>
+              </div>
+            `}
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+            <div>
+              <label style="font-size:11px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:3px">Date format</label>
+              <select id="ap-datefmt" style="width:100%;padding:6px 10px;border:1px solid var(--line-1);border-radius:8px;background:var(--bg-surface);font-size:13px">
+                <option value="%Y-%m-%d" ${inferred.date_format==='%Y-%m-%d'?'selected':''}>YYYY-MM-DD</option>
+                <option value="%m/%d/%Y" ${inferred.date_format==='%m/%d/%Y'?'selected':''}>MM/DD/YYYY</option>
+                <option value="%d/%m/%Y" ${inferred.date_format==='%d/%m/%Y'?'selected':''}>DD/MM/YYYY</option>
+                <option value="%m-%d-%Y" ${inferred.date_format==='%m-%d-%Y'?'selected':''}>MM-DD-YYYY</option>
+                <option value="%d-%m-%Y" ${inferred.date_format==='%d-%m-%Y'?'selected':''}>DD-MM-YYYY</option>
+                <option value="%m/%d/%y" ${inferred.date_format==='%m/%d/%y'?'selected':''}>MM/DD/YY</option>
+                <option value="%d/%m/%y" ${inferred.date_format==='%d/%m/%y'?'selected':''}>DD/MM/YY</option>
+                <option value="%b %d %Y" ${inferred.date_format==='%b %d %Y'?'selected':''}>Mon DD YYYY</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:500;color:var(--ink-3);display:block;margin-bottom:3px">Account name</label>
+              <input type="text" id="ap-account" placeholder="e.g. My Bank Chequing" value="" style="padding:6px 10px;border:1px solid var(--line-1);border-radius:8px;background:var(--bg-surface);font-size:13px;width:100%;box-sizing:border-box">
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <button class="btn btn-primary" id="ap-preview">${icon('eye',14)} Preview transactions</button>
+          <button class="btn" id="wiz-cancel">Cancel</button>
+        </div>
+
+        <div id="ap-preview-area"></div>
+      </div>`;
+
+      // ── Wire up event listeners ──
+      document.getElementById('wiz-cancel')?.addEventListener('click', () => { wizard.style.display='none'; wizard.innerHTML=''; });
+
+      // Re-render amount fields when mode changes
+      document.querySelectorAll('input[name="ap-amt-mode"]').forEach(r => {
+        r.addEventListener('change', () => renderWizard());
+      });
+
+      // Preview button
+      document.getElementById('ap-preview')?.addEventListener('click', () => doAutoPreview());
+    }
+
+    async function doAutoPreview() {
+      const mapping = getMapping();
+      if (!mapping.date_column || !mapping.description_column) {
+        showToast('Please select date and description columns');
+        return;
+      }
+      if (mapping.amount_mode === 'single' && !mapping.amount_column) {
+        showToast('Please select the amount column');
+        return;
+      }
+      if (mapping.amount_mode === 'debit_credit' && (!mapping.debit_column || !mapping.credit_column)) {
+        showToast('Please select debit and credit columns');
+        return;
+      }
+      const area = document.getElementById('ap-preview-area');
+      area.innerHTML = `<div style="display:flex;align-items:center;gap:8px;padding:16px;color:var(--ink-3)"><div class="spinner"></div>Parsing…</div>`;
 
       await _ensureCsrf();
-      const res = await authFetch('/api/import', { method: 'POST', body: importFd, headers: { 'X-CSRF-Token': _csrfToken } });
-      if (!res) { showToast('Import failed'); return; }
-      if (!res.ok) { const err = await res.json().catch(() => ({})); showToast(err.error || 'Import failed'); return; }
-      const resultData = await res.json();
-      // New format: {files: [...], transfer_pairs: [...]}
-      // Backward compat: old format was a flat array
-      const fileResults = resultData.files || (Array.isArray(resultData) ? resultData : []);
-      const transferPairs = resultData.transfer_pairs || [];
-      const total = fileResults.reduce((s, r) => s + (r.added || 0), 0);
-      const dupes = fileResults.reduce((s, r) => s + (r.dupes || 0), 0);
-      const transfers = fileResults.reduce((s, r) => s + (r.transfers_detected || 0), 0);
-      const errors = fileResults.filter(r => r.error);
-      if (errors.length) {
-        showToast(`Import had errors: ${errors.map(e => e.error).join(', ')}`);
-      } else {
-        let msg = `Imported ${total} transaction${total!==1?'s':''}${dupes ? ` (${dupes} duplicate${dupes!==1?'s':''} skipped)` : ''}`;
-        if (transfers) msg += ` · ${transfers} transfer${transfers!==1?'s':''} detected`;
-        showToast(msg);
+      const res = await authFetch('/api/preview-parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken },
+        body: JSON.stringify({ raw_text: rawText, mapping }),
+      });
+      if (!res || !res.ok) {
+        const err = res ? await res.json().catch(() => ({})) : {};
+        area.innerHTML = `<div style="color:var(--neg, #e74c3c);font-size:13px;padding:12px">${esc(err.error || 'Failed to parse — try adjusting the column mappings')}</div>`;
+        return;
       }
+      const data = await res.json();
+      const rows = data.transactions || [];
+      const total = data.total || rows.length;
+
+      if (!rows.length) {
+        area.innerHTML = `<div style="color:var(--neg, #e74c3c);font-size:13px;padding:12px">No transactions parsed. Try adjusting the column mappings or date format.</div>`;
+        return;
+      }
+
+      // Check if dates look sane
+      let dateWarning = '';
+      if (rows.length > 0) {
+        const years = rows.map(r => parseInt((r.date||'').substring(0,4))).filter(y => y > 1900);
+        const thisYear = new Date().getFullYear();
+        if (years.length && years.every(y => y < thisYear - 10)) {
+          dateWarning = `<div style="background:color-mix(in srgb, orange 12%, transparent);color:var(--warn-ink, #b45309);padding:8px 12px;border-radius:8px;font-size:12px;margin-bottom:10px;display:flex;align-items:center;gap:8px">${icon('alert',14)} Dates look old — you might have the wrong date format selected.</div>`;
+        }
+      }
+
+      area.innerHTML = `
+        ${dateWarning}
+        <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
+          <table class="tbl">
+            <thead><tr><th>Date</th><th>Description</th><th class="right">Amount</th><th>Type</th></tr></thead>
+            <tbody>${rows.slice(0,20).map(r => `<tr>
+              <td style="color:var(--ink-3)">${fmtDate(r.date)}</td>
+              <td>${esc(r.name||'')}</td>
+              <td class="right mono" style="color:${r.type==='Income'?'var(--pos)':'var(--ink-1)'}">${fmtCurrency(r.amount||0)}</td>
+              <td><span class="cat-pill" style="${r.type==='Income'?'background:color-mix(in srgb, var(--pos) 12%, transparent);color:var(--pos)':''}">${esc(r.type)}</span></td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+        <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">${total} transactions found${total>20?' (showing first 20)':''}</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-primary" id="ap-import">${icon('check',14)} Looks good — import ${total} transactions</button>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px;color:var(--ink-3);cursor:pointer">
+            <input type="checkbox" id="ap-save-config"> Remember this bank format
+          </label>
+        </div>
+      `;
+
+      document.getElementById('ap-import')?.addEventListener('click', () => doAutoImport(mapping));
+    }
+
+    function getMapping() {
+      const amtMode = document.querySelector('input[name="ap-amt-mode"]:checked')?.value || 'single';
+      return {
+        date_column: document.getElementById('ap-date')?.value || '',
+        description_column: document.getElementById('ap-desc')?.value || '',
+        amount_mode: amtMode,
+        amount_column: amtMode === 'single' ? (document.getElementById('ap-amount')?.value || '') : '',
+        debit_column: amtMode === 'debit_credit' ? (document.getElementById('ap-debit')?.value || '') : '',
+        credit_column: amtMode === 'debit_credit' ? (document.getElementById('ap-credit')?.value || '') : '',
+        amount_sign: document.getElementById('ap-sign')?.value || 'standard',
+        date_format: document.getElementById('ap-datefmt')?.value || '%Y-%m-%d',
+        bank_name: document.getElementById('ap-account')?.value || 'Unknown Bank',
+      };
+    }
+
+    async function doAutoImport(mapping) {
+      const saveConfig = document.getElementById('ap-save-config')?.checked;
+      await _ensureCsrf();
+
+      // If "Remember" is checked, save the bank config first
+      if (saveConfig && mapping.bank_name && mapping.bank_name !== 'Unknown Bank') {
+        const configPayload = {
+          bank_name: mapping.bank_name,
+          date_column: mapping.date_column,
+          description_column: mapping.description_column,
+          amount_mode: mapping.amount_mode,
+          amount_column: mapping.amount_column,
+          debit_column: mapping.debit_column,
+          credit_column: mapping.credit_column,
+          amount_sign: mapping.amount_sign,
+          date_format: mapping.date_format,
+          detection_headers: [mapping.date_column.toLowerCase(), mapping.description_column.toLowerCase()],
+        };
+        await authFetch('/api/save-bank-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken },
+          body: JSON.stringify(configPayload),
+        });
+      }
+
+      // Import using the confirmed mapping
+      const res = await authFetch('/api/import-mapped', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken },
+        body: JSON.stringify({ raw_text: rawText, mapping }),
+      });
+      if (!res || !res.ok) {
+        const err = res ? await res.json().catch(() => ({})) : {};
+        showToast(err.error || 'Import failed');
+        return;
+      }
+      const resultData = await res.json();
+      const added = resultData.added || 0;
+      const dupes = resultData.dupes || 0;
+      const transferPairs = resultData.transfer_pairs || [];
+
+      let msg = `Imported ${added} transaction${added!==1?'s':''}`;
+      if (dupes) msg += ` (${dupes} duplicate${dupes!==1?'s':''} skipped)`;
+      showToast(msg);
+
       invalidateApiCache();
       wizard.style.display = 'none';
       wizard.innerHTML = '';
 
-      // Show transfer pair review if any detected
       if (transferPairs.length) {
         await showTransferReview(transferPairs);
       }
 
       await refreshMonths();
       navigateTo('transactions');
-    });
+    }
+
+    // Auto-preview if confidence is high enough
+    renderWizard();
+    if (inferred.confidence >= 0.5 && inferred.date_column && inferred.description_column) {
+      setTimeout(() => document.getElementById('ap-preview')?.click(), 100);
+    }
+  }
+
+  async function doImport(file, bankName, wizard) {
+    const importFd = new FormData();
+    importFd.append('file', file);
+    if (bankName) importFd.append('bank', bankName);
+    const acct = document.getElementById('wiz-account')?.value;
+    if (acct) importFd.append('account', acct);
+
+    await _ensureCsrf();
+    const res = await authFetch('/api/import', { method: 'POST', body: importFd, headers: { 'X-CSRF-Token': _csrfToken } });
+    if (!res) { showToast('Import failed'); return; }
+    if (!res.ok) { const err = await res.json().catch(() => ({})); showToast(err.error || 'Import failed'); return; }
+    const resultData = await res.json();
+    const fileResults = resultData.files || (Array.isArray(resultData) ? resultData : []);
+    const transferPairs = resultData.transfer_pairs || [];
+    const total = fileResults.reduce((s, r) => s + (r.added || 0), 0);
+    const dupes = fileResults.reduce((s, r) => s + (r.dupes || 0), 0);
+    const transfers = fileResults.reduce((s, r) => s + (r.transfers_detected || 0), 0);
+    const errors = fileResults.filter(r => r.error);
+    if (errors.length) {
+      showToast(`Import had errors: ${errors.map(e => e.error).join(', ')}`);
+    } else {
+      let msg = `Imported ${total} transaction${total!==1?'s':''}${dupes ? ` (${dupes} duplicate${dupes!==1?'s':''} skipped)` : ''}`;
+      if (transfers) msg += ` · ${transfers} transfer${transfers!==1?'s':''} detected`;
+      showToast(msg);
+    }
+    invalidateApiCache();
+    wizard.style.display = 'none';
+    wizard.innerHTML = '';
+    if (transferPairs.length) {
+      await showTransferReview(transferPairs);
+    }
+    await refreshMonths();
+    navigateTo('transactions');
   }
 }
 
