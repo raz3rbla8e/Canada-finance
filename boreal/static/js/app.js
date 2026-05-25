@@ -237,13 +237,46 @@ function fmtDateLong(iso) {
 
 // ── CATEGORY HELPERS ──────────────────────────────────────────
 const CAT_COLORS = {
-  'Groceries': '#5b9c6e', 'Dining & Coffee': '#c08a4e', 'Eating Out': '#c08a4e',
-  'Transport': '#6b8eb5', 'Transportation': '#6b8eb5', 'Fuel': '#a47c5b',
-  'Subscriptions': '#9b6fb7', 'Shopping': '#c7798d', 'Rent & Housing': '#4a7a8f', 'Rent': '#4a7a8f',
-  'Utilities': '#8a96a3', 'Phone & Internet': '#7c8aab', 'Health': '#76a89c',
-  'Fitness': '#7ba072', 'Entertainment': '#b08bbf', 'Alcohol': '#9c5a5a',
-  'Income': '#3f7f5c', 'Salary': '#3f7f5c', 'Freelance': '#5a8db5',
-  'Transfer': '#9aa5b3', 'Uncategorized': '#b8b0a3',
+  // Expense categories — each visually distinct
+  'Eating Out': '#e07c42',       // warm orange
+  'Groceries': '#4caf6a',        // green
+  'Fuel': '#c6943a',             // gold/amber
+  'Transport': '#4a90d9',        // blue
+  'Transportation': '#4a90d9',
+  'Entertainment': '#ab47bc',    // purple
+  'Subscriptions': '#7e57c2',    // deep violet
+  'Healthcare': '#26a69a',       // teal
+  'Health': '#26a69a',
+  'Pharmacy': '#4db6ac',         // light teal
+  'Clothing': '#ec407a',         // pink
+  'Shopping': '#e91e63',         // hot pink
+  'Home': '#8d6e63',             // brown
+  'Insurance': '#5c6bc0',        // indigo
+  'Travel': '#29b6f6',           // sky blue
+  'Education': '#66bb6a',        // light green
+  'Phone': '#ff7043',            // deep orange
+  'Internet': '#42a5f5',         // bright blue
+  'Phone & Internet': '#ff7043',
+  'Utilities': '#78909c',        // steel gray
+  'Car Payment': '#ef5350',      // red
+  'Rent': '#795548',             // dark brown
+  'Rent & Housing': '#795548',
+  'Savings Transfer': '#26c6da', // cyan
+  'Misc': '#bdbdbd',             // gray
+  'Dining & Coffee': '#e07c42',
+  'Fitness': '#00897b',          // dark teal
+  'Alcohol': '#c62828',          // dark red
+  // Income categories
+  'Job': '#2e7d32',              // forest green
+  'Income': '#2e7d32',
+  'Salary': '#2e7d32',
+  'Freelance': '#0277bd',        // ocean blue
+  'Bonus': '#f9a825',            // bright yellow
+  'Refund': '#00acc1',           // cyan-teal
+  'Other Income': '#558b2f',     // olive green
+  // System
+  'Transfer': '#90a4ae',         // muted blue-gray
+  'Uncategorized': '#b8b0a3',    // beige
 };
 function catColor(name) { return CAT_COLORS[name] || '#b8b0a3'; }
 
